@@ -19,8 +19,33 @@ fastify.register(dbConnector)
 fastify.register(jwtConnector)
 
 // Register modules
+fastify.get('/', async (request, reply) => {
+    return {
+        name: 'Paints App API',
+        version: '1.0.0',
+        message: 'Welcome to the Paints App API',
+        endpoints: {
+            health: '/health'
+        }
+    }
+})
+
 fastify.get('/health', async (request, reply) => {
-    return { status: 'ok' }
+    try {
+        // Verify database connection
+        fastify.db.prepare('SELECT 1').get()
+        return {
+            status: 'ok',
+            database: 'healthy'
+        }
+    } catch (err) {
+        fastify.log.error(err)
+        return reply.status(500).send({
+            status: 'unhealthy',
+            database: 'unhealthy',
+            error: err instanceof Error ? err.message : 'Unknown error'
+        })
+    }
 })
 // (You will add modules here)
 
