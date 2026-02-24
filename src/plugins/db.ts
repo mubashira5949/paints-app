@@ -1,19 +1,37 @@
 
 import fp from 'fastify-plugin'
-import Database from 'better-sqlite3'
+import { Pool } from 'pg'
 import { FastifyInstance } from 'fastify'
 
 async function dbConnector(fastify: FastifyInstance) {
-    const db = new Database('data.db', { verbose: console.log });
+    const pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        ssl: {
+            rejectUnauthorized: false // Neon requires SSL
+        }
+    })
 
-    // Decorate fastify instance with the database instance
-    fastify.decorate('db', db)
+    // Test the connection
+    try {
+        await pool.query('SELECT 1')
+        fastify.log.info('Database connected successfully')
+    } catch (err) {
+        fastify.log.error({ err }, 'Database connection failed')
+        throw err
+    }
+
+    // Decorate fastify instance with the pool instance
+    fastify.decorate('db', pool)
+
+    fastify.addHook('onClose', async (instance) => {
+        await pool.end()
+    })
 }
 
 export default fp(dbConnector)
 
 declare module 'fastify' {
     interface FastifyInstance {
-        db: Database.Database
+        db: Pool
     }
 }
