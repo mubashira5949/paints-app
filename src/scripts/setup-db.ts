@@ -130,7 +130,9 @@ CREATE TABLE IF NOT EXISTS finished_stock_transactions (
 INSERT INTO roles (name, description) VALUES 
 ('admin', 'Super Administrator with full access'),
 ('manager', 'Production and Inventory Manager'),
-('staff', 'Standard floor staff for recording production')
+('operator', 'Production floor operator'),
+('sales', 'Sales and order management'),
+('client', 'External client access')
 ON CONFLICT (name) DO NOTHING;
 `;
 
