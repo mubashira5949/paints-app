@@ -19,6 +19,11 @@ fastify.register(dbConnector)
 fastify.register(jwtConnector)
 
 // Register modules
+import userModule from './modules/users'
+import authModule from './modules/auth'
+fastify.register(userModule)
+fastify.register(authModule, { prefix: '/auth' })
+
 fastify.get('/', async (request, reply) => {
     return {
         name: 'Paints App API',

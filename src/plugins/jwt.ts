@@ -18,3 +18,9 @@ async function jwtConnector(fastify: FastifyInstance) {
 }
 
 export default fp(jwtConnector)
+
+declare module 'fastify' {
+    interface FastifyInstance {
+        authenticate: (request: any, reply: any) => Promise<void>
+    }
+}
