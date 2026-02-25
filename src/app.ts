@@ -33,7 +33,7 @@ fastify.get('/', async (request, reply) => {
 fastify.get('/health', async (request, reply) => {
     try {
         // Verify database connection
-        fastify.db.prepare('SELECT 1').get()
+        await fastify.db.query('SELECT 1')
         return {
             status: 'ok',
             database: 'healthy'
