@@ -1,9 +1,17 @@
+/**
+ * Database Setup Script
+ * Initializes the database schema and default roles.
+ */
 
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
 
+// Load environment variables for database connection.
 dotenv.config();
 
+/**
+ * Configure PostgreSQL connection pool.
+ */
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
@@ -11,8 +19,12 @@ const pool = new Pool({
     }
 });
 
+/**
+ * SQL Schema definition for the Paints App.
+ * Includes tables for users, roles, resources, colors, recipes, production runs, and stock transactions.
+ */
 const schema = `
--- 1. Roles
+-- 1. Roles table: Stores user access levels
 CREATE TABLE IF NOT EXISTS roles (
     id SERIAL PRIMARY KEY,
     name VARCHAR(50) UNIQUE NOT NULL,
@@ -20,7 +32,7 @@ CREATE TABLE IF NOT EXISTS roles (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2. Users
+-- 2. Users table: Stores system users and their hashed passwords
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     username VARCHAR(100) UNIQUE NOT NULL,
@@ -31,7 +43,7 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 3. Resources (Raw Materials)
+-- 3. Resources table: Manages raw materials inventory
 CREATE TABLE IF NOT EXISTS resources (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) UNIQUE NOT NULL,
@@ -42,7 +54,7 @@ CREATE TABLE IF NOT EXISTS resources (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 4. Colors (Finished Goods Products)
+-- 4. Colors table: Manages finished paint products
 CREATE TABLE IF NOT EXISTS colors (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) UNIQUE NOT NULL,
@@ -52,7 +64,7 @@ CREATE TABLE IF NOT EXISTS colors (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 5. Recipes
+-- 5. Recipes table: Stores formulas for different colors
 CREATE TABLE IF NOT EXISTS recipes (
     id SERIAL PRIMARY KEY,
     color_id INTEGER REFERENCES colors(id) NOT NULL,
@@ -64,7 +76,7 @@ CREATE TABLE IF NOT EXISTS recipes (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 6. Recipe Resources (Bill of Materials)
+-- 6. Recipe Resources table: Defines raw material requirements for each recipe (Bill of Materials)
 CREATE TABLE IF NOT EXISTS recipe_resources (
     id SERIAL PRIMARY KEY,
     recipe_id INTEGER REFERENCES recipes(id) ON DELETE CASCADE NOT NULL,
@@ -73,7 +85,7 @@ CREATE TABLE IF NOT EXISTS recipe_resources (
     UNIQUE(recipe_id, resource_id)
 );
 
--- 7. Production Runs
+-- 7. Production Runs table: Tracks the process of manufacturing paint
 CREATE TABLE IF NOT EXISTS production_runs (
     id SERIAL PRIMARY KEY,
     recipe_id INTEGER REFERENCES recipes(id) NOT NULL,
@@ -87,7 +99,7 @@ CREATE TABLE IF NOT EXISTS production_runs (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 8. Production Resource Actuals (Variance tracking)
+-- 8. Production Resource Actuals: Variance tracking for raw materials used in production
 CREATE TABLE IF NOT EXISTS production_resource_actuals (
     id SERIAL PRIMARY KEY,
     production_run_id INTEGER REFERENCES production_runs(id) ON DELETE CASCADE NOT NULL,
@@ -96,7 +108,7 @@ CREATE TABLE IF NOT EXISTS production_resource_actuals (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 9. Resource Stock Transactions
+-- 9. Resource Stock Transactions: Audit trail for raw material stock changes
 CREATE TABLE IF NOT EXISTS resource_stock_transactions (
     id SERIAL PRIMARY KEY,
     resource_id INTEGER REFERENCES resources(id) NOT NULL,
@@ -107,7 +119,7 @@ CREATE TABLE IF NOT EXISTS resource_stock_transactions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 10. Finished Stock (Current levels for colors)
+-- 10. Finished Stock: Current inventory levels for finished paint colors
 CREATE TABLE IF NOT EXISTS finished_stock (
     id SERIAL PRIMARY KEY,
     color_id INTEGER REFERENCES colors(id) UNIQUE NOT NULL,
@@ -115,7 +127,7 @@ CREATE TABLE IF NOT EXISTS finished_stock (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 11. Finished Stock Transactions
+-- 11. Finished Stock Transactions: Audit trail for finished product stock changes
 CREATE TABLE IF NOT EXISTS finished_stock_transactions (
     id SERIAL PRIMARY KEY,
     color_id INTEGER REFERENCES colors(id) NOT NULL,
@@ -126,7 +138,7 @@ CREATE TABLE IF NOT EXISTS finished_stock_transactions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Initial Roles
+-- Initial Roles: Seed the roles table with default system roles
 INSERT INTO roles (name, description) VALUES 
 ('admin', 'Super Administrator with full access'),
 ('manager', 'Production and Inventory Manager'),
@@ -136,16 +148,22 @@ INSERT INTO roles (name, description) VALUES
 ON CONFLICT (name) DO NOTHING;
 `;
 
+/**
+ * Main function to execute the schema creation.
+ */
 async function setup() {
     try {
         console.log('Starting database schema creation...');
+        // Run the combined SQL schema string.
         await pool.query(schema);
         console.log('Database schema created successfully!');
         process.exit(0);
     } catch (err) {
+        // Log errors and exit with failure code.
         console.error('Error creating database schema:', err);
         process.exit(1);
     }
 }
 
+// Execute the setup function.
 setup();
