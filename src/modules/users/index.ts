@@ -18,16 +18,17 @@ export default async function (fastify: FastifyInstance) {
         schema: {
             body: {
                 type: 'object',
-                required: ['username', 'password', 'role'],
+                required: ['username', 'email', 'password', 'role'],
                 properties: {
                     username: { type: 'string' },
+                    email: { type: 'string', format: 'email' },
                     password: { type: 'string', minLength: 6 },
                     role: { type: 'string' }
                 }
             }
         },
         handler: async (request: any, reply: any) => {
-            const { username, password, role } = request.body
+            const { username, email, password, role } = request.body
             const currentUser = request.user
 
             // Role-based access control: Only 'manager' can create other users.
@@ -60,8 +61,8 @@ export default async function (fastify: FastifyInstance) {
 
                 // 3. Insert the new user into the database.
                 const userResult = await fastify.db.query(
-                    'INSERT INTO users (username, password_hash, role_id) VALUES ($1, $2, $3) RETURNING id, username, role_id, created_at',
-                    [username, passwordHash, roleId]
+                    'INSERT INTO users (username, email, password_hash, role_id) VALUES ($1, $2, $3, $4) RETURNING id, username, email, role_id, created_at',
+                    [username, email, passwordHash, roleId]
                 )
 
                 const newUser = userResult.rows[0]
@@ -72,16 +73,17 @@ export default async function (fastify: FastifyInstance) {
                     user: {
                         id: newUser.id,
                         username: newUser.username,
+                        email: newUser.email,
                         role: role,
                         created_at: newUser.created_at
                     }
                 })
             } catch (err: any) {
-                // Handle duplicate username error (PostgreSQL unique constraint violation).
+                // Handle duplicate username or email error (PostgreSQL unique constraint violation).
                 if (err.code === '23505') {
                     return reply.status(400).send({
                         error: 'Bad Request',
-                        message: 'Username already exists'
+                        message: 'Username or Email already exists'
                     })
                 }
                 // Log and return internal error for other failures.

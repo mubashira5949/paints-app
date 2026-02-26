@@ -15,32 +15,32 @@ export default async function (fastify: FastifyInstance) {
         schema: {
             body: {
                 type: 'object',
-                required: ['username', 'password'],
+                required: ['email', 'password'],
                 properties: {
-                    username: { type: 'string' },
+                    email: { type: 'string', format: 'email' },
                     password: { type: 'string' }
                 }
             }
         },
         handler: async (request, reply) => {
-            const { username, password } = request.body as any
+            const { email, password } = request.body as any
 
             try {
                 // 1. Retrieve the user and their associated role name from the database.
                 // Only active users are allowed to log in.
                 const result = await fastify.db.query(
-                    `SELECT u.id, u.username, u.password_hash, r.name as role 
+                    `SELECT u.id, u.username, u.email, u.password_hash, r.name as role 
                      FROM users u 
                      JOIN roles r ON u.role_id = r.id 
-                     WHERE u.username = $1 AND u.is_active = TRUE`,
-                    [username]
+                     WHERE u.email = $1 AND u.is_active = TRUE`,
+                    [email]
                 )
 
                 // If user doesn't exist or is inactive.
                 if (result.rows.length === 0) {
                     return reply.status(401).send({
                         error: 'Unauthorized',
-                        message: 'Invalid username or password'
+                        message: 'Invalid email or password'
                     })
                 }
 
@@ -51,7 +51,7 @@ export default async function (fastify: FastifyInstance) {
                 if (!isMatch) {
                     return reply.status(401).send({
                         error: 'Unauthorized',
-                        message: 'Invalid username or password'
+                        message: 'Invalid email or password'
                     })
                 }
 
@@ -60,6 +60,7 @@ export default async function (fastify: FastifyInstance) {
                 const token = fastify.jwt.sign({
                     id: user.id,
                     username: user.username,
+                    email: user.email,
                     role: user.role
                 })
 
