@@ -1,10 +1,20 @@
+/**
+ * User Module
+ * Handles user management operations like registration and deletion.
+ */
 
 import { FastifyInstance } from 'fastify'
 import bcrypt from 'bcrypt'
 
 export default async function (fastify: FastifyInstance) {
+    /**
+     * POST /users - Create a new user.
+     * Only accessible by users with 'manager' role.
+     */
     fastify.post('/users', {
+        // middleware to verify JWT
         preHandler: [fastify.authenticate],
+        // request body validation schema
         schema: {
             body: {
                 type: 'object',
@@ -20,9 +30,7 @@ export default async function (fastify: FastifyInstance) {
             const { username, password, role } = request.body
             const currentUser = request.user
 
-            // Check if current user is manager
-            // Note: In a real app, you'd fetch the role name from the DB if it's not in the JWT
-            // Assuming the JWT payload has { id, username, role }
+            // Role-based access control: Only 'manager' can create other users.
             if (currentUser.role !== 'manager') {
                 return reply.status(403).send({
                     error: 'Forbidden',
@@ -31,7 +39,7 @@ export default async function (fastify: FastifyInstance) {
             }
 
             try {
-                // 1. Check if role exists and get its ID
+                // 1. Check if the specified role exists in the database and retrieve its ID.
                 const roleResult = await fastify.db.query(
                     'SELECT id FROM roles WHERE name = $1',
                     [role]
@@ -46,11 +54,11 @@ export default async function (fastify: FastifyInstance) {
 
                 const roleId = roleResult.rows[0].id
 
-                // 2. Hash password
+                // 2. Hash the user's password securely using bcrypt.
                 const saltRounds = 10
                 const passwordHash = await bcrypt.hash(password, saltRounds)
 
-                // 3. Create user
+                // 3. Insert the new user into the database.
                 const userResult = await fastify.db.query(
                     'INSERT INTO users (username, password_hash, role_id) VALUES ($1, $2, $3) RETURNING id, username, role_id, created_at',
                     [username, passwordHash, roleId]
@@ -58,6 +66,7 @@ export default async function (fastify: FastifyInstance) {
 
                 const newUser = userResult.rows[0]
 
+                // Return the newly created user (excluding sensitive data like password hash).
                 return reply.status(201).send({
                     message: 'User created successfully',
                     user: {
@@ -68,12 +77,14 @@ export default async function (fastify: FastifyInstance) {
                     }
                 })
             } catch (err: any) {
-                if (err.code === '23505') { // Unique violation
+                // Handle duplicate username error (PostgreSQL unique constraint violation).
+                if (err.code === '23505') {
                     return reply.status(400).send({
                         error: 'Bad Request',
                         message: 'Username already exists'
                     })
                 }
+                // Log and return internal error for other failures.
                 fastify.log.error(err)
                 return reply.status(500).send({
                     error: 'Internal Server Error',
@@ -83,8 +94,14 @@ export default async function (fastify: FastifyInstance) {
         }
     })
 
+    /**
+     * DELETE /users/:id - Delete a user by their ID.
+     * Only accessible by users with 'manager' role.
+     */
     fastify.delete('/users/:id', {
+        // middleware to verify JWT
         preHandler: [fastify.authenticate],
+        // parameter validation schema
         schema: {
             params: {
                 type: 'object',
@@ -98,7 +115,7 @@ export default async function (fastify: FastifyInstance) {
             const { id } = request.params
             const currentUser = request.user
 
-            // Only Managers can delete users
+            // Role-based access control: Only 'manager' can delete users.
             if (currentUser.role !== 'manager') {
                 return reply.status(403).send({
                     error: 'Forbidden',
@@ -107,11 +124,13 @@ export default async function (fastify: FastifyInstance) {
             }
 
             try {
+                // Delete user from the database and return the deleted user's info.
                 const result = await fastify.db.query(
                     'DELETE FROM users WHERE id = $1 RETURNING id, username',
                     [id]
                 )
 
+                // If no user was found with that ID.
                 if (result.rows.length === 0) {
                     return reply.status(404).send({
                         error: 'Not Found',
@@ -124,6 +143,7 @@ export default async function (fastify: FastifyInstance) {
                     user: result.rows[0]
                 }
             } catch (err) {
+                // Log and return internal error for failures.
                 fastify.log.error(err)
                 return reply.status(500).send({
                     error: 'Internal Server Error',
