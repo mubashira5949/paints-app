@@ -190,4 +190,89 @@ export default async function (fastify: FastifyInstance) {
             }
         }
     })
+
+    /**
+     * POST /recipes/:id/resources - Add a resource to an existing recipe.
+     * Only accessible by users with 'admin' or 'manager' roles.
+     */
+    fastify.post('/:id/resources', {
+        // middleware to verify JWT and check user role
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
+        // request schema validation
+        schema: {
+            params: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                    id: { type: 'integer' }
+                }
+            },
+            body: {
+                type: 'object',
+                required: ['resource_id', 'quantity_required'],
+                properties: {
+                    resource_id: { type: 'integer' },
+                    quantity_required: { type: 'number', exclusiveMinimum: 0 }
+                }
+            }
+        },
+        handler: async (request: any, reply: any) => {
+            const { id } = request.params
+            const { resource_id, quantity_required } = request.body
+
+            try {
+                // 1. Validate that the recipe exists
+                const recipeCheck = await fastify.db.query(
+                    'SELECT id FROM recipes WHERE id = $1',
+                    [id]
+                )
+                if (recipeCheck.rows.length === 0) {
+                    return reply.status(404).send({
+                        error: 'Not Found',
+                        message: 'Recipe not found'
+                    })
+                }
+
+                // 2. Validate that the resource exists
+                const resourceCheck = await fastify.db.query(
+                    'SELECT id FROM resources WHERE id = $1',
+                    [resource_id]
+                )
+                if (resourceCheck.rows.length === 0) {
+                    return reply.status(404).send({
+                        error: 'Not Found',
+                        message: 'Resource not found'
+                    })
+                }
+
+                // 3. Insert the resource link (Bill of Materials entry)
+                const result = await fastify.db.query(
+                    `INSERT INTO recipe_resources (recipe_id, resource_id, quantity_required) 
+                     VALUES ($1, $2, $3) 
+                     RETURNING id, recipe_id, resource_id, quantity_required`,
+                    [id, resource_id, quantity_required]
+                )
+
+                return reply.status(201).send({
+                    message: 'Resource added to recipe successfully',
+                    recipe_resource: result.rows[0]
+                })
+
+            } catch (err: any) {
+                // Catch unique constraint violation (e.g., resource_id already mapped to this recipe_id)
+                if (err.code === '23505') {
+                    return reply.status(400).send({
+                        error: 'Bad Request',
+                        message: 'This resource is already added to the specified recipe'
+                    })
+                }
+
+                fastify.log.error(err)
+                return reply.status(500).send({
+                    error: 'Internal Server Error',
+                    message: 'Failed to add resource to recipe'
+                })
+            }
+        }
+    })
 }
