@@ -4,42 +4,52 @@
  */
 
 import { FastifyInstance } from 'fastify'
+import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
+import { Type } from '@sinclair/typebox'
 import { authorizeRole } from '../../utils/authorizeRole'
 
-export default async function (fastify: FastifyInstance) {
+export default async function (fastifyRaw: FastifyInstance) {
+    const fastify = fastifyRaw.withTypeProvider<TypeBoxTypeProvider>()
+
+    const CreateProductionRunSchema = Type.Object({
+        recipe_id: Type.Integer(),
+        planned_quantity_liters: Type.Number({ exclusiveMinimum: 0 }),
+        actual_resources: Type.Array(
+            Type.Object({
+                resource_id: Type.Integer(),
+                actual_quantity_used: Type.Number({ exclusiveMinimum: 0 })
+            }),
+            { minItems: 1 }
+        )
+    })
+
+    const RunIdParamSchema = Type.Object({
+        id: Type.Integer()
+    })
+
+    const PackagingDetailsSchema = Type.Object({
+        packaging_details: Type.Array(
+            Type.Object({
+                pack_size_liters: Type.Number({ exclusiveMinimum: 0 }),
+                quantity_units: Type.Integer({ exclusiveMinimum: 0 })
+            }),
+            { minItems: 1 }
+        )
+    })
+
     /**
      * POST /production-runs - Create a new production run, deducting materials.
      * Only accessible by users with 'admin', 'manager', or 'operator' roles.
      */
     fastify.post('/', {
-        // middleware to verify JWT and check user role
         preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'operator'])],
-        // request validation schema
         schema: {
-            body: {
-                type: 'object',
-                required: ['recipe_id', 'planned_quantity_liters', 'actual_resources'],
-                properties: {
-                    recipe_id: { type: 'integer' },
-                    planned_quantity_liters: { type: 'number', exclusiveMinimum: 0 },
-                    actual_resources: {
-                        type: 'array',
-                        minItems: 1,
-                        items: {
-                            type: 'object',
-                            required: ['resource_id', 'actual_quantity_used'],
-                            properties: {
-                                resource_id: { type: 'integer' },
-                                actual_quantity_used: { type: 'number', exclusiveMinimum: 0 }
-                            }
-                        }
-                    }
-                }
-            }
+            body: CreateProductionRunSchema
         },
-        handler: async (request: any, reply: any) => {
+        handler: async (request, reply) => {
             const { recipe_id, planned_quantity_liters, actual_resources } = request.body
-            const user_id = request.user.id
+            const user = request.user as any
+            const user_id = user.id
 
             let client
             try {
@@ -168,37 +178,12 @@ export default async function (fastify: FastifyInstance) {
      * Accessible by 'manager' and 'operator' roles.
      */
     fastify.post('/:id/packaging', {
-        // middleware to verify JWT and check user role
         preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'operator'])],
-        // request validation schema
         schema: {
-            params: {
-                type: 'object',
-                required: ['id'],
-                properties: {
-                    id: { type: 'integer' }
-                }
-            },
-            body: {
-                type: 'object',
-                required: ['packaging_details'],
-                properties: {
-                    packaging_details: {
-                        type: 'array',
-                        minItems: 1,
-                        items: {
-                            type: 'object',
-                            required: ['pack_size_liters', 'quantity_units'],
-                            properties: {
-                                pack_size_liters: { type: 'number', exclusiveMinimum: 0 },
-                                quantity_units: { type: 'integer', exclusiveMinimum: 0 }
-                            }
-                        }
-                    }
-                }
-            }
+            params: RunIdParamSchema,
+            body: PackagingDetailsSchema
         },
-        handler: async (request: any, reply: any) => {
+        handler: async (request, reply) => {
             const { id } = request.params
             const { packaging_details } = request.body
 

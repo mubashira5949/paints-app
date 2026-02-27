@@ -4,31 +4,35 @@
  */
 
 import { FastifyInstance } from 'fastify'
+import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
+import { Type } from '@sinclair/typebox'
 import bcrypt from 'bcrypt'
 import { authorizeRole } from '../../utils/authorizeRole'
 
-export default async function (fastify: FastifyInstance) {
+export default async function (fastifyRaw: FastifyInstance) {
+    const fastify = fastifyRaw.withTypeProvider<TypeBoxTypeProvider>()
+
+    const CreateUserSchema = Type.Object({
+        username: Type.String(),
+        email: Type.String({ format: 'email' }),
+        password: Type.String({ minLength: 6 }),
+        role: Type.String()
+    })
+
+    const UserIdSchema = Type.Object({
+        id: Type.Integer()
+    })
+
     /**
      * POST /users - Create a new user.
      * Only accessible by users with 'manager' role.
      */
     fastify.post('/users', {
-        // middleware to verify JWT and check user role
         preHandler: [fastify.authenticate, authorizeRole(['manager'])],
-        // request body validation schema
         schema: {
-            body: {
-                type: 'object',
-                required: ['username', 'email', 'password', 'role'],
-                properties: {
-                    username: { type: 'string' },
-                    email: { type: 'string', format: 'email' },
-                    password: { type: 'string', minLength: 6 },
-                    role: { type: 'string' }
-                }
-            }
+            body: CreateUserSchema
         },
-        handler: async (request: any, reply: any) => {
+        handler: async (request, reply) => {
             const { username, email, password, role } = request.body
             const currentUser = request.user
 
@@ -94,19 +98,11 @@ export default async function (fastify: FastifyInstance) {
      * Only accessible by users with 'manager' role.
      */
     fastify.delete('/users/:id', {
-        // middleware to verify JWT and check user role
         preHandler: [fastify.authenticate, authorizeRole(['manager'])],
-        // parameter validation schema
         schema: {
-            params: {
-                type: 'object',
-                required: ['id'],
-                properties: {
-                    id: { type: 'integer' }
-                }
-            }
+            params: UserIdSchema
         },
-        handler: async (request: any, reply: any) => {
+        handler: async (request, reply) => {
             const { id } = request.params
             const currentUser = request.user
 

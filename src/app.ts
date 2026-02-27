@@ -7,6 +7,7 @@ import Fastify from 'fastify'
 import dbConnector from './plugins/db'
 import jwtConnector from './plugins/jwt'
 import dotenv from 'dotenv'
+import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
 
 // Load environment variables from .env file
 dotenv.config()
@@ -19,6 +20,20 @@ const fastify = Fastify({
         transport: {
             target: 'pino-pretty'
         }
+    }
+}).withTypeProvider<TypeBoxTypeProvider>()
+
+// Global Error Handler to catch and format TypeBox Validation Failures
+fastify.setErrorHandler((error, request, reply) => {
+    if (error.validation) {
+        reply.status(400).send({
+            error: 'Bad Request',
+            message: 'Validation failed',
+            details: error.validation
+        })
+    } else {
+        fastify.log.error(error)
+        reply.status(500).send({ error: 'Internal Server Error', message: error.message || 'An unexpected error occurred' })
     }
 })
 

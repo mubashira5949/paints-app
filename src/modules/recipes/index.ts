@@ -4,26 +4,50 @@
  */
 
 import { FastifyInstance } from 'fastify'
+import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
+import { Type } from '@sinclair/typebox'
 import { authorizeRole } from '../../utils/authorizeRole'
 
-export default async function (fastify: FastifyInstance) {
+export default async function (fastifyRaw: FastifyInstance) {
+    const fastify = fastifyRaw.withTypeProvider<TypeBoxTypeProvider>()
+
+    const ColorIdParamSchema = Type.Object({
+        colorId: Type.Integer()
+    })
+
+    const CreateRecipeSchema = Type.Object({
+        color_id: Type.Integer(),
+        name: Type.String(),
+        version: Type.Optional(Type.String({ default: '1.0.0' })),
+        batch_size_liters: Type.Number(),
+        resources: Type.Array(
+            Type.Object({
+                resource_id: Type.Integer(),
+                quantity_required: Type.Number()
+            }),
+            { minItems: 1 }
+        )
+    })
+
+    const RecipeIdParamSchema = Type.Object({
+        id: Type.Integer()
+    })
+
+    const AddResourceSchema = Type.Object({
+        resource_id: Type.Integer(),
+        quantity_required: Type.Number({ exclusiveMinimum: 0 })
+    })
+
     /**
      * GET /recipes/:colorId - Retrieve active recipes for a specific color.
      * Accessible to all authenticated users.
      */
     fastify.get('/:colorId', {
-        // middleware to verify JWT
         preHandler: [fastify.authenticate],
         schema: {
-            params: {
-                type: 'object',
-                required: ['colorId'],
-                properties: {
-                    colorId: { type: 'integer' }
-                }
-            }
+            params: ColorIdParamSchema
         },
-        handler: async (request: any, reply: any) => {
+        handler: async (request, reply) => {
             const { colorId } = request.params
 
             try {
@@ -89,34 +113,11 @@ export default async function (fastify: FastifyInstance) {
      * Only accessible by users with 'admin' or 'manager' roles.
      */
     fastify.post('/', {
-        // middleware to verify JWT and check user role
         preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
-        // request body validation schema
         schema: {
-            body: {
-                type: 'object',
-                required: ['color_id', 'name', 'batch_size_liters', 'resources'],
-                properties: {
-                    color_id: { type: 'integer' },
-                    name: { type: 'string' },
-                    version: { type: 'string', default: '1.0.0' },
-                    batch_size_liters: { type: 'number' },
-                    resources: {
-                        type: 'array',
-                        minItems: 1,
-                        items: {
-                            type: 'object',
-                            required: ['resource_id', 'quantity_required'],
-                            properties: {
-                                resource_id: { type: 'integer' },
-                                quantity_required: { type: 'number' }
-                            }
-                        }
-                    }
-                }
-            }
+            body: CreateRecipeSchema
         },
-        handler: async (request: any, reply: any) => {
+        handler: async (request, reply) => {
             const { color_id, name, version, batch_size_liters, resources } = request.body
 
             // We need a transaction block to ensure both the recipe and its resources are safely committed.
@@ -146,10 +147,11 @@ export default async function (fastify: FastifyInstance) {
                 }
 
                 // 4. Log the creation in the audit_logs table
+                const user = request.user as any
                 await client.query(
                     `INSERT INTO audit_logs (user_id, action, entity_type, entity_id)
                      VALUES ($1, 'recipe_created', 'recipe', $2)`,
-                    [request.user.id, newRecipe.id]
+                    [user.id, newRecipe.id]
                 )
 
                 // 5. Commit Transaction
@@ -203,27 +205,12 @@ export default async function (fastify: FastifyInstance) {
      * Only accessible by users with 'admin' or 'manager' roles.
      */
     fastify.post('/:id/resources', {
-        // middleware to verify JWT and check user role
         preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
-        // request schema validation
         schema: {
-            params: {
-                type: 'object',
-                required: ['id'],
-                properties: {
-                    id: { type: 'integer' }
-                }
-            },
-            body: {
-                type: 'object',
-                required: ['resource_id', 'quantity_required'],
-                properties: {
-                    resource_id: { type: 'integer' },
-                    quantity_required: { type: 'number', exclusiveMinimum: 0 }
-                }
-            }
+            params: RecipeIdParamSchema,
+            body: AddResourceSchema
         },
-        handler: async (request: any, reply: any) => {
+        handler: async (request, reply) => {
             const { id } = request.params
             const { resource_id, quantity_required } = request.body
 

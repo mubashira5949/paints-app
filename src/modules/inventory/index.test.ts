@@ -29,7 +29,8 @@ describe('Inventory Module API', () => {
         },
         get: (path: string, options: any) => {
             routes[`GET ${path}`] = options
-        }
+        },
+        withTypeProvider: () => mockFastify
     }
 
     // Helper function to create a stateful mocked reply object

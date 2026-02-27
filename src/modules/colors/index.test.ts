@@ -81,7 +81,8 @@ describe('Colors Module API', () => {
         },
         post: (path: string, options: any) => {
             routes[`POST ${path}`] = options
-        }
+        },
+        withTypeProvider: () => mockFastify
     }
 
     // Helper to simulate a Fastify Reply object for assertions

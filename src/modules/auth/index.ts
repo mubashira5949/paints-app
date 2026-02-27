@@ -4,26 +4,27 @@
  */
 
 import { FastifyInstance } from 'fastify'
+import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
+import { Type } from '@sinclair/typebox'
 import bcrypt from 'bcrypt'
 
-export default async function (fastify: FastifyInstance) {
+export default async function (fastifyRaw: FastifyInstance) {
+    const fastify = fastifyRaw.withTypeProvider<TypeBoxTypeProvider>()
+
+    const LoginSchema = Type.Object({
+        email: Type.String({ format: 'email' }),
+        password: Type.String()
+    })
+
     /**
      * POST /login - Authenticate a user and return a JWT token.
      */
     fastify.post('/login', {
-        // request body validation schema
         schema: {
-            body: {
-                type: 'object',
-                required: ['email', 'password'],
-                properties: {
-                    email: { type: 'string', format: 'email' },
-                    password: { type: 'string' }
-                }
-            }
+            body: LoginSchema
         },
         handler: async (request, reply) => {
-            const { email, password } = request.body as any
+            const { email, password } = request.body
 
             try {
                 // 1. Retrieve the user and their associated role name from the database.
