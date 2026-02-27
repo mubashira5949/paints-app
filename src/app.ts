@@ -58,6 +58,13 @@ fastify.register(recipesModule, { prefix: '/recipes' })
  */
 fastify.register(productionModule, { prefix: '/production-runs' })
 
+import inventoryModule from './modules/inventory'
+
+/**
+ * Register inventory module with a '/inventory' prefix.
+ */
+fastify.register(inventoryModule, { prefix: '/inventory' })
+
 /**
  * Root endpoint - returns basic API information.
  */

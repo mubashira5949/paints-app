@@ -1,3 +1,8 @@
+/**
+ * Recipes Module Tests
+ * Integration tests verifying the creation and validation of recipes.
+ */
+
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import recipesModule from './index'

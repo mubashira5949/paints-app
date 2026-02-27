@@ -1,3 +1,9 @@
+/**
+ * authorizeRole.test.ts
+ * Unit tests for the RBAC middleware.
+ * Verifies that authorized roles pass and unauthorized roles are rejected.
+ */
+
 import { describe, it, expect } from 'vitest'
 import { authorizeRole } from './authorizeRole'
 import { FastifyRequest, FastifyReply } from 'fastify'

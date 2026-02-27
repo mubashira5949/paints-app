@@ -1,3 +1,8 @@
+/**
+ * Colors Module Tests
+ * Integration tests for the Colors API endpoints.
+ */
+
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import colorsModule from './index'
