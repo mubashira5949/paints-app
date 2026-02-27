@@ -31,6 +31,7 @@ import userModule from './modules/users'
 import authModule from './modules/auth'
 import colorsModule from './modules/colors'
 import recipesModule from './modules/recipes'
+import productionModule from './modules/production'
 
 /**
  * Register user management module.
@@ -51,6 +52,11 @@ fastify.register(colorsModule, { prefix: '/colors' })
  * Register recipes module with a '/recipes' prefix.
  */
 fastify.register(recipesModule, { prefix: '/recipes' })
+
+/**
+ * Register production runs module with a '/production-runs' prefix.
+ */
+fastify.register(productionModule, { prefix: '/production-runs' })
 
 /**
  * Root endpoint - returns basic API information.
