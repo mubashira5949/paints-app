@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS resources (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) UNIQUE NOT NULL,
     unit VARCHAR(20) NOT NULL, -- e.g., kg, L, units
-    current_stock DECIMAL(12, 4) DEFAULT 0,
+    current_stock DECIMAL(12, 4) DEFAULT 0 CHECK (current_stock >= 0),
     reorder_level DECIMAL(12, 4) DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -150,6 +150,25 @@ INSERT INTO roles (name, description) VALUES
 ('sales', 'Sales and order management'),
 ('client', 'External client access')
 ON CONFLICT (name) DO NOTHING;
+
+-- 12. Triggers: Automatically adjust resource stock when transactions occur
+CREATE OR REPLACE FUNCTION update_resource_stock_from_transaction()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE resources
+    SET current_stock = current_stock + NEW.quantity,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = NEW.resource_id;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_resource_stock_audit ON resource_stock_transactions;
+
+CREATE TRIGGER trg_resource_stock_audit
+AFTER INSERT ON resource_stock_transactions
+FOR EACH ROW
+EXECUTE FUNCTION update_resource_stock_from_transaction();
 `;
 
 /**
