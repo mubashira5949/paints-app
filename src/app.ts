@@ -29,6 +29,7 @@ fastify.register(jwtConnector)
 // Register feature modules
 import userModule from './modules/users'
 import authModule from './modules/auth'
+import colorsModule from './modules/colors'
 
 /**
  * Register user management module.
@@ -39,6 +40,11 @@ fastify.register(userModule)
  * Register authentication module with a '/auth' prefix.
  */
 fastify.register(authModule, { prefix: '/auth' })
+
+/**
+ * Register colors module with a '/colors' prefix.
+ */
+fastify.register(colorsModule, { prefix: '/colors' })
 
 /**
  * Root endpoint - returns basic API information.
