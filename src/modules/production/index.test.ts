@@ -99,9 +99,7 @@ describe('Production Runs Module API', () => {
             expect(mockClient.query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO production_runs'), expect.any(Array))
             // Expect stock consumption tracking (relying on PostgreSQL trigger exclusively to update actual stock parameters)
             expect(mockClient.query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO production_resource_actuals'), expect.any(Array))
-            // Expect finished stock logic
-            expect(mockClient.query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO finished_stock'), expect.any(Array))
-
+            // Finished stock logic is now deferred to packaging endpoint
             expect(mockClient.query).toHaveBeenCalledWith('COMMIT')
             expect(mockClient.release).toHaveBeenCalledTimes(1)
         })
@@ -236,6 +234,78 @@ describe('Production Runs Module API', () => {
             expect(insertActualsCalls[0][1]).toEqual([999, 101, 20, 20, 0, false])
             // Second item (102): Expected 30, Received 50. Variance: 20. Flag: true.
             expect(insertActualsCalls[1][1]).toEqual([999, 102, 50, 30, 20, true])
+        })
+    })
+
+    describe('POST /production-runs/:id/packaging', () => {
+        let postPackagingRoute: any
+
+        beforeEach(() => {
+            // Find the packaging post route
+            postPackagingRoute = routes['POST /:id/packaging']
+
+            // Re-mock standard successful transaction behavior
+            mockClient.query.mockImplementation(async (query: string, params?: any[]) => {
+                if (query === 'BEGIN' || query === 'COMMIT' || query === 'ROLLBACK') return
+                if (query.includes('FROM production_runs')) {
+                    // Fake valid run yielding 100 liters safely
+                    if (params![0] === 1) return { rows: [{ actual_quantity_liters: 100, status: 'completed', color_id: 10 }] }
+                    return { rows: [] }
+                }
+                if (query.includes('INSERT')) return { rowCount: 1 }
+                return { rows: [] }
+            })
+        })
+
+        it('should successfully package yield into standard cans', async () => {
+            const req = {
+                params: { id: 1 },
+                headers: { authorization: 'Bearer manager:testuser' },
+                user: { id: 10, username: 'testuser', role: 'manager' },
+                body: {
+                    packaging_details: [
+                        { pack_size_liters: 1.0, quantity_units: 50 }, // 50L
+                        { pack_size_liters: 5.0, quantity_units: 10 }  // 50L (100L total)
+                    ]
+                }
+            } as unknown as FastifyRequest
+            const rep = createMockReply()
+
+            for (const handler of postPackagingRoute.preHandler) { await handler(req, rep) }
+            await postPackagingRoute.handler(req, rep)
+
+            expect((rep as any).getStatusCode()).toBe(201)
+            expect(mockClient.query).toHaveBeenCalledWith('COMMIT')
+
+            // Confirm two disparate inserts for the two container geometries 
+            const insertFinishedCalls = mockClient.query.mock.calls.filter(call => call[0].includes('INSERT INTO finished_stock('))
+            expect(insertFinishedCalls.length).toBe(2)
+
+            // Assert upsert arguments [color_id, pack_size_liters, quantity_units]
+            expect(insertFinishedCalls[0][1]).toEqual([10, 1.0, 50])
+            expect(insertFinishedCalls[1][1]).toEqual([10, 5.0, 10])
+        })
+
+        it('should rollback transaction if packaging exceeds true physical batch capacity yielded', async () => {
+            const req = {
+                params: { id: 1 },
+                headers: { authorization: 'Bearer operator:testuser' },
+                user: { id: 10, username: 'testuser', role: 'operator' },
+                body: {
+                    packaging_details: [
+                        { pack_size_liters: 10.0, quantity_units: 50 } // 500L exceeds 100L capacity
+                    ]
+                }
+            } as unknown as FastifyRequest
+            const rep = createMockReply()
+
+            for (const handler of postPackagingRoute.preHandler) { await handler(req, rep) }
+            await postPackagingRoute.handler(req, rep)
+
+            expect((rep as any).getStatusCode()).toBe(400)
+            expect((rep as any).getBody().message).toBe('Requested packaged volume (500L) exceeds actual production batch limits (100L).')
+            expect(mockClient.query).toHaveBeenCalledWith('ROLLBACK')
+            expect(mockClient.release).toHaveBeenCalledTimes(1)
         })
     })
 })
