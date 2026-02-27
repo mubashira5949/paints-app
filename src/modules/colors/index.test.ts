@@ -3,7 +3,7 @@
  * Integration tests for the Colors API endpoints.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import colorsModule from './index'
 
@@ -11,8 +11,10 @@ describe('Colors Module API', () => {
     let mockColors: any[] = []
     let routes: { [method: string]: any } = {}
 
+    // Mock Fastify Instance capturing authentication and DB queries
     const mockFastify = {
         authenticate: async (request: any, reply: any) => {
+            // Simulate JWT verification middleware
             if (!request.headers.authorization) {
                 throw new Error('Unauthorized')
             }
@@ -22,9 +24,11 @@ describe('Colors Module API', () => {
         },
         db: {
             query: async (query: string, params?: any[]) => {
+                // Mock simple SELECT query logic
                 if (query.includes('SELECT')) {
                     return { rows: mockColors }
                 } else if (query.includes('INSERT')) {
+                    // Mock INSERT logic to handle color creation and emulate DB constraints
                     const newColor = {
                         id: mockColors.length + 1,
                         name: params![0],
@@ -41,7 +45,33 @@ describe('Colors Module API', () => {
                     return { rows: [newColor] }
                 }
                 return { rows: [] }
-            }
+            },
+            connect: async () => ({
+                query: async (query: string, params?: any[]) => {
+                    if (query === 'BEGIN' || query === 'COMMIT' || query === 'ROLLBACK') return
+
+                    if (query.includes('INSERT INTO colors')) {
+                        const newColor = {
+                            id: mockColors.length + 1,
+                            name: params![0],
+                            color_code: params![1],
+                            description: params![2],
+                            created_at: new Date().toISOString()
+                        }
+                        if (mockColors.some(c => c.name === newColor.name)) {
+                            const error = new Error('Duplicate key')
+                                ; (error as any).code = '23505'
+                            throw error
+                        }
+                        mockColors.push(newColor)
+                        return { rows: [newColor] }
+                    } else if (query.includes('INSERT INTO audit_logs')) {
+                        return { rows: [] }
+                    }
+                    return { rows: [] }
+                },
+                release: vi.fn()
+            })
         },
         log: {
             error: (err: any) => { } // silent log for tests
@@ -54,6 +84,7 @@ describe('Colors Module API', () => {
         }
     }
 
+    // Helper to simulate a Fastify Reply object for assertions
     const createMockReply = () => {
         let statusCode = 200;
         let responseBody: any = null;
@@ -83,6 +114,7 @@ describe('Colors Module API', () => {
     describe('POST /colors', () => {
         it('should allow admin and manager to create a color', async () => {
             const postRoute = routes['POST /']
+            // Provide an authorized mock request object
             const req = {
                 headers: { authorization: 'Bearer manager:testuser' },
                 body: { name: 'Titanium White', color_code: '#FFFFFF', description: 'Base white paint' }
@@ -139,6 +171,7 @@ describe('Colors Module API', () => {
                 await postRoute.handler(req, rep)
             }
 
+            // Assert that duplicate names trigger a bad request error
             expect((rep as any).getStatusCode()).toBe(400)
             expect((rep as any).getBody().message).toBe('A color with this name already exists')
         })

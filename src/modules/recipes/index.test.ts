@@ -139,11 +139,12 @@ describe('Recipes Module API', () => {
 
             expect((rep as any).getStatusCode()).toBe(201)
 
-            // Verify transactional logic
+            // Verify that the transactional boundary was executed in order
             expect(mockClient.query).toHaveBeenNthCalledWith(1, 'BEGIN')
             expect(mockClient.query).toHaveBeenNthCalledWith(2, expect.stringContaining('INSERT INTO recipes'), expect.any(Array))
             expect(mockClient.query).toHaveBeenNthCalledWith(3, expect.stringContaining('INSERT INTO recipe_resources'), expect.any(Array))
-            expect(mockClient.query).toHaveBeenNthCalledWith(4, 'COMMIT')
+            expect(mockClient.query).toHaveBeenNthCalledWith(4, expect.stringContaining('INSERT INTO audit_logs'), expect.any(Array))
+            expect(mockClient.query).toHaveBeenNthCalledWith(5, 'COMMIT')
             expect(mockClient.release).toHaveBeenCalledTimes(1)
         })
 
@@ -256,6 +257,7 @@ describe('Recipes Module API', () => {
             for (const handler of postResourceRoute.preHandler) { await handler(req, rep) }
             await postResourceRoute.handler(req, rep)
 
+            // Assert that the resource mapping was successful
             expect((rep as any).getStatusCode()).toBe(201)
             expect((rep as any).getBody().message).toBe('Resource added to recipe successfully')
             expect((rep as any).getBody().recipe_resource.resource_id).toBe(101)

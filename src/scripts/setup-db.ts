@@ -145,6 +145,16 @@ CREATE TABLE IF NOT EXISTS finished_stock_transactions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 12. Audit Logs: General system audit for tracking creation of integral items
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) NOT NULL,
+    action VARCHAR(255) NOT NULL, -- e.g. color_created, recipe_created, production_created
+    entity_type VARCHAR(50) NOT NULL, -- e.g. color, recipe, production_run
+    entity_id INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Initial Roles: Seed the roles table with default system roles
 INSERT INTO roles (name, description) VALUES 
 ('admin', 'Super Administrator with full access'),
@@ -154,7 +164,7 @@ INSERT INTO roles (name, description) VALUES
 ('client', 'External client access')
 ON CONFLICT (name) DO NOTHING;
 
--- 12. Triggers: Automatically adjust resource stock when transactions occur
+-- 13. Triggers: Automatically adjust resource stock when transactions occur
 CREATE OR REPLACE FUNCTION update_resource_stock_from_transaction()
 RETURNS TRIGGER AS $$
 BEGIN

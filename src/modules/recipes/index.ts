@@ -145,7 +145,14 @@ export default async function (fastify: FastifyInstance) {
                     )
                 }
 
-                // Everything succeeded, commit the transaction
+                // 4. Log the creation in the audit_logs table
+                await client.query(
+                    `INSERT INTO audit_logs (user_id, action, entity_type, entity_id)
+                     VALUES ($1, 'recipe_created', 'recipe', $2)`,
+                    [request.user.id, newRecipe.id]
+                )
+
+                // 5. Commit Transaction
                 await client.query('COMMIT')
 
                 return reply.status(201).send({
