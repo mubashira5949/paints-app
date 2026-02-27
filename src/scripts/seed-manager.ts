@@ -42,8 +42,8 @@ async function seed() {
         // 3. Insert the initial manager user into the users table.
         // Uses ON CONFLICT to prevent error if the user already exists.
         await pool.query(
-            'INSERT INTO users (username, password_hash, role_id) VALUES ($1, $2, $3) ON CONFLICT (username) DO NOTHING',
-            ['initial_manager', hashedPassword, roleId]
+            'INSERT INTO users (username, email, password_hash, role_id) VALUES ($1, $2, $3, $4) ON CONFLICT (username) DO NOTHING',
+            ['initial_manager', 'manager@paintsapp.com', hashedPassword, roleId]
         );
 
         console.log('Initial manager user created!');
