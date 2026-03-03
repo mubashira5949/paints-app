@@ -1,3 +1,9 @@
+/**
+ * authorizeRole.ts
+ * Fastify preHandler middleware for Role-Based Access Control (RBAC).
+ * Ensures the authenticated user possesses one of the permitted roles.
+ */
+
 import { FastifyReply, FastifyRequest } from 'fastify'
 
 /**
