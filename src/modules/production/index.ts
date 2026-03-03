@@ -122,24 +122,7 @@ export default async function (fastify: FastifyInstance) {
                     )
                 }
 
-                // 5. Update Finished Stock
-                // a. Audit the finished goods increment
-                await client.query(
-                    `INSERT INTO finished_stock_transactions (color_id, transaction_type, quantity_liters, reference_id, notes)
-                      VALUES ($1, 'production_entry', $2, $3, 'Generated from Production Run')`,
-                    [colorId, planned_quantity_liters, runId, 'Generated from Production Run']
-                )
-
-                // b. Update or Create finished tracking row (UPSERT)
-                await client.query(
-                    `INSERT INTO finished_stock (color_id, quantity_liters)
-                      VALUES ($1, $2)
-                      ON CONFLICT (color_id) 
-                      DO UPDATE SET 
-                        quantity_liters = finished_stock.quantity_liters + EXCLUDED.quantity_liters,
-                        updated_at = CURRENT_TIMESTAMP`,
-                    [colorId, planned_quantity_liters]
-                )
+                // 5. Update Finished Stock is deferred to the Packaging endpoint.
 
                 // Everything successfully applied out, commit
                 await client.query('COMMIT')
@@ -166,6 +149,127 @@ export default async function (fastify: FastifyInstance) {
                 return reply.status(500).send({
                     error: 'Internal Server Error',
                     message: 'Failed to process production run'
+                })
+            } finally {
+                if (client) {
+                    client.release()
+                }
+            }
+        }
+    })
+
+    /**
+     * POST /production-runs/:id/packaging - Package the yield of an existing production run.
+     * Accessible by 'manager' and 'operator' roles.
+     */
+    fastify.post('/:id/packaging', {
+        // middleware to verify JWT and check user role
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'operator'])],
+        // request validation schema
+        schema: {
+            params: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                    id: { type: 'integer' }
+                }
+            },
+            body: {
+                type: 'object',
+                required: ['packaging_details'],
+                properties: {
+                    packaging_details: {
+                        type: 'array',
+                        minItems: 1,
+                        items: {
+                            type: 'object',
+                            required: ['pack_size_liters', 'quantity_units'],
+                            properties: {
+                                pack_size_liters: { type: 'number', exclusiveMinimum: 0 },
+                                quantity_units: { type: 'integer', exclusiveMinimum: 0 }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        handler: async (request: any, reply: any) => {
+            const { id } = request.params
+            const { packaging_details } = request.body
+
+            let client
+            try {
+                client = await fastify.db.connect()
+                await client.query('BEGIN')
+
+                // 1. Fetch current run and validate volume integrity
+                const runResult = await client.query(
+                    `SELECT pr.actual_quantity_liters, pr.status, r.color_id 
+                      FROM production_runs pr
+                      JOIN recipes r ON pr.recipe_id = r.id
+                      WHERE pr.id = $1`,
+                    [id]
+                )
+
+                if (runResult.rows.length === 0) {
+                    await client.query('ROLLBACK')
+                    return reply.status(404).send({ error: 'Not Found', message: 'Production run not found' })
+                }
+
+                const { actual_quantity_liters, status, color_id } = runResult.rows[0]
+
+                // Ensure we don't package volumes we didn't theoretically produce
+                let requestedVolumeLiters = 0
+                for (const pack of packaging_details) {
+                    requestedVolumeLiters += (pack.pack_size_liters * pack.quantity_units)
+                }
+
+                // Check against actual_quantity. In a real application, you might also query previous packages
+                // allocated to this run ID if packaging happens in stages rather than one bulk mapping
+                if (requestedVolumeLiters > actual_quantity_liters) {
+                    await client.query('ROLLBACK')
+                    return reply.status(400).send({
+                        error: 'Bad Request',
+                        message: `Requested packaged volume (${requestedVolumeLiters}L) exceeds actual production batch limits (${actual_quantity_liters}L).`
+                    })
+                }
+
+                // 2. Transact Finished Stock
+                for (const pack of packaging_details) {
+                    // a. Audit tracking explicitly by bucket scale
+                    await client.query(
+                        `INSERT INTO finished_stock_transactions
+                        (color_id, pack_size_liters, transaction_type, quantity_units, reference_id, notes)
+                          VALUES($1, $2, 'production_entry', $3, $4, 'Packaged from Production Run')`,
+                        [color_id, pack.pack_size_liters, pack.quantity_units, id]
+                    )
+
+                    // b. Increment total finished stock count combining composite sizes natively
+                    await client.query(
+                        `INSERT INTO finished_stock(color_id, pack_size_liters, quantity_units)
+                          VALUES($1, $2, $3)
+                          ON CONFLICT(color_id, pack_size_liters) 
+                          DO UPDATE SET 
+                            quantity_units = finished_stock.quantity_units + EXCLUDED.quantity_units,
+                        updated_at = CURRENT_TIMESTAMP`,
+                        [color_id, pack.pack_size_liters, pack.quantity_units]
+                    )
+                }
+
+                await client.query('COMMIT')
+
+                return reply.status(201).send({
+                    message: 'Packaging completed successfully, inventory incremented.'
+                })
+
+            } catch (err: any) {
+                if (client) {
+                    await client.query('ROLLBACK')
+                }
+                fastify.log.error(err)
+                return reply.status(500).send({
+                    error: 'Internal Server Error',
+                    message: 'Failed to package production run'
                 })
             } finally {
                 if (client) {

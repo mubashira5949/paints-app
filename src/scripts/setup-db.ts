@@ -123,11 +123,13 @@ CREATE TABLE IF NOT EXISTS resource_stock_transactions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 10. Finished Stock: Current inventory levels for finished paint colors
+-- 10. Finished Stock: Current inventory levels for finished paint colors by package size
 CREATE TABLE IF NOT EXISTS finished_stock (
     id SERIAL PRIMARY KEY,
-    color_id INTEGER REFERENCES colors(id) UNIQUE NOT NULL,
-    quantity_liters DECIMAL(12, 4) DEFAULT 0,
+    color_id INTEGER REFERENCES colors(id) NOT NULL,
+    pack_size_liters DECIMAL(5, 2) NOT NULL,
+    quantity_units INTEGER DEFAULT 0,
+    UNIQUE(color_id, pack_size_liters),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -135,8 +137,9 @@ CREATE TABLE IF NOT EXISTS finished_stock (
 CREATE TABLE IF NOT EXISTS finished_stock_transactions (
     id SERIAL PRIMARY KEY,
     color_id INTEGER REFERENCES colors(id) NOT NULL,
+    pack_size_liters DECIMAL(5, 2) NOT NULL,
     transaction_type VARCHAR(50) NOT NULL, -- production_entry, sale, adjustment, return
-    quantity_liters DECIMAL(12, 4) NOT NULL,
+    quantity_units INTEGER NOT NULL,
     reference_id INT, -- e.g., production_run_id or sale_id
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
