@@ -43,7 +43,7 @@ describe('Recipes Module API', () => {
                 }
                 return { rows: [] }
             },
-            // Logic for getting connection pool (used in POST transactions)
+            // Logic for getting connection pool (used in POST /recipes transactions)
             connect: async () => mockClient
         },
         log: {
@@ -210,6 +210,112 @@ describe('Recipes Module API', () => {
             expect(body[0].resources.length).toBe(1)
             expect(body[0].resources[0].resource_id).toBe(101)
             expect(body[0].resources[0].quantity_required).toBe(15)
+        })
+    })
+
+    describe('POST /recipes/:id/resources', () => {
+        beforeEach(() => {
+            // Setup additional routing mocks specifically for simple query validation
+            vi.spyOn(mockFastify.db, 'query').mockImplementation(async (query: string, params?: any[]) => {
+                if (query.includes('FROM recipes')) {
+                    const id = params![0]
+                    if (id === 99) return { rows: [{ id: 99 }] }
+                    return { rows: [] }
+                } else if (query.includes('FROM resources')) {
+                    const id = params![0]
+                    if (id === 101) return { rows: [{ id: 101 }] }
+                    return { rows: [] }
+                } else if (query.includes('INSERT INTO recipe_resources')) {
+                    // Simulate uniqueness rejection
+                    if (params![0] === 99 && params![1] === 102) {
+                        const error = new Error('Duplicate key')
+                            ; (error as any).code = '23505'
+                        throw error
+                    }
+                    const newRR = { id: 1, recipe_id: params![0], resource_id: params![1], quantity_required: params![2] }
+                    return { rows: [newRR] }
+                }
+                return { rows: [] }
+            })
+        })
+
+        it('should append a valid resource to an existing recipe successfully', async () => {
+            const postResourceRoute = routes['POST /:id/resources']
+            const req = {
+                headers: { authorization: 'Bearer admin:testuser' },
+                params: { id: 99 },
+                body: { resource_id: 101, quantity_required: 20 }
+            } as unknown as FastifyRequest
+            const rep = createMockReply()
+
+            for (const handler of postResourceRoute.preHandler) { await handler(req, rep) }
+            await postResourceRoute.handler(req, rep)
+
+            expect((rep as any).getStatusCode()).toBe(201)
+            expect((rep as any).getBody().message).toBe('Resource added to recipe successfully')
+            expect((rep as any).getBody().recipe_resource.resource_id).toBe(101)
+            expect((rep as any).getBody().recipe_resource.quantity_required).toBe(20)
+        })
+
+        it('should return 404 if the requested recipe does not exist', async () => {
+            const postResourceRoute = routes['POST /:id/resources']
+            const req = {
+                headers: { authorization: 'Bearer manager:testuser' },
+                params: { id: 88 }, // invalid recipe
+                body: { resource_id: 101, quantity_required: 10 }
+            } as unknown as FastifyRequest
+            const rep = createMockReply()
+
+            for (const handler of postResourceRoute.preHandler) { await handler(req, rep) }
+            await postResourceRoute.handler(req, rep)
+
+            expect((rep as any).getStatusCode()).toBe(404)
+            expect((rep as any).getBody().message).toBe('Recipe not found')
+        })
+
+        it('should return 404 if the requested resource does not exist', async () => {
+            const postResourceRoute = routes['POST /:id/resources']
+            const req = {
+                headers: { authorization: 'Bearer manager:testuser' },
+                params: { id: 99 },
+                body: { resource_id: 77, quantity_required: 10 } // invalid resource
+            } as unknown as FastifyRequest
+            const rep = createMockReply()
+
+            for (const handler of postResourceRoute.preHandler) { await handler(req, rep) }
+            await postResourceRoute.handler(req, rep)
+
+            expect((rep as any).getStatusCode()).toBe(404)
+            expect((rep as any).getBody().message).toBe('Resource not found')
+        })
+
+        it('should return 400 if the resource is already mapped to the recipe', async () => {
+            const postResourceRoute = routes['POST /:id/resources']
+            // Using our mock implementation: resource 102 will trigger unique fault
+            // but we must make sure resource 102 passes the resource exist validation first
+            vi.spyOn(mockFastify.db, 'query').mockImplementation(async (query: string, params?: any[]) => {
+                if (query.includes('FROM recipes')) return { rows: [{ id: 99 }] }
+                if (query.includes('FROM resources')) return { rows: [{ id: 102 }] }
+                if (query.includes('INSERT INTO recipe_resources')) {
+                    const error = new Error('Duplicate key')
+                        ; (error as any).code = '23505'
+                    throw error
+                }
+                return { rows: [] }
+            })
+
+            const req = {
+                headers: { authorization: 'Bearer admin:testuser' },
+                params: { id: 99 },
+                body: { resource_id: 102, quantity_required: 15 }
+            } as unknown as FastifyRequest
+            const rep = createMockReply()
+
+            for (const handler of postResourceRoute.preHandler) { await handler(req, rep) }
+            await postResourceRoute.handler(req, rep)
+
+            expect((rep as any).getStatusCode()).toBe(400)
+            expect((rep as any).getBody().message).toBe('This resource is already added to the specified recipe')
         })
     })
 })
