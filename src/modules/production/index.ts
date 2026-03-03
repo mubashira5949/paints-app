@@ -122,7 +122,12 @@ export default async function (fastify: FastifyInstance) {
                     )
                 }
 
-                // 5. Update Finished Stock is deferred to the Packaging endpoint.
+                // 6. Log the creation in the audit_logs table
+                await client.query(
+                    `INSERT INTO audit_logs (user_id, action, entity_type, entity_id)
+                     VALUES ($1, 'production_created', 'production_run', $2)`,
+                    [user_id, runId]
+                )
 
                 // Everything successfully applied out, commit
                 await client.query('COMMIT')

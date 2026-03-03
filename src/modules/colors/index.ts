@@ -52,22 +52,34 @@ export default async function (fastify: FastifyInstance) {
         },
         handler: async (request: any, reply: any) => {
             const { name, color_code, description } = request.body
+            const client = await fastify.db.connect() // Get a client from the pool
 
             try {
-                const result = await fastify.db.query(
-                    'INSERT INTO colors (name, color_code, description) VALUES ($1, $2, $3) RETURNING id, name, color_code, description, created_at',
+                await client.query('BEGIN') // Start transaction
+
+                // Create the color entry
+                const insertResult = await client.query(
+                    'INSERT INTO colors (name, color_code, description) VALUES ($1, $2, $3) RETURNING *',
                     [name, color_code, description]
                 )
+                const newColor = insertResult.rows[0]
 
-                const newColor = result.rows[0]
+                // Log the creation in the audit_logs table
+                await client.query(
+                    `INSERT INTO audit_logs (user_id, action, entity_type, entity_id)
+                     VALUES ($1, 'color_created', 'color', $2)`,
+                    [request.user.id, newColor.id]
+                )
+
+                await client.query('COMMIT') // Commit transaction
 
                 return reply.status(201).send({
                     message: 'Color created successfully',
                     color: newColor
                 })
             } catch (err: any) {
-                // Handle duplicate color name error (PostgreSQL unique constraint violation).
-                if (err.code === '23505') {
+                await client.query('ROLLBACK')
+                if (err.code === '23505') { // Unique violation Postgres
                     return reply.status(400).send({
                         error: 'Bad Request',
                         message: 'A color with this name already exists'
@@ -78,6 +90,8 @@ export default async function (fastify: FastifyInstance) {
                     error: 'Internal Server Error',
                     message: 'Failed to create color'
                 })
+            } finally {
+                client.release()
             }
         }
     })
