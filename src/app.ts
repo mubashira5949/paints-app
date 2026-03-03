@@ -35,7 +35,9 @@ fastify.setErrorHandler((error: any, request, reply) => {
         })
     } else {
         fastify.log.error(error)
-        reply.status(500).send({ error: 'Internal Server Error', message: error.message || 'An unexpected error occurred' })
+        const statusCode = error.statusCode || 500
+        const errorName = statusCode === 500 ? 'Internal Server Error' : (error.name || 'Error')
+        reply.status(statusCode).send({ error: errorName, message: error.message || 'An unexpected error occurred' })
     }
 })
 
