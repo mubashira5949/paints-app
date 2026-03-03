@@ -8,6 +8,8 @@ import dbConnector from './plugins/db'
 import jwtConnector from './plugins/jwt'
 import dotenv from 'dotenv'
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
+import swagger from '@fastify/swagger'
+import swaggerUI from '@fastify/swagger-ui'
 
 // Load environment variables from .env file
 dotenv.config()
@@ -24,7 +26,7 @@ const fastify = Fastify({
 }).withTypeProvider<TypeBoxTypeProvider>()
 
 // Global Error Handler to catch and format TypeBox Validation Failures
-fastify.setErrorHandler((error, request, reply) => {
+fastify.setErrorHandler((error: any, request, reply) => {
     if (error.validation) {
         reply.status(400).send({
             error: 'Bad Request',
@@ -34,6 +36,35 @@ fastify.setErrorHandler((error, request, reply) => {
     } else {
         fastify.log.error(error)
         reply.status(500).send({ error: 'Internal Server Error', message: error.message || 'An unexpected error occurred' })
+    }
+})
+
+// Register Swagger API documentation
+fastify.register(swagger, {
+    openapi: {
+        info: {
+            title: 'Paints App API',
+            description: 'API documentation for Paints App',
+            version: '1.0.0'
+        },
+        components: {
+            securitySchemes: {
+                bearerAuth: {
+                    type: 'http',
+                    scheme: 'bearer',
+                    bearerFormat: 'JWT'
+                }
+            }
+        },
+        security: [{ bearerAuth: [] }]
+    }
+})
+
+fastify.register(swaggerUI, {
+    routePrefix: '/docs',
+    uiConfig: {
+        docExpansion: 'list',
+        deepLinking: false
     }
 })
 
