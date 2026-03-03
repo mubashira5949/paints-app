@@ -97,9 +97,8 @@ describe('Production Runs Module API', () => {
             // Verify transactional logic checks
             expect(mockClient.query).toHaveBeenCalledWith('BEGIN')
             expect(mockClient.query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO production_runs'), expect.any(Array))
-            // Expect stock consumption tracking for the two items provided
+            // Expect stock consumption tracking (relying on PostgreSQL trigger exclusively to update actual stock parameters)
             expect(mockClient.query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO production_resource_actuals'), expect.any(Array))
-            expect(mockClient.query).toHaveBeenCalledWith(expect.stringContaining('UPDATE resources'), expect.any(Array))
             // Expect finished stock logic
             expect(mockClient.query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO finished_stock'), expect.any(Array))
 
@@ -149,6 +148,44 @@ describe('Production Runs Module API', () => {
 
             expect((rep as any).getStatusCode()).toBe(400)
             expect((rep as any).getBody().message).toBe('Provided resources do not match the selected recipe blueprint')
+
+            // Should properly close and rollback DB
+            expect(mockClient.query).toHaveBeenCalledWith('ROLLBACK')
+            expect(mockClient.release).toHaveBeenCalledTimes(1)
+        })
+
+        it('should rollback transaction intercepting a database CHECK violation mapping to Insufficient Stock limits', async () => {
+            const postRoute = routes['POST /']
+
+            // Re-mock DB connection locally to intercept the constraint during log insertion
+            mockClient.query.mockImplementationOnce(async (q) => { if (q === 'BEGIN') return })
+                .mockImplementationOnce(async () => { return { rows: [{ id: 1, color_id: 10, batch_size_liters: 100 }] } }) // fetch recipe
+                .mockImplementationOnce(async () => { return { rows: [{ resource_id: 101, quantity_required: 10 }] } }) // fetch blueprint
+                .mockImplementationOnce(async () => { return { rows: [{ id: 999 }] } }) // fake prod id
+                .mockImplementationOnce(async () => { }) // Insert production_resource_actuals ok
+                .mockImplementationOnce(async () => {
+                    // Trap constraint on 'resource_stock_transactions' indicating native trigger broke check
+                    const err = new Error('check_violation')
+                        ; (err as any).code = '23514'
+                    throw err
+                })
+
+            const req = {
+                headers: { authorization: 'Bearer manager:testuser' },
+                user: { id: 10 },
+                body: {
+                    recipe_id: 1,
+                    planned_quantity_liters: 200,
+                    actual_resources: [{ resource_id: 101, actual_quantity_used: 10000 }] // enormous depletion expected to trip bound 
+                }
+            } as unknown as FastifyRequest
+            const rep = createMockReply()
+
+            for (const handler of postRoute.preHandler) { await handler(req, rep) }
+            await postRoute.handler(req, rep)
+
+            expect((rep as any).getStatusCode()).toBe(400)
+            expect((rep as any).getBody().message).toBe('Insufficient raw materials stock exists in inventory to complete this run.')
 
             // Should properly close and rollback DB
             expect(mockClient.query).toHaveBeenCalledWith('ROLLBACK')

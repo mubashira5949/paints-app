@@ -114,19 +114,11 @@ export default async function (fastify: FastifyInstance) {
                         [runId, actual.resource_id, actual.actual_quantity_used, expectedQuantity, variance, varianceFlag]
                     )
 
-                    // b. Audit the stock decrement
+                    // b. Audit the stock decrement (trigger auto-updates the resources table)
                     await client.query(
                         `INSERT INTO resource_stock_transactions (resource_id, transaction_type, quantity, reference_id, notes)
                           VALUES ($1, 'production_usage', $2, $3, 'Consumed in Production Run')`,
                         [actual.resource_id, -actual.actual_quantity_used, runId]
-                    )
-
-                    // c. Update current resource inventory
-                    await client.query(
-                        `UPDATE resources 
-                          SET current_stock = current_stock - $1, updated_at = CURRENT_TIMESTAMP
-                          WHERE id = $2`,
-                        [actual.actual_quantity_used, actual.resource_id]
                     )
                 }
 
@@ -135,7 +127,7 @@ export default async function (fastify: FastifyInstance) {
                 await client.query(
                     `INSERT INTO finished_stock_transactions (color_id, transaction_type, quantity_liters, reference_id, notes)
                       VALUES ($1, 'production_entry', $2, $3, 'Generated from Production Run')`,
-                    [colorId, 'production_entry', planned_quantity_liters, runId, 'Generated from Production Run']
+                    [colorId, planned_quantity_liters, runId, 'Generated from Production Run']
                 )
 
                 // b. Update or Create finished tracking row (UPSERT)
@@ -157,10 +149,19 @@ export default async function (fastify: FastifyInstance) {
                     production_run_id: runId
                 })
 
-            } catch (err) {
+            } catch (err: any) {
                 if (client) {
                     await client.query('ROLLBACK')
                 }
+
+                // Catch DB Constraint violation for negative stock bounds
+                if (err.code === '23514') {
+                    return reply.status(400).send({
+                        error: 'Bad Request',
+                        message: 'Insufficient raw materials stock exists in inventory to complete this run.'
+                    })
+                }
+
                 fastify.log.error(err)
                 return reply.status(500).send({
                     error: 'Internal Server Error',
