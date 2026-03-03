@@ -59,8 +59,10 @@ describe('Production Runs Module API', () => {
                 return { rows: [] }
             }
             if (query.includes('FROM recipe_resources')) {
-                // Mock dependencies for recipe_id 1
-                if (params![0] === 1) return { rows: [{ resource_id: 101 }, { resource_id: 102 }] }
+                // Mock dependencies for recipe_id 1 (batch_size = 100)
+                // expects exactly matching scale:
+                // For 200L planned: expected_qty = 20 & 30 respectively
+                if (params![0] === 1) return { rows: [{ resource_id: 101, quantity_required: 10 }, { resource_id: 102, quantity_required: 15 }] }
                 return { rows: [] }
             }
             if (query.includes('INSERT INTO production_runs')) {
@@ -167,6 +169,36 @@ describe('Production Runs Module API', () => {
             }
 
             expect((rep as any).getStatusCode()).toBe(403)
+        })
+
+        it('should correctly mark variance flags if actual limits exceed 5% deviation', async () => {
+            const postRoute = routes['POST /']
+            const req = {
+                headers: { authorization: 'Bearer manager:testuser' },
+                user: { id: 10 },
+                body: {
+                    recipe_id: 1,
+                    planned_quantity_liters: 200,
+                    actual_resources: [
+                        { resource_id: 101, actual_quantity_used: 20 }, // Exact expected amount (200 / 100 * 10) = 20
+                        { resource_id: 102, actual_quantity_used: 50 }  // Extreme deviation! (200 / 100 * 15) = 30. Diff is 20 > 5% limit!
+                    ]
+                }
+            } as unknown as FastifyRequest
+            const rep = createMockReply()
+
+            for (const handler of postRoute.preHandler) { await handler(req, rep) }
+            await postRoute.handler(req, rep)
+
+            expect((rep as any).getStatusCode()).toBe(201)
+
+            // Expected mapping assertions (checking arguments built for the mockClient query)
+            const insertActualsCalls = mockClient.query.mock.calls.filter(call => call[0].includes('INSERT INTO production_resource_actuals'))
+
+            // First item (101): Expected 20, Received 20. Variance: 0. Flag: false.
+            expect(insertActualsCalls[0][1]).toEqual([999, 101, 20, 20, 0, false])
+            // Second item (102): Expected 30, Received 50. Variance: 20. Flag: true.
+            expect(insertActualsCalls[1][1]).toEqual([999, 102, 50, 30, 20, true])
         })
     })
 })

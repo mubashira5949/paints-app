@@ -66,10 +66,11 @@ export default async function (fastify: FastifyInstance) {
 
                 // 2. Fetch expected recipe resources to validate the components provided
                 const expectedResourcesResult = await client.query(
-                    'SELECT resource_id FROM recipe_resources WHERE recipe_id = $1',
+                    'SELECT resource_id, quantity_required FROM recipe_resources WHERE recipe_id = $1',
                     [recipe_id]
                 )
-                const expectedResourceIds = expectedResourcesResult.rows.map(r => r.resource_id)
+                const expectedResources = expectedResourcesResult.rows
+                const expectedResourceIds = expectedResources.map(r => r.resource_id)
 
                 // Validate that all submitted actual resources belong to the recipe
                 const providedResourceIds = actual_resources.map((ar: any) => ar.resource_id)
@@ -93,12 +94,24 @@ export default async function (fastify: FastifyInstance) {
                 const runId = productionRunResult.rows[0].id
 
                 // 4. Iterate over actual resources: track actuals, write stock audit, deduct stock
+                const scaleFactor = planned_quantity_liters / recipe.batch_size_liters
+
                 for (const actual of actual_resources) {
-                    // a. Record the actual consumption against the production run
+                    // Find expected mapping requirements
+                    const expectedRes = expectedResources.find(er => er.resource_id === actual.resource_id)
+                    const expectedQuantity = expectedRes ? expectedRes.quantity_required * scaleFactor : 0
+
+                    // Calculate numeric variance
+                    const variance = actual.actual_quantity_used - expectedQuantity
+                    // Flag variance exceeding 5% threshold
+                    const varianceFlag = Math.abs(variance / expectedQuantity) > 0.05
+
+                    // a. Record the actual consumption alongside variance tracking
                     await client.query(
-                        `INSERT INTO production_resource_actuals (production_run_id, resource_id, actual_quantity_used)
-                          VALUES ($1, $2, $3)`,
-                        [runId, actual.resource_id, actual.actual_quantity_used]
+                        `INSERT INTO production_resource_actuals 
+                         (production_run_id, resource_id, actual_quantity_used, expected_quantity, variance, variance_flag)
+                          VALUES ($1, $2, $3, $4, $5, $6)`,
+                        [runId, actual.resource_id, actual.actual_quantity_used, expectedQuantity, variance, varianceFlag]
                     )
 
                     // b. Audit the stock decrement

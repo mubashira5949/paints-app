@@ -106,6 +106,9 @@ CREATE TABLE IF NOT EXISTS production_resource_actuals (
     production_run_id INTEGER REFERENCES production_runs(id) ON DELETE CASCADE NOT NULL,
     resource_id INTEGER REFERENCES resources(id) NOT NULL,
     actual_quantity_used DECIMAL(12, 4) NOT NULL,
+    expected_quantity DECIMAL(12, 4),
+    variance DECIMAL(12, 4),
+    variance_flag BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
