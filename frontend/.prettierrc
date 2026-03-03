@@ -1,0 +1,12 @@
+{
+  // Do not print semicolons at the ends of statements
+  "semi": false,
+  // Use single quotes instead of double quotes
+  "singleQuote": true,
+  // Print trailing commas wherever possible when multiline
+  "trailingComma": "all",
+  // Wrap lines that exceed 100 characters
+  "printWidth": 100,
+  // Number of spaces per indentation-level
+  "tabWidth": 2
+}
