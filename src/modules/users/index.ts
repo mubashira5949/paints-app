@@ -5,6 +5,7 @@
 
 import { FastifyInstance } from 'fastify'
 import bcrypt from 'bcrypt'
+import { authorizeRole } from '../../utils/authorizeRole'
 
 export default async function (fastify: FastifyInstance) {
     /**
@@ -12,8 +13,8 @@ export default async function (fastify: FastifyInstance) {
      * Only accessible by users with 'manager' role.
      */
     fastify.post('/users', {
-        // middleware to verify JWT
-        preHandler: [fastify.authenticate],
+        // middleware to verify JWT and check user role
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
         // request body validation schema
         schema: {
             body: {
@@ -30,14 +31,6 @@ export default async function (fastify: FastifyInstance) {
         handler: async (request: any, reply: any) => {
             const { username, email, password, role } = request.body
             const currentUser = request.user
-
-            // Role-based access control: Only 'manager' can create other users.
-            if (currentUser.role !== 'manager') {
-                return reply.status(403).send({
-                    error: 'Forbidden',
-                    message: 'Only Managers can create users'
-                })
-            }
 
             try {
                 // 1. Check if the specified role exists in the database and retrieve its ID.
@@ -101,8 +94,8 @@ export default async function (fastify: FastifyInstance) {
      * Only accessible by users with 'manager' role.
      */
     fastify.delete('/users/:id', {
-        // middleware to verify JWT
-        preHandler: [fastify.authenticate],
+        // middleware to verify JWT and check user role
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
         // parameter validation schema
         schema: {
             params: {
@@ -116,14 +109,6 @@ export default async function (fastify: FastifyInstance) {
         handler: async (request: any, reply: any) => {
             const { id } = request.params
             const currentUser = request.user
-
-            // Role-based access control: Only 'manager' can delete users.
-            if (currentUser.role !== 'manager') {
-                return reply.status(403).send({
-                    error: 'Forbidden',
-                    message: 'Only Managers can delete users'
-                })
-            }
 
             try {
                 // Delete user from the database and return the deleted user's info.
