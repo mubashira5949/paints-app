@@ -5,9 +5,10 @@
   "main": "index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
-    "start": "ts-node src/app.ts",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "build": "tsc",
+    "start": "node dist/app.js",
+    "test": "vitest run src/",
+    "test:watch": "vitest src/"
   },
   "keywords": [],
   "author": "",
