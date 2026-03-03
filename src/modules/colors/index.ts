@@ -4,17 +4,26 @@
  */
 
 import { FastifyInstance } from 'fastify'
+import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
+import { Type } from '@sinclair/typebox'
 import { authorizeRole } from '../../utils/authorizeRole'
 
-export default async function (fastify: FastifyInstance) {
+export default async function (fastifyRaw: FastifyInstance) {
+    const fastify = fastifyRaw.withTypeProvider<TypeBoxTypeProvider>()
+
+    const CreateColorSchema = Type.Object({
+        name: Type.String(),
+        color_code: Type.Optional(Type.String()),
+        description: Type.Optional(Type.String())
+    })
+
     /**
      * GET /colors - Retrieve all colors.
      * Accessible to all authenticated users.
      */
     fastify.get('/', {
-        // middleware to verify JWT
         preHandler: [fastify.authenticate],
-        handler: async (request: any, reply: any) => {
+        handler: async (request, reply) => {
             try {
                 const result = await fastify.db.query(
                     'SELECT id, name, color_code, description, created_at, updated_at FROM colors ORDER BY created_at DESC'
@@ -36,21 +45,11 @@ export default async function (fastify: FastifyInstance) {
      * Only accessible by users with 'admin' or 'manager' roles.
      */
     fastify.post('/', {
-        // middleware to verify JWT and check user role
         preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
-        // request body validation schema
         schema: {
-            body: {
-                type: 'object',
-                required: ['name'],
-                properties: {
-                    name: { type: 'string' },
-                    color_code: { type: 'string' },
-                    description: { type: 'string' }
-                }
-            }
+            body: CreateColorSchema
         },
-        handler: async (request: any, reply: any) => {
+        handler: async (request, reply) => {
             const { name, color_code, description } = request.body
             const client = await fastify.db.connect() // Get a client from the pool
 
@@ -65,10 +64,11 @@ export default async function (fastify: FastifyInstance) {
                 const newColor = insertResult.rows[0]
 
                 // Log the creation in the audit_logs table
+                const user = request.user as any
                 await client.query(
                     `INSERT INTO audit_logs (user_id, action, entity_type, entity_id)
                      VALUES ($1, 'color_created', 'color', $2)`,
-                    [request.user.id, newColor.id]
+                    [user.id, newColor.id]
                 )
 
                 await client.query('COMMIT') // Commit transaction

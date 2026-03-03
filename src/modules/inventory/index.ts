@@ -4,9 +4,12 @@
  */
 
 import { FastifyInstance } from 'fastify'
+import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
 import { authorizeRole } from '../../utils/authorizeRole'
 
-export default async function (fastify: FastifyInstance) {
+export default async function (fastifyRaw: FastifyInstance) {
+    const fastify = fastifyRaw.withTypeProvider<TypeBoxTypeProvider>()
+
     /**
      * GET /inventory/finished-stock
      * Retrieves a summarized view of finished stock grouped by color and pack size.
@@ -14,7 +17,7 @@ export default async function (fastify: FastifyInstance) {
      */
     fastify.get('/finished-stock', {
         preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'sales', 'client'])],
-        handler: async (request: any, reply: any) => {
+        handler: async (request, reply) => {
             let client
             try {
                 // Retrieve a connection from the database pool
