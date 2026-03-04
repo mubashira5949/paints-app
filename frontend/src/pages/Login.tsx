@@ -24,22 +24,32 @@ export default function Login() {
         setError("");
 
         try {
-            // Simulate an asynchronous network request (e.g., to an authentication API backend)
-            await new Promise((resolve, reject) => {
-                setTimeout(() => {
-                    // Add some basic mocked validation criteria
-                    if (!email.includes("@") || password.length < 6) {
-                        reject(new Error("Invalid email or password. Minimum password length is 6 characters."));
-                    } else {
-                        resolve(true); // "Success" response
-                    }
-                }, 1200); // Wait 1.2s to show off loading state
+            // Make a POST request to the backend auth API
+            const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
+            const response = await fetch(`${apiUrl}/login`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ email, password }),
             });
 
-            // If the mocked login resolves successfully, route the user to the dashboard
+            const data = await response.json();
+
+            // Handle non-200 responses sent from fastify/auth logic
+            if (!response.ok) {
+                throw new Error(data.message || data.error || "Invalid email or password.");
+            }
+
+            // Store the JWT token in localStorage securely
+            if (data.token) {
+                localStorage.setItem("token", data.token);
+            }
+
+            // If the login resolves successfully, route the user to the dashboard
             navigate("/dashboard");
         } catch (err: any) {
-            // If the simulated request fails (the "reject" path), display the error to the user
+            // If the request fails, display the error to the user
             setError(err.message || "An unexpected error occurred. Please try again.");
         } finally {
             // Ensure the loading indicator is stopped whether successful or rejected
