@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, Mail, Lock, AlertCircle, ArrowRight } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function Login() {
     // Navigation hook to programmatically change routes
     const navigate = useNavigate();
+    const { login } = useAuth();
 
     // State variables for form inputs
     const [email, setEmail] = useState("");
@@ -41,9 +43,9 @@ export default function Login() {
                 throw new Error(data.message || data.error || "Invalid email or password.");
             }
 
-            // Store the JWT token in localStorage securely
+            // Store the JWT token in AuthContext sequentially linking it globally
             if (data.token) {
-                localStorage.setItem("token", data.token);
+                login(data.token);
             }
 
             // If the login resolves successfully, route the user to the dashboard

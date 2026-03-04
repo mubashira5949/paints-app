@@ -1,4 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "./contexts/AuthContext";
+import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { MainLayout } from "./layouts/MainLayout";
 import Dashboard from "./pages/Dashboard";
 import Inventory from "./pages/Inventory";
@@ -9,27 +11,33 @@ import Login from "./pages/Login";
 
 function App() {
   return (
-    // BrowserRouter provides the routing context for the entire application
-    <BrowserRouter>
-      {/* Routes is the container for all defined Route components */}
-      <Routes>
-        {/* Public Route: The login page sits outside the MainLayout so it occupies the full screen */}
-        <Route path="/login" element={<Login />} />
+    // AuthProvider initializes the user state and provides the JWT context
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Public Route: The login page sits outside the MainLayout so it occupies the full screen */}
+          <Route path="/login" element={<Login />} />
 
-        {/* Protected/App Routes Wrapper: MainLayout handles the Sidebar, Topbar, and common UI structure */}
-        <Route path="/" element={<MainLayout />}>
-          {/* Index Route: Automatically redirects users hitting the root "/" path directly to the Dashboard */}
-          <Route index element={<Navigate to="/dashboard" replace />} />
+          {/* Protected Routes Wrapper: Ensures user is authenticated before hitting MainLayout */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/" element={<MainLayout />}>
+              <Route index element={<Navigate to="/dashboard" replace />} />
 
-          {/* Feature Routes: The following components will render in the Outlet inside MainLayout */}
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="inventory" element={<Inventory />} />
-          <Route path="production" element={<Production />} />
-          <Route path="users" element={<Users />} />
-          <Route path="settings" element={<Settings />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+              {/* Feature routes available to both managers and workers */}
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="inventory" element={<Inventory />} />
+              <Route path="production" element={<Production />} />
+
+              {/* Feature routes strictly restricted to "manager" role */}
+              <Route element={<ProtectedRoute allowedRoles={["manager"]} />}>
+                <Route path="users" element={<Users />} />
+                <Route path="settings" element={<Settings />} />
+              </Route>
+            </Route>
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 

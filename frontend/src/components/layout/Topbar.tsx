@@ -1,12 +1,13 @@
-import { Menu } from "lucide-react";
+import { Menu, LogOut, User as UserIcon } from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
 
 interface TopbarProps {
   onMenuClick: () => void;
-  userRole: string; // Used strictly for demonstration toggle bridging
-  onRoleToggle: () => void; // Used strictly for demonstration toggle bridging
 }
 
-export function Topbar({ onMenuClick, userRole, onRoleToggle }: TopbarProps) {
+export function Topbar({ onMenuClick }: TopbarProps) {
+  const { user, logout } = useAuth();
+
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-x-4 border-b bg-background px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
       <button
@@ -22,16 +23,25 @@ export function Topbar({ onMenuClick, userRole, onRoleToggle }: TopbarProps) {
       <div className="h-6 w-px bg-border lg:hidden" aria-hidden="true" />
 
       <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6 justify-end items-center">
-        {/* Mock Role Switcher for demonstration */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground block hidden sm:block">
-            Testing Role:
-          </span>
+        <div className="flex items-center gap-4">
+          <div className="hidden sm:flex items-center gap-2 pr-4 border-r border-border">
+            <div className="bg-primary/10 p-1.5 rounded-full text-primary">
+              <UserIcon size={16} />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-medium leading-none">{user?.username || "Loading..."}</span>
+              <span className="text-xs text-muted-foreground capitalize mt-1">
+                {user?.role || "Active Session"}
+              </span>
+            </div>
+          </div>
+
           <button
-            onClick={onRoleToggle}
-            className="text-xs bg-secondary hover:bg-secondary/80 text-secondary-foreground px-3 py-1.5 rounded-full font-medium transition-colors"
+            onClick={logout}
+            className="flex items-center gap-2 text-sm text-destructive hover:bg-destructive/10 px-3 py-2 rounded-md transition-colors font-medium border border-transparent hover:border-destructive/20"
           >
-            Switch to {userRole === "manager" ? "Worker" : "Manager"}
+            <LogOut size={16} />
+            <span className="hidden sm:inline">Logout</span>
           </button>
         </div>
       </div>
