@@ -10,6 +10,7 @@ import dotenv from 'dotenv'
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
 import swagger from '@fastify/swagger'
 import swaggerUI from '@fastify/swagger-ui'
+import cors from '@fastify/cors'
 
 // Load environment variables from .env file
 dotenv.config()
@@ -24,6 +25,11 @@ const fastify = Fastify({
         }
     }
 }).withTypeProvider<TypeBoxTypeProvider>()
+
+// Allow Cross-Origin requests from the frontend
+fastify.register(cors, {
+    origin: true // Allow all origins for development, can be configured securely later
+})
 
 // Global Error Handler to catch and format TypeBox Validation Failures
 fastify.setErrorHandler((error: any, request, reply) => {
