@@ -229,9 +229,9 @@ export default async function (fastifyRaw: FastifyInstance) {
                     // a. Audit tracking explicitly by bucket scale
                     await client.query(
                         `INSERT INTO finished_stock_transactions
-                        (color_id, pack_size_liters, transaction_type, quantity_units, reference_id, notes)
-                          VALUES($1, $2, 'production_entry', $3, $4, 'Packaged from Production Run')`,
-                        [color_id, pack.pack_size_liters, pack.quantity_units, id]
+                        (color_id, pack_size_liters, transaction_type, quantity_units, quantity_liters, reference_id, notes)
+                          VALUES($1, $2, 'production_entry', $3, $4, $5, 'Packaged from Production Run')`,
+                        [color_id, pack.pack_size_liters, pack.quantity_units, pack.pack_size_liters * pack.quantity_units, id]
                     )
 
                     // b. Increment total finished stock count combining composite sizes natively

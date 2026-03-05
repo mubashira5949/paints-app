@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS resources (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) UNIQUE NOT NULL,
+    description TEXT,
     unit VARCHAR(20) NOT NULL, -- e.g., kg, L, units
     current_stock DECIMAL(12, 4) DEFAULT 0 CHECK (current_stock >= 0),
     reorder_level DECIMAL(12, 4) DEFAULT 0,
@@ -140,6 +141,7 @@ CREATE TABLE IF NOT EXISTS finished_stock_transactions (
     pack_size_liters DECIMAL(5, 2) NOT NULL,
     transaction_type VARCHAR(50) NOT NULL, -- production_entry, sale, adjustment, return
     quantity_units INTEGER NOT NULL,
+    quantity_liters DECIMAL(12, 4) NOT NULL,
     reference_id INT, -- e.g., production_run_id or sale_id
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

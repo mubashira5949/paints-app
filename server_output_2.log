@@ -1,0 +1,800 @@
+
+> paints-app@1.0.0 dev
+> ts-node-dev --respawn --transpile-only src/app.ts
+
+[INFO] 07:57:57 ts-node-dev ver. 2.0.0 (using ts-node ver. 10.9.2, typescript ver. 5.9.3)
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+(node:18329) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[07:58:00.054] INFO (18329): Database connected successfully
+[07:58:00.137] INFO (18329): Server listening at http://10.255.255.254:3000
+[07:58:00.137] INFO (18329): Server listening at http://127.0.0.1:3000
+[07:58:00.137] INFO (18329): Server listening at http://172.27.235.88:3000
+[07:58:00.137] INFO (18329): Server listening at http://172.18.0.1:3000
+[07:58:23.663] INFO (18329): incoming request
+    reqId: "req-1"
+    req: {
+      "method": "POST",
+      "url": "/resources",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 51248
+    }
+[07:58:23.668] ERROR (18329): No Authorization was found in request.headers
+    err: {
+      "type": "FastifyError",
+      "message": "No Authorization was found in request.headers",
+      "stack":
+          FastifyError: No Authorization was found in request.headers
+              at lookupToken (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:278:13)
+              at _Request.requestVerify [as jwtVerify] (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:487:15)
+              at useGlobalOptions (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:455:31)
+              at new Promise (<anonymous>)
+              at _Request.requestVerify [as jwtVerify] (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:454:14)
+              at Object.authenticate (/home/mubashira/paints-app/src/plugins/jwt.ts:26:27)
+              at hookIterator (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:408:10)
+              at next (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:242:18)
+              at hookRunner (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:264:5)
+              at validationCompleted (/home/mubashira/paints-app/node_modules/fastify/lib/handle-request.js:117:5)
+      "code": "FST_JWT_NO_AUTHORIZATION_IN_HEADER",
+      "name": "FastifyError",
+      "statusCode": 401
+    }
+[07:58:23.683] INFO (18329): request completed
+    reqId: "req-1"
+    res: {
+      "statusCode": 401
+    }
+    responseTime: 18.91598800010979
+[07:58:50.443] INFO (18329): incoming request
+    reqId: "req-2"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 51310
+    }
+[07:58:51.154] INFO (18329): request completed
+    reqId: "req-2"
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 711.2076540002599
+[07:58:51.169] INFO (18329): incoming request
+    reqId: "req-3"
+    req: {
+      "method": "POST",
+      "url": "/resources",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 51314
+    }
+[07:58:51.257] ERROR (18329): column "description" of relation "resources" does not exist
+    err: {
+      "type": "DatabaseError",
+      "message": "column \"description\" of relation \"resources\" does not exist",
+      "stack":
+          error: column "description" of relation "resources" does not exist
+              at /home/mubashira/paints-app/node_modules/pg-pool/index.js:45:11
+              at processTicksAndRejections (node:internal/process/task_queues:103:5)
+              at Object.handler (/home/mubashira/paints-app/src/modules/resources/index.ts:96:38)
+      "length": 133,
+      "name": "error",
+      "severity": "ERROR",
+      "code": "42703",
+      "position": "30",
+      "file": "parse_target.c",
+      "line": "1066",
+      "routine": "checkInsertTargets"
+    }
+[07:58:51.262] INFO (18329): request completed
+    reqId: "req-3"
+    res: {
+      "statusCode": 500
+    }
+    responseTime: 92.82409500004724
+[08:01:14.379] INFO (18329): incoming request
+    reqId: "req-4"
+    req: {
+      "method": "POST",
+      "url": "/resources",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 53392
+    }
+[08:01:15.052] ERROR (18329): relation "audit_logs" does not exist
+    err: {
+      "type": "DatabaseError",
+      "message": "relation \"audit_logs\" does not exist",
+      "stack":
+          error: relation "audit_logs" does not exist
+              at /home/mubashira/paints-app/node_modules/pg-pool/index.js:45:11
+              at processTicksAndRejections (node:internal/process/task_queues:103:5)
+              at Object.handler (/home/mubashira/paints-app/src/modules/resources/index.ts:104:17)
+      "length": 109,
+      "name": "error",
+      "severity": "ERROR",
+      "code": "42P01",
+      "position": "13",
+      "file": "parse_relation.c",
+      "line": "1449",
+      "routine": "parserOpenTable"
+    }
+[08:01:15.053] INFO (18329): request completed
+    reqId: "req-4"
+    res: {
+      "statusCode": 500
+    }
+    responseTime: 674.3299340000376
+[08:04:14.235] INFO (18329): incoming request
+    reqId: "req-5"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 43068
+    }
+[08:04:14.764] INFO (18329): request completed
+    reqId: "req-5"
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 527.6733510000631
+[08:04:14.775] INFO (18329): incoming request
+    reqId: "req-6"
+    req: {
+      "method": "POST",
+      "url": "/resources",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 43076
+    }
+[08:04:14.842] INFO (18329): request completed
+    reqId: "req-6"
+    res: {
+      "statusCode": 400
+    }
+    responseTime: 66.57667700015008
+[08:04:31.719] INFO (18329): incoming request
+    reqId: "req-7"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 37158
+    }
+[08:04:32.475] INFO (18329): request completed
+    reqId: "req-7"
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 755.7915149996988
+[08:04:32.482] INFO (18329): incoming request
+    reqId: "req-8"
+    req: {
+      "method": "POST",
+      "url": "/resources",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 51720
+    }
+[08:04:32.643] INFO (18329): request completed
+    reqId: "req-8"
+    res: {
+      "statusCode": 201
+    }
+    responseTime: 160.96970200026408
+[08:04:32.649] INFO (18329): incoming request
+    reqId: "req-9"
+    req: {
+      "method": "POST",
+      "url": "/resources",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 51730
+    }
+[08:04:32.835] INFO (18329): request completed
+    reqId: "req-9"
+    res: {
+      "statusCode": 201
+    }
+    responseTime: 185.7600330002606
+[08:04:52.805] INFO (18329): incoming request
+    reqId: "req-a"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 46872
+    }
+[08:04:53.432] INFO (18329): request completed
+    reqId: "req-a"
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 626.9845950002782
+[08:04:53.439] INFO (18329): incoming request
+    reqId: "req-b"
+    req: {
+      "method": "GET",
+      "url": "/resources",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 46876
+    }
+[08:04:53.508] INFO (18329): request completed
+    reqId: "req-b"
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 69.81888199970126
+[08:07:34.725] INFO (18329): incoming request
+    reqId: "req-c"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 60342
+    }
+[08:07:35.372] INFO (18329): request completed
+    reqId: "req-c"
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 647.0233220001683
+[08:07:35.379] INFO (18329): incoming request
+    reqId: "req-d"
+    req: {
+      "method": "POST",
+      "url": "/colors",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 60356
+    }
+[08:07:35.717] INFO (18329): request completed
+    reqId: "req-d"
+    res: {
+      "statusCode": 201
+    }
+    responseTime: 337.7475049998611
+[08:07:57.556] INFO (18329): incoming request
+    reqId: "req-e"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 50490
+    }
+[08:07:58.076] INFO (18329): request completed
+    reqId: "req-e"
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 519.3470170004293
+[08:07:58.081] INFO (18329): incoming request
+    reqId: "req-f"
+    req: {
+      "method": "POST",
+      "url": "/recipes",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 50506
+    }
+[08:07:58.582] INFO (18329): request completed
+    reqId: "req-f"
+    res: {
+      "statusCode": 201
+    }
+    responseTime: 500.96080999914557
+[08:08:13.039] INFO (18329): incoming request
+    reqId: "req-g"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 47088
+    }
+[08:08:14.746] INFO (18329): request completed
+    reqId: "req-g"
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 1707.1406799992546
+[08:08:14.753] INFO (18329): incoming request
+    reqId: "req-h"
+    req: {
+      "method": "POST",
+      "url": "/production-runs",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 47096
+    }
+[08:08:15.195] ERROR (18329): column "expected_quantity" of relation "production_resource_actuals" does not exist
+    err: {
+      "type": "DatabaseError",
+      "message": "column \"expected_quantity\" of relation \"production_resource_actuals\" does not exist",
+      "stack":
+          error: column "expected_quantity" of relation "production_resource_actuals" does not exist
+              at /home/mubashira/paints-app/node_modules/pg/lib/client.js:624:17
+              at processTicksAndRejections (node:internal/process/task_queues:103:5)
+              at Object.handler (/home/mubashira/paints-app/src/modules/production/index.ts:120:21)
+      "length": 158,
+      "name": "error",
+      "severity": "ERROR",
+      "code": "42703",
+      "position": "122",
+      "file": "parse_target.c",
+      "line": "1066",
+      "routine": "checkInsertTargets"
+    }
+[08:08:15.213] INFO (18329): request completed
+    reqId: "req-h"
+    res: {
+      "statusCode": 500
+    }
+    responseTime: 460.1026079999283
+[08:10:15.496] INFO (18329): incoming request
+    reqId: "req-i"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 46350
+    }
+[08:10:17.038] INFO (18329): request completed
+    reqId: "req-i"
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 1541.3445179993287
+[08:10:17.044] INFO (18329): incoming request
+    reqId: "req-j"
+    req: {
+      "method": "POST",
+      "url": "/production-runs",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 46360
+    }
+[08:10:17.421] ERROR (18329): column "variance" of relation "production_resource_actuals" does not exist
+    err: {
+      "type": "DatabaseError",
+      "message": "column \"variance\" of relation \"production_resource_actuals\" does not exist",
+      "stack":
+          error: column "variance" of relation "production_resource_actuals" does not exist
+              at /home/mubashira/paints-app/node_modules/pg/lib/client.js:624:17
+              at processTicksAndRejections (node:internal/process/task_queues:103:5)
+              at Object.handler (/home/mubashira/paints-app/src/modules/production/index.ts:120:21)
+      "length": 149,
+      "name": "error",
+      "severity": "ERROR",
+      "code": "42703",
+      "position": "141",
+      "file": "parse_target.c",
+      "line": "1066",
+      "routine": "checkInsertTargets"
+    }
+[08:10:17.422] INFO (18329): request completed
+    reqId: "req-j"
+    res: {
+      "statusCode": 500
+    }
+    responseTime: 377.88655599951744
+[08:11:49.228] INFO (18329): incoming request
+    reqId: "req-k"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 58612
+    }
+[08:11:49.861] INFO (18329): request completed
+    reqId: "req-k"
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 632.4660670002922
+[08:11:49.870] INFO (18329): incoming request
+    reqId: "req-l"
+    req: {
+      "method": "POST",
+      "url": "/production-runs",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 58616
+    }
+[08:11:50.802] INFO (18329): request completed
+    reqId: "req-l"
+    res: {
+      "statusCode": 201
+    }
+    responseTime: 931.3902449999005
+[08:12:18.659] INFO (18329): incoming request
+    reqId: "req-m"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 50502
+    }
+[08:12:19.426] INFO (18329): request completed
+    reqId: "req-m"
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 767.1815550001338
+[08:12:19.442] INFO (18329): incoming request
+    reqId: "req-n"
+    req: {
+      "method": "POST",
+      "url": "/production-runs/3/packaging",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 50508
+    }
+[08:12:19.707] ERROR (18329): column "pack_size_liters" of relation "finished_stock_transactions" does not exist
+    err: {
+      "type": "DatabaseError",
+      "message": "column \"pack_size_liters\" of relation \"finished_stock_transactions\" does not exist",
+      "stack":
+          error: column "pack_size_liters" of relation "finished_stock_transactions" does not exist
+              at /home/mubashira/paints-app/node_modules/pg/lib/client.js:624:17
+              at processTicksAndRejections (node:internal/process/task_queues:103:5)
+              at Object.handler (/home/mubashira/paints-app/src/modules/production/index.ts:230:21)
+      "length": 156,
+      "name": "error",
+      "severity": "ERROR",
+      "code": "42703",
+      "position": "76",
+      "file": "parse_target.c",
+      "line": "1066",
+      "routine": "checkInsertTargets"
+    }
+[08:12:19.708] INFO (18329): request completed
+    reqId: "req-n"
+    res: {
+      "statusCode": 500
+    }
+    responseTime: 266.24842399917543
+[08:15:29.107] INFO (18329): incoming request
+    reqId: "req-o"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 58880
+    }
+[08:15:29.644] INFO (18329): request completed
+    reqId: "req-o"
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 536.7137199994177
+[08:15:29.650] INFO (18329): incoming request
+    reqId: "req-p"
+    req: {
+      "method": "POST",
+      "url": "/production-runs/3/packaging",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 58888
+    }
+[08:15:29.897] ERROR (18329): column "quantity_units" of relation "finished_stock_transactions" does not exist
+    err: {
+      "type": "DatabaseError",
+      "message": "column \"quantity_units\" of relation \"finished_stock_transactions\" does not exist",
+      "stack":
+          error: column "quantity_units" of relation "finished_stock_transactions" does not exist
+              at /home/mubashira/paints-app/node_modules/pg/lib/client.js:624:17
+              at processTicksAndRejections (node:internal/process/task_queues:103:5)
+              at Object.handler (/home/mubashira/paints-app/src/modules/production/index.ts:230:21)
+      "length": 155,
+      "name": "error",
+      "severity": "ERROR",
+      "code": "42703",
+      "position": "112",
+      "file": "parse_target.c",
+      "line": "1066",
+      "routine": "checkInsertTargets"
+    }
+[08:15:29.898] INFO (18329): request completed
+    reqId: "req-p"
+    res: {
+      "statusCode": 500
+    }
+    responseTime: 248.23470900021493
+[08:18:20.049] INFO (18329): incoming request
+    reqId: "req-q"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 47168
+    }
+[08:18:20.557] INFO (18329): request completed
+    reqId: "req-q"
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 508.29427899979055
+[08:18:20.563] INFO (18329): incoming request
+    reqId: "req-r"
+    req: {
+      "method": "POST",
+      "url": "/production-runs/3/packaging",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 47184
+    }
+[08:18:20.849] ERROR (18329): null value in column "quantity_liters" of relation "finished_stock_transactions" violates not-null constraint
+    err: {
+      "type": "DatabaseError",
+      "message": "null value in column \"quantity_liters\" of relation \"finished_stock_transactions\" violates not-null constraint",
+      "stack":
+          error: null value in column "quantity_liters" of relation "finished_stock_transactions" violates not-null constraint
+              at /home/mubashira/paints-app/node_modules/pg/lib/client.js:624:17
+              at processTicksAndRejections (node:internal/process/task_queues:103:5)
+              at Object.handler (/home/mubashira/paints-app/src/modules/production/index.ts:230:21)
+      "length": 354,
+      "name": "error",
+      "severity": "ERROR",
+      "code": "23502",
+      "detail": "Failing row contains (1, 1, production_entry, null, 3, Packaged from Production Run, 2026-03-05 08:18:20.843715+00, 20.00, 5).",
+      "schema": "public",
+      "table": "finished_stock_transactions",
+      "column": "quantity_liters",
+      "file": "execMain.c",
+      "line": "2067",
+      "routine": "ExecConstraints"
+    }
+[08:18:20.850] INFO (18329): request completed
+    reqId: "req-r"
+    res: {
+      "statusCode": 500
+    }
+    responseTime: 286.75516599975526
+[INFO] 08:24:03 Restarting: /home/mubashira/paints-app/src/modules/production/index.ts has been modified
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  override existing env vars with { override: true }
+(node:26319) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[08:24:05.650] INFO (26319): Database connected successfully
+[08:24:05.806] INFO (26319): Server listening at http://10.255.255.254:3000
+[08:24:05.806] INFO (26319): Server listening at http://127.0.0.1:3000
+[08:24:05.806] INFO (26319): Server listening at http://172.27.235.88:3000
+[08:24:05.806] INFO (26319): Server listening at http://172.18.0.1:3000
+[08:24:26.253] INFO (26319): incoming request
+    reqId: "req-1"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 52698
+    }
+[08:24:26.986] INFO (26319): request completed
+    reqId: "req-1"
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 733.0385440001264
+[08:24:26.999] INFO (26319): incoming request
+    reqId: "req-2"
+    req: {
+      "method": "POST",
+      "url": "/production-runs/3/packaging",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 52710
+    }
+[08:24:27.431] ERROR (26319): column "pack_size_liters" of relation "finished_stock" does not exist
+    err: {
+      "type": "DatabaseError",
+      "message": "column \"pack_size_liters\" of relation \"finished_stock\" does not exist",
+      "stack":
+          error: column "pack_size_liters" of relation "finished_stock" does not exist
+              at /home/mubashira/paints-app/node_modules/pg/lib/client.js:624:17
+              at processTicksAndRejections (node:internal/process/task_queues:103:5)
+              at Object.handler (/home/mubashira/paints-app/src/modules/production/index.ts:238:21)
+      "length": 143,
+      "name": "error",
+      "severity": "ERROR",
+      "code": "42703",
+      "position": "38",
+      "file": "parse_target.c",
+      "line": "1066",
+      "routine": "checkInsertTargets"
+    }
+[08:24:27.439] INFO (26319): request completed
+    reqId: "req-2"
+    res: {
+      "statusCode": 500
+    }
+    responseTime: 440.1231100000441
+[08:27:07.885] INFO (26319): incoming request
+    reqId: "req-3"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 41974
+    }
+[08:27:08.434] INFO (26319): request completed
+    reqId: "req-3"
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 548.9054840002209
+[08:27:08.462] INFO (26319): incoming request
+    reqId: "req-4"
+    req: {
+      "method": "POST",
+      "url": "/resources",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 41990
+    }
+[08:27:08.530] ERROR (26319): column "description" of relation "resources" does not exist
+    err: {
+      "type": "DatabaseError",
+      "message": "column \"description\" of relation \"resources\" does not exist",
+      "stack":
+          error: column "description" of relation "resources" does not exist
+              at /home/mubashira/paints-app/node_modules/pg-pool/index.js:45:11
+              at processTicksAndRejections (node:internal/process/task_queues:103:5)
+              at Object.handler (/home/mubashira/paints-app/src/modules/resources/index.ts:96:38)
+      "length": 133,
+      "name": "error",
+      "severity": "ERROR",
+      "code": "42703",
+      "position": "30",
+      "file": "parse_target.c",
+      "line": "1066",
+      "routine": "checkInsertTargets"
+    }
+[08:27:08.535] INFO (26319): request completed
+    reqId: "req-4"
+    res: {
+      "statusCode": 500
+    }
+    responseTime: 73.04033000022173
+[08:27:08.551] INFO (26319): incoming request
+    reqId: "req-5"
+    req: {
+      "method": "POST",
+      "url": "/resources",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 41998
+    }
+[08:27:09.195] ERROR (26319): column "description" of relation "resources" does not exist
+    err: {
+      "type": "DatabaseError",
+      "message": "column \"description\" of relation \"resources\" does not exist",
+      "stack":
+          error: column "description" of relation "resources" does not exist
+              at /home/mubashira/paints-app/node_modules/pg-pool/index.js:45:11
+              at processTicksAndRejections (node:internal/process/task_queues:103:5)
+              at Object.handler (/home/mubashira/paints-app/src/modules/resources/index.ts:96:38)
+      "length": 133,
+      "name": "error",
+      "severity": "ERROR",
+      "code": "42703",
+      "position": "30",
+      "file": "parse_target.c",
+      "line": "1066",
+      "routine": "checkInsertTargets"
+    }
+[08:27:09.196] INFO (26319): request completed
+    reqId: "req-5"
+    res: {
+      "statusCode": 500
+    }
+    responseTime: 644.3058200003579
+[08:27:09.214] INFO (26319): incoming request
+    reqId: "req-6"
+    req: {
+      "method": "POST",
+      "url": "/resources",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 42010
+    }
+[08:27:09.653] ERROR (26319): column "description" of relation "resources" does not exist
+    err: {
+      "type": "DatabaseError",
+      "message": "column \"description\" of relation \"resources\" does not exist",
+      "stack":
+          error: column "description" of relation "resources" does not exist
+              at /home/mubashira/paints-app/node_modules/pg-pool/index.js:45:11
+              at processTicksAndRejections (node:internal/process/task_queues:103:5)
+              at Object.handler (/home/mubashira/paints-app/src/modules/resources/index.ts:96:38)
+      "length": 133,
+      "name": "error",
+      "severity": "ERROR",
+      "code": "42703",
+      "position": "30",
+      "file": "parse_target.c",
+      "line": "1066",
+      "routine": "checkInsertTargets"
+    }
+[08:27:09.655] INFO (26319): request completed
+    reqId: "req-6"
+    res: {
+      "statusCode": 500
+    }
+    responseTime: 440.2024379996583
+[08:27:30.064] INFO (26319): incoming request
+    reqId: "req-7"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 42856
+    }
+[08:27:30.650] INFO (26319): request completed
+    reqId: "req-7"
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 586.4735599998385
+[08:27:30.656] INFO (26319): incoming request
+    reqId: "req-8"
+    req: {
+      "method": "GET",
+      "url": "/resources",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 42858
+    }
+[08:27:30.731] ERROR (26319): column "description" does not exist
+    err: {
+      "type": "DatabaseError",
+      "message": "column \"description\" does not exist",
+      "stack":
+          error: column "description" does not exist
+              at /home/mubashira/paints-app/node_modules/pg-pool/index.js:45:11
+              at processTicksAndRejections (node:internal/process/task_queues:103:5)
+              at Object.handler (/home/mubashira/paints-app/src/modules/resources/index.ts:38:32)
+      "length": 111,
+      "name": "error",
+      "severity": "ERROR",
+      "code": "42703",
+      "position": "18",
+      "file": "parse_relation.c",
+      "line": "3722",
+      "routine": "errorMissingColumn"
+    }
+[08:27:30.732] INFO (26319): request completed
+    reqId: "req-8"
+    res: {
+      "statusCode": 500
+    }
+    responseTime: 75.42578900046647
