@@ -38,6 +38,34 @@ export default async function (fastifyRaw: FastifyInstance) {
     })
 
     /**
+     * GET /production-runs - List recent production runs.
+     * Accessible by 'admin', 'manager', or 'operator' roles.
+     */
+    fastify.get('/', {
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'operator'])],
+        handler: async (request, reply) => {
+            try {
+                const result = await fastify.db.query(
+                    `SELECT pr.id, pr.status, pr.planned_quantity_liters, pr.actual_quantity_liters, 
+                            pr.started_at, pr.completed_at, r.name as recipe_name, c.name as color_name
+                     FROM production_runs pr
+                     JOIN recipes r ON pr.recipe_id = r.id
+                     JOIN colors c ON r.color_id = c.id
+                     ORDER BY pr.created_at DESC
+                     LIMIT 50`
+                )
+                return reply.send(result.rows)
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({
+                    error: 'Internal Server Error',
+                    message: 'Failed to retrieve production runs'
+                })
+            }
+        }
+    })
+
+    /**
      * POST /production-runs - Create a new production run, deducting materials.
      * Only accessible by users with 'admin', 'manager', or 'operator' roles.
      */
