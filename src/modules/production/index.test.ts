@@ -29,6 +29,9 @@ describe('Production Runs Module API', () => {
         post: (path: string, options: any) => {
             routes[`POST ${path}`] = options
         },
+        get: (path: string, options: any) => {
+            routes[`GET ${path}`] = options
+        },
         withTypeProvider: () => mockFastify
     }
 
