@@ -25,7 +25,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
       <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6 justify-end items-center">
         <div className="flex items-center gap-4">
           <div className="hidden sm:flex items-center gap-2 pr-4 border-r border-border">
-            <div className="bg-primary/10 p-1.5 rounded-full text-primary">
+            <div className="bg-blue-100 p-1.5 rounded-full text-blue-600">
               <UserIcon size={16} />
             </div>
             <div className="flex flex-col">

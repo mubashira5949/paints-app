@@ -38,8 +38,8 @@ export function Sidebar({ userRole, isOpen, setIsOpen }: SidebarProps) {
         )}
       >
         <div className="flex h-16 shrink-0 items-center justify-between px-6 border-b">
-          <div className="flex items-center gap-2 font-bold text-xl text-primary tracking-tight">
-            <div className="size-8 rounded bg-primary flex items-center justify-center text-primary-foreground">
+          <div className="flex items-center gap-2 font-bold text-xl text-blue-600 tracking-tight">
+            <div className="size-8 rounded bg-blue-600 flex items-center justify-center text-white">
               P
             </div>
             Paints App
@@ -62,7 +62,7 @@ export function Sidebar({ userRole, isOpen, setIsOpen }: SidebarProps) {
                 cn(
                   "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                   isActive
-                    ? "bg-primary/10 text-primary"
+                    ? "bg-blue-50 text-blue-600"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground",
                 )
               }
@@ -76,7 +76,7 @@ export function Sidebar({ userRole, isOpen, setIsOpen }: SidebarProps) {
         {/* User preview snippet at the bottom */}
         <div className="p-4 border-t border-border mt-auto">
           <div className="flex items-center gap-3 rounded-md px-3 py-2 bg-secondary/50">
-            <div className="size-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
+            <div className="size-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
               {userRole === "manager" ? "M" : "W"}
             </div>
             <div className="flex flex-col">

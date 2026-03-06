@@ -23,15 +23,15 @@ export const navigation: NavItem[] = [
     roles: ["manager", "worker"],
   },
   {
-    title: "Inventory",
-    path: "/inventory",
-    icon: Package,
-    roles: ["manager", "worker"],
-  },
-  {
     title: "Production",
     path: "/production",
     icon: Factory,
+    roles: ["manager", "worker"],
+  },
+  {
+    title: "Inventory",
+    path: "/inventory",
+    icon: Package,
     roles: ["manager", "worker"],
   },
   {

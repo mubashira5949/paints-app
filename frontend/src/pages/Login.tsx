@@ -79,7 +79,7 @@ export default function Login() {
 
             {/* Decorative background gradients using absolute positioning and SVG/CSS blur effects */}
             <div className="absolute top-0 flex w-full justify-center opacity-50">
-                <div className="absolute left-[-10%] top-[-10rem] h-[30rem] w-[30rem] rounded-full bg-primary/20 blur-[100px] mix-blend-multiply opacity-70"></div>
+                <div className="absolute left-[-10%] top-[-10rem] h-[30rem] w-[30rem] rounded-full bg-blue-600/20 blur-[100px] mix-blend-multiply opacity-70"></div>
                 <div className="absolute right-[-10%] top-[-5rem] h-[25rem] w-[25rem] rounded-full bg-blue-400/20 blur-[100px] mix-blend-multiply opacity-70"></div>
             </div>
 
@@ -121,7 +121,7 @@ export default function Login() {
                         </label>
                         <div className="relative">
                             {/* Overlay Icon - left aligned */}
-                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 group-focus-within:text-primary transition-colors">
+                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 group-focus-within:text-blue-600 transition-colors">
                                 <Mail className="h-5 w-5" />
                             </div>
                             <input
@@ -129,7 +129,7 @@ export default function Login() {
                                 required // HTML5 form validation
                                 disabled={isLoading} // Disable editing when submitting
                                 placeholder="you@example.com"
-                                className="w-full rounded-xl border border-slate-200 dark:border-input bg-white dark:bg-background/50 py-2.5 pl-10 pr-4 text-slate-900 dark:text-foreground placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50"
+                                className="w-full rounded-xl border border-slate-200 dark:border-input bg-white dark:bg-background/50 py-2.5 pl-10 pr-4 text-slate-900 dark:text-foreground placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20 transition-all disabled:opacity-50"
                                 value={email} // Controlled component data binding
                                 onChange={(e) => setEmail(e.target.value)}
                             />
@@ -142,12 +142,12 @@ export default function Login() {
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                                 Password
                             </label>
-                            <a href="#" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors">
+                            <a href="#" className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors">
                                 Forgot password?
                             </a>
                         </div>
                         <div className="relative">
-                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 group-focus-within:text-primary transition-colors">
+                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 group-focus-within:text-blue-600 transition-colors">
                                 <Lock className="h-5 w-5" />
                             </div>
                             <input
@@ -155,7 +155,7 @@ export default function Login() {
                                 required
                                 disabled={isLoading}
                                 placeholder="••••••••"
-                                className="w-full rounded-xl border border-slate-200 dark:border-input bg-white dark:bg-background/50 py-2.5 pl-10 pr-10 text-slate-900 dark:text-foreground placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50"
+                                className="w-full rounded-xl border border-slate-200 dark:border-input bg-white dark:bg-background/50 py-2.5 pl-10 pr-10 text-slate-900 dark:text-foreground placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20 transition-all disabled:opacity-50"
                                 value={password}
                                 onChange={(e) => {
                                     setPassword(e.target.value);
@@ -167,7 +167,7 @@ export default function Login() {
                             />
                             <button
                                 type="button"
-                                className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-primary transition-colors"
+                                className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-blue-600 transition-colors"
                                 onClick={() => setShowPassword(!showPassword)}
                             >
                                 {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
@@ -179,17 +179,17 @@ export default function Login() {
                     <button
                         type="submit"
                         disabled={isLoading} // Prevents duplicate submissions while loading
-                        className="group relative mt-4 flex w-full items-center justify-center gap-3 rounded-xl bg-primary py-3.5 px-4 font-bold text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-200 hover:bg-primary/90 hover:shadow-primary/40 hover:scale-[1.01] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-70"
+                        className="group relative mt-4 flex w-full items-center justify-center gap-3 rounded-xl bg-blue-600 py-3.5 px-4 font-bold text-white shadow-lg shadow-blue-600/25 transition-all duration-200 hover:bg-blue-700 hover:shadow-blue-600/40 hover:scale-[1.01] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-70"
                     >
                         {/* Conditional Button UI based on loading state */}
                         {isLoading ? (
                             <div className="flex items-center gap-2">
                                 <Loader2 className="h-5 w-5 animate-spin" />
-                                <span className="tracking-wide">Signing in...</span>
+                                <span className="tracking-wide">Accessing Dashboard...</span>
                             </div>
                         ) : (
                             <div className="flex items-center gap-2">
-                                <span className="tracking-wide">Sign In</span>
+                                <span className="tracking-wide">Access Dashboard</span>
                                 <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
                             </div>
                         )}
@@ -205,7 +205,7 @@ export default function Login() {
                 {/* Support Footer link */}
                 <div className="mt-4 text-center text-sm text-slate-500 dark:text-muted-foreground">
                     Need help? Contact{" "}
-                    <a href="#" className="font-semibold text-primary hover:underline underline-offset-4">
+                    <a href="#" className="font-semibold text-blue-600 hover:underline underline-offset-4">
                         IT Support
                     </a>
                 </div>

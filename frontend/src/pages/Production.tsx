@@ -166,7 +166,7 @@ export default function Production() {
         </div>
         <button
           onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+          className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 h-10 px-4 py-2"
         >
           <Plus className="mr-2 h-4 w-4" />
           New Production Run
@@ -177,7 +177,7 @@ export default function Production() {
         <div className="rounded-xl border bg-card shadow-sm">
           <div className="p-6 border-b bg-muted/30">
             <h2 className="text-lg font-semibold flex items-center">
-              <History className="mr-2 h-5 w-5 text-primary" />
+              <History className="mr-2 h-5 w-5 text-blue-600" />
               Recent Production History
             </h2>
           </div>
@@ -218,7 +218,7 @@ export default function Production() {
                         {run.status === 'completed' && (
                           <button
                             onClick={() => handlePackage(run.id, run.actual_quantity_liters)}
-                            className="inline-flex items-center text-xs font-medium text-primary hover:underline"
+                            className="inline-flex items-center text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
                           >
                             <PackageCheck className="mr-1 h-3 w-3" />
                             Package
@@ -249,7 +249,7 @@ export default function Production() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Select Color</label>
                   <select
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
+                    className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-blue-600"
                     value={selectedColor}
                     onChange={(e) => setSelectedColor(e.target.value === "" ? "" : Number(e.target.value))}
                     required
@@ -261,7 +261,7 @@ export default function Production() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Select Recipe</label>
                   <select
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
+                    className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-blue-600"
                     disabled={!selectedColor}
                     value={selectedRecipe?.id || ""}
                     onChange={(e) => handleRecipeSelect(e.target.value)}
@@ -328,7 +328,7 @@ export default function Production() {
                 <button
                   type="submit"
                   disabled={!selectedRecipe}
-                  className="inline-flex items-center px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
                 >
                   <Play className="mr-2 h-4 w-4" />
                   Start Production
