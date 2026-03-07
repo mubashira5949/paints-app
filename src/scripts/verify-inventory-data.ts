@@ -1,0 +1,48 @@
+/**
+ * Verification Script: Seed Operational Data
+ * This script updates existing colors with business codes, series, and min thresholds.
+ */
+
+import { Pool } from 'pg';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+});
+
+async function seed() {
+    try {
+        console.log('Seeding operational data for colors...');
+
+        // Update some colors to have business codes and thresholds
+        await pool.query(`
+            UPDATE colors 
+            SET business_code = 'TC-01', series = 'Water-based', min_threshold_liters = 50.0
+            WHERE name ILIKE '%test%' OR name ILIKE '%red%';
+        `);
+
+        await pool.query(`
+            UPDATE colors 
+            SET business_code = 'BL-02', series = 'Oil-based', min_threshold_liters = 20.0
+            WHERE name ILIKE '%blue%';
+        `);
+
+        // Ensure some are definitely low stock for verification (defaulting others)
+        await pool.query(`
+            UPDATE colors 
+            SET min_threshold_liters = 1000.0
+            WHERE business_code IS NULL;
+        `);
+
+        console.log('Operational data seeded successfully.');
+        process.exit(0);
+    } catch (err) {
+        console.error('Seeding failed:', err);
+        process.exit(1);
+    }
+}
+
+seed();
