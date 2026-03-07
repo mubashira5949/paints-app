@@ -79,6 +79,60 @@ describe('Production Runs Module API', () => {
         await productionModule(mockFastify as unknown as FastifyInstance)
     })
 
+    describe('GET /production-runs/summary', () => {
+        it('should return aggregated production metrics for authorized roles', async () => {
+            const getRoute = routes['GET /summary']
+
+            // Re-mock DB for summary
+            mockClient.query.mockImplementation(async (query: string) => {
+                if (query.includes('COUNT(*)')) return { rows: [{ count: '2' }] }
+                if (query.includes('SUM(actual_quantity_liters)')) return { rows: [{ total: '340' }] }
+                if (query.includes('SUM(pra.actual_quantity_used)')) {
+                    if (query.includes('expected_quantity')) {
+                        return { rows: [{ total_expected: '100', total_actual: '102.4' }] }
+                    }
+                    return { rows: [{ total: '28' }] }
+                }
+                return { rows: [] }
+            })
+
+            // Mock as admin
+            const req = {
+                headers: { authorization: 'Bearer admin:testadmin' },
+                user: { id: 10, role: 'admin' }
+            } as unknown as FastifyRequest
+            const rep = createMockReply()
+
+            // execute
+            for (const handler of getRoute.preHandler) { await handler(req, rep) }
+            await getRoute.handler(req, rep)
+
+            expect((rep as any).getStatusCode()).toBe(200)
+            const body = (rep as any).getBody()
+
+            expect(body.active_runs).toBe(2)
+            expect(body.todays_production_liters).toBe(340)
+            expect(body.resource_consumption_kg).toBe(28)
+            expect(body.production_variance_percent).toBeCloseTo(2.4)
+        })
+
+        it('should correctly reject standard users from establishing summary reports', async () => {
+            const getRoute = routes['GET /summary']
+            const req = {
+                headers: { authorization: 'Bearer user:testuser' }, // Not listed in authorized arrays
+                body: {}
+            } as unknown as FastifyRequest
+            const rep = createMockReply()
+
+            for (const handler of getRoute.preHandler) {
+                await handler(req, rep)
+                if ((rep as any).getStatusCode() !== 200) break;
+            }
+
+            expect((rep as any).getStatusCode()).toBe(403)
+        })
+    })
+
     describe('POST /production-runs', () => {
         it('should execute transactional stock updates successfully for autorized operator', async () => {
             const postRoute = routes['POST /']

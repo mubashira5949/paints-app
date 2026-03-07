@@ -37,29 +37,136 @@ export default async function (fastifyRaw: FastifyInstance) {
         )
     })
 
+    const ListRunsQuerySchema = Type.Object({
+        search: Type.Optional(Type.String()),
+        color_id: Type.Optional(Type.Integer()),
+        status: Type.Optional(Type.String()),
+        from_date: Type.Optional(Type.String({ format: 'date' })),
+        to_date: Type.Optional(Type.String({ format: 'date' }))
+    })
+
     /**
-     * GET /production-runs - List recent production runs.
+     * GET /production-runs - List recent production runs with filtering and packaging info.
      * Accessible by 'admin', 'manager', or 'operator' roles.
      */
     fastify.get('/', {
         preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'operator'])],
+        schema: {
+            querystring: ListRunsQuerySchema
+        },
         handler: async (request, reply) => {
+            const { search, color_id, status, from_date, to_date } = request.query
             try {
-                const result = await fastify.db.query(
-                    `SELECT pr.id, pr.status, pr.planned_quantity_liters, pr.actual_quantity_liters, 
-                            pr.started_at, pr.completed_at, r.name as recipe_name, c.name as color_name
-                     FROM production_runs pr
-                     JOIN recipes r ON pr.recipe_id = r.id
-                     JOIN colors c ON r.color_id = c.id
-                     ORDER BY pr.created_at DESC
-                     LIMIT 50`
-                )
+                let query = `
+                    SELECT pr.id, pr.status, pr.planned_quantity_liters, pr.actual_quantity_liters, 
+                           pr.started_at, pr.completed_at, pr.created_at, r.name as recipe_name, c.name as color_name,
+                           (SELECT json_agg(json_build_object('pack_size_liters', fst.pack_size_liters, 'quantity_units', fst.quantity_units))
+                            FROM finished_stock_transactions fst
+                            WHERE fst.reference_id = pr.id AND fst.transaction_type = 'production_entry'
+                           ) as packaging
+                    FROM production_runs pr
+                    JOIN recipes r ON pr.recipe_id = r.id
+                    JOIN colors c ON r.color_id = c.id
+                    WHERE 1=1
+                `
+                const params: any[] = []
+
+                if (search) {
+                    params.push(`%${search}%`)
+                    query += ` AND (pr.id::text LIKE $${params.length} OR r.name ILIKE $${params.length} OR c.name ILIKE $${params.length})`
+                }
+
+                if (color_id) {
+                    params.push(color_id)
+                    query += ` AND r.color_id = $${params.length}`
+                }
+
+                if (status && status !== 'All') {
+                    params.push(status.toLowerCase())
+                    query += ` AND pr.status = $${params.length}`
+                }
+
+                if (from_date) {
+                    params.push(from_date)
+                    query += ` AND DATE(pr.created_at) >= $${params.length}`
+                }
+
+                if (to_date) {
+                    params.push(to_date)
+                    query += ` AND DATE(pr.created_at) <= $${params.length}`
+                }
+
+                query += ` ORDER BY pr.created_at DESC LIMIT 50`
+
+                const result = await fastify.db.query(query, params)
                 return reply.send(result.rows)
             } catch (err) {
                 fastify.log.error(err)
                 return reply.status(500).send({
                     error: 'Internal Server Error',
                     message: 'Failed to retrieve production runs'
+                })
+            }
+        }
+    })
+
+    /**
+     * GET /production-runs/summary - Retrieve production summary metrics.
+     * Accessible by 'admin', 'manager', or 'operator' roles.
+     */
+    fastify.get('/summary', {
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'operator'])],
+        handler: async (request, reply) => {
+            try {
+                // 1. Active Runs
+                const activeRunsRes = await fastify.db.query(
+                    `SELECT COUNT(*) as count FROM production_runs WHERE status != 'completed'`
+                )
+                const activeRuns = parseInt(activeRunsRes.rows[0].count, 10)
+
+                // 2. Today's Production (Yield)
+                const todaysProductionRes = await fastify.db.query(
+                    `SELECT SUM(actual_quantity_liters) as total 
+                     FROM production_runs 
+                     WHERE DATE(created_at) = CURRENT_DATE AND status = 'completed'`
+                )
+                const todaysProduction = parseFloat(todaysProductionRes.rows[0].total || '0')
+
+                // 3. Resource Consumption (Today)
+                const todaysConsumptionRes = await fastify.db.query(
+                    `SELECT SUM(pra.actual_quantity_used) as total 
+                     FROM production_resource_actuals pra
+                     JOIN production_runs pr ON pra.production_run_id = pr.id
+                     WHERE DATE(pra.created_at) = CURRENT_DATE`
+                )
+                const resourceConsumption = parseFloat(todaysConsumptionRes.rows[0].total || '0')
+
+                // 4. Production Variance
+                const varianceRes = await fastify.db.query(
+                    `SELECT SUM(expected_quantity) as total_expected, SUM(actual_quantity_used) as total_actual
+                     FROM production_resource_actuals pra
+                     JOIN production_runs pr ON pra.production_run_id = pr.id
+                     WHERE DATE(pra.created_at) = CURRENT_DATE`
+                )
+                const totalExpected = parseFloat(varianceRes.rows[0].total_expected || '0')
+                const totalActual = parseFloat(varianceRes.rows[0].total_actual || '0')
+
+                let variancePercentage = 0;
+                if (totalExpected > 0) {
+                    variancePercentage = ((totalActual - totalExpected) / totalExpected) * 100;
+                }
+
+                return reply.send({
+                    active_runs: activeRuns,
+                    todays_production_liters: todaysProduction,
+                    resource_consumption_kg: resourceConsumption, // Assuming standard metric mix is kg/liters
+                    production_variance_percent: variancePercentage
+                })
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({
+                    error: 'Internal Server Error',
+                    message: 'Failed to retrieve production summary'
                 })
             }
         }
