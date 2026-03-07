@@ -61,6 +61,9 @@ CREATE TABLE IF NOT EXISTS colors (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) UNIQUE NOT NULL,
     color_code VARCHAR(50), -- e.g., HEX, RAL code
+    business_code VARCHAR(50), -- e.g., TC-01
+    series VARCHAR(100), -- e.g., Water-based
+    min_threshold_liters DECIMAL(12, 4) DEFAULT 0,
     description TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

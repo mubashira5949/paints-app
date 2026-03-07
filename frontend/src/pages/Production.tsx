@@ -340,20 +340,20 @@ export default function Production() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b bg-muted/30">
-                    <th className="h-10 px-4 text-left font-medium text-muted-foreground border-r">
+                  <tr className="border-b bg-slate-50/50">
+                    <th className="h-12 px-6 text-left align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
                       Batch ID
                     </th>
-                    <th className="h-10 px-4 text-left font-medium text-muted-foreground border-r">
+                    <th className="h-12 px-6 text-left align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
                       Color
                     </th>
-                    <th className="h-10 px-4 text-left font-medium text-muted-foreground border-r">
+                    <th className="h-12 px-6 text-left align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
                       Recipe
                     </th>
-                    <th className="h-10 px-4 text-center font-medium text-muted-foreground border-r">
+                    <th className="h-12 px-6 text-center align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
                       Target Qty
                     </th>
-                    <th className="h-10 px-4 text-center font-medium text-muted-foreground">
+                    <th className="h-12 px-6 text-center align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
                       Status
                     </th>
                   </tr>
@@ -381,34 +381,33 @@ export default function Production() {
                     activeRuns.map((run) => (
                       <tr
                         key={run.id}
-                        className="hover:bg-muted/50 transition-colors"
+                        className="hover:bg-slate-50 transition-colors"
                       >
-                        <td className="p-4 text-muted-foreground font-mono border-r">
+                        <td className="p-6 font-bold text-blue-600 tracking-tight">
                           PR-{run.id}
                         </td>
-                        <td className="p-4 font-medium text-foreground border-r">
+                        <td className="p-6 font-extrabold text-slate-900">
                           {run.color_name}
                         </td>
-                        <td className="p-4 text-muted-foreground text-sm border-r">
+                        <td className="p-6 text-slate-500 font-medium text-xs">
                           {run.recipe_name}
                         </td>
-                        <td className="p-4 text-center font-mono text-muted-foreground border-r">
-                          {run.planned_quantity_liters}kg
+                        <td className="p-6 text-center font-black text-slate-700">
+                          {run.planned_quantity_liters}L
                         </td>
-                        <td className="p-4 text-center">
+                        <td className="p-6 text-center">
                           <span
-                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${
-                              run.status === "completed"
-                                ? "bg-green-100 text-green-800"
+                            className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${run.status === "completed"
+                                ? "bg-emerald-100 text-emerald-800"
                                 : run.status === "variance" ||
-                                    run.status === "flagged"
+                                  run.status === "flagged"
                                   ? "bg-red-100 text-red-800"
                                   : "bg-blue-100 text-blue-800"
-                            }`}
+                              }`}
                           >
                             {run.status === "pending" ||
-                            run.status === "in_progress" ||
-                            run.status === "running"
+                              run.status === "in_progress" ||
+                              run.status === "running"
                               ? "Running"
                               : run.status}
                           </span>
@@ -494,35 +493,32 @@ export default function Production() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b bg-muted/30">
-                    <th className="h-10 px-4 text-left font-medium text-muted-foreground w-20 border-r">
+                  <tr className="border-b bg-slate-50/50">
+                    <th className="h-12 px-4 text-left align-middle font-bold text-slate-500 text-[10px] uppercase tracking-widest">
                       Timeline
                     </th>
-                    <th className="h-10 px-4 text-left font-medium text-muted-foreground border-r">
+                    <th className="h-12 px-4 text-left align-middle font-bold text-slate-500 text-[10px] uppercase tracking-widest">
                       Batch ID
                     </th>
-                    <th className="h-10 px-4 text-left font-medium text-muted-foreground border-r">
+                    <th className="h-12 px-4 text-left align-middle font-bold text-slate-500 text-[10px] uppercase tracking-widest">
                       Color
                     </th>
-                    <th className="h-10 px-4 text-left font-medium text-muted-foreground border-r">
+                    <th className="h-12 px-4 text-left align-middle font-bold text-slate-500 text-[10px] uppercase tracking-widest">
                       Recipe
                     </th>
-                    <th className="h-10 px-4 text-center font-medium text-muted-foreground border-r">
-                      Expected
+                    <th className="h-12 px-4 text-center align-middle font-bold text-slate-500 text-[10px] uppercase tracking-widest">
+                      Target
                     </th>
-                    <th className="h-10 px-4 text-center font-medium text-muted-foreground border-r">
+                    <th className="h-12 px-4 text-center align-middle font-bold text-slate-500 text-[10px] uppercase tracking-widest">
                       Actual
                     </th>
-                    <th className="h-10 px-4 text-center font-medium text-muted-foreground border-r">
-                      Variance
+                    <th className="h-12 px-4 text-center align-middle font-bold text-slate-500 text-[10px] uppercase tracking-widest">
+                      Var.
                     </th>
-                    <th className="h-10 px-4 text-center font-medium text-muted-foreground border-r">
-                      Packaging
-                    </th>
-                    <th className="h-10 px-4 text-center font-medium text-muted-foreground border-r">
+                    <th className="h-12 px-4 text-center align-middle font-bold text-slate-500 text-[10px] uppercase tracking-widest">
                       Status
                     </th>
-                    <th className="h-10 px-4 text-right font-medium text-muted-foreground">
+                    <th className="h-12 px-4 text-right align-middle font-bold text-slate-500 text-[10px] uppercase tracking-widest">
                       Actions
                     </th>
                   </tr>
@@ -568,7 +564,7 @@ export default function Production() {
                             ? 4
                             : 3
                           : run.status === "running" ||
-                              run.status === "in_progress"
+                            run.status === "in_progress"
                             ? 2
                             : 1;
 
@@ -582,13 +578,12 @@ export default function Production() {
                               {[1, 2, 3, 4].map((step) => (
                                 <div
                                   key={step}
-                                  className={`h-1.5 w-3 rounded-full ${
-                                    step <= timelineStep
+                                  className={`h-1.5 w-3 rounded-full ${step <= timelineStep
                                       ? step === 4
                                         ? "bg-green-500"
                                         : "bg-blue-500"
                                       : "bg-muted"
-                                  }`}
+                                    }`}
                                   title={
                                     step === 1
                                       ? "Planned"
@@ -643,20 +638,19 @@ export default function Production() {
                               </span>
                             )}
                           </td>
-                          <td className="p-4 text-center border-r">
+                          <td className="p-4 border-r">
                             <span
-                              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-                                run.status === "completed"
-                                  ? "bg-green-100 text-green-800"
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${run.status === "completed"
+                                  ? "bg-emerald-100 text-emerald-800"
                                   : run.status === "variance" ||
-                                      run.status === "flagged"
+                                    run.status === "flagged"
                                     ? "bg-red-100 text-red-800"
                                     : "bg-blue-100 text-blue-800"
-                              }`}
+                                }`}
                             >
                               {run.status === "pending" ||
-                              run.status === "in_progress" ||
-                              run.status === "running"
+                                run.status === "in_progress" ||
+                                run.status === "running"
                                 ? "Running"
                                 : run.status}
                             </span>
