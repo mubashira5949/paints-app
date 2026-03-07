@@ -21,7 +21,8 @@ describe('Production Runs Module API', () => {
             request.user = { id: 10, role, username } // mock user payload
         },
         db: {
-            connect: async () => mockClient
+            connect: async () => mockClient,
+            query: mockClient.query
         },
         log: {
             error: (err: any) => { } // silent log
@@ -87,10 +88,10 @@ describe('Production Runs Module API', () => {
             mockClient.query.mockImplementation(async (query: string) => {
                 if (query.includes('COUNT(*)')) return { rows: [{ count: '2' }] }
                 if (query.includes('SUM(actual_quantity_liters)')) return { rows: [{ total: '340' }] }
-                if (query.includes('SUM(pra.actual_quantity_used)')) {
-                    if (query.includes('expected_quantity')) {
-                        return { rows: [{ total_expected: '100', total_actual: '102.4' }] }
-                    }
+                if (query.includes('expected_quantity')) {
+                    return { rows: [{ total_expected: '100', total_actual: '102.4' }] }
+                }
+                if (query.includes('actual_quantity_used')) {
                     return { rows: [{ total: '28' }] }
                 }
                 return { rows: [] }
