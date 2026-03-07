@@ -29,7 +29,9 @@ export function Topbar({ onMenuClick }: TopbarProps) {
               <UserIcon size={16} />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-medium leading-none">{user?.username || "Loading..."}</span>
+              <span className="text-sm font-medium leading-none">
+                {user?.username || "Loading..."}
+              </span>
               <span className="text-xs text-muted-foreground capitalize mt-1">
                 {user?.role || "Active Session"}
               </span>

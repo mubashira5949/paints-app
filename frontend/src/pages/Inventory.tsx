@@ -25,7 +25,9 @@ export default function Inventory() {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await apiRequest<{ data: InventoryItem[] }>("/inventory/finished-stock");
+      const response = await apiRequest<{ data: InventoryItem[] }>(
+        "/inventory/finished-stock",
+      );
       setInventory(response.data);
     } catch (err: any) {
       setError(err.message || "Failed to load inventory");
@@ -42,7 +44,9 @@ export default function Inventory() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Inventory Management</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Inventory Management
+          </h1>
           <p className="text-muted-foreground mt-1">
             Real-time finished paint stock levels and distribution.
           </p>
@@ -52,7 +56,9 @@ export default function Inventory() {
           disabled={isLoading}
           className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-10 px-4 py-2"
         >
-          <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+          <RefreshCw
+            className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
+          />
           Refresh
         </button>
       </div>
@@ -71,7 +77,13 @@ export default function Inventory() {
           </div>
           <div>
             <div className="text-2xl font-bold">
-              {inventory.reduce((acc, item) => acc + Number(item.total_volume_liters), 0).toFixed(2)}L
+              {inventory
+                .reduce(
+                  (acc, item) => acc + Number(item.total_volume_liters),
+                  0,
+                )
+                .toFixed(2)}
+              L
             </div>
             <p className="text-xs text-muted-foreground">Across all colors</p>
           </div>
@@ -83,7 +95,10 @@ export default function Inventory() {
           </div>
           <div>
             <div className="text-2xl font-bold">
-              {inventory.reduce((acc, item) => acc + item.total_quantity_units, 0)}
+              {inventory.reduce(
+                (acc, item) => acc + item.total_quantity_units,
+                0,
+              )}
             </div>
             <p className="text-xs text-muted-foreground">Packaged products</p>
           </div>
@@ -95,7 +110,9 @@ export default function Inventory() {
           </div>
           <div>
             <div className="text-2xl font-bold">{inventory.length}</div>
-            <p className="text-xs text-muted-foreground">Unique paint products</p>
+            <p className="text-xs text-muted-foreground">
+              Unique paint products
+            </p>
           </div>
         </div>
       </div>
@@ -105,31 +122,53 @@ export default function Inventory() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/50 transition-colors">
-                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Color</th>
-                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Pack Details</th>
-                <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">Total Units</th>
-                <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">Total Volume</th>
+                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                  Color
+                </th>
+                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                  Pack Details
+                </th>
+                <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">
+                  Total Units
+                </th>
+                <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">
+                  Total Volume
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {isLoading ? (
                 Array.from({ length: 3 }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    <td className="p-4"><div className="h-4 w-32 bg-muted rounded"></div></td>
-                    <td className="p-4"><div className="h-4 w-48 bg-muted rounded"></div></td>
-                    <td className="p-4 text-right"><div className="h-4 w-12 bg-muted rounded ml-auto"></div></td>
-                    <td className="p-4 text-right"><div className="h-4 w-16 bg-muted rounded ml-auto"></div></td>
+                    <td className="p-4">
+                      <div className="h-4 w-32 bg-muted rounded"></div>
+                    </td>
+                    <td className="p-4">
+                      <div className="h-4 w-48 bg-muted rounded"></div>
+                    </td>
+                    <td className="p-4 text-right">
+                      <div className="h-4 w-12 bg-muted rounded ml-auto"></div>
+                    </td>
+                    <td className="p-4 text-right">
+                      <div className="h-4 w-16 bg-muted rounded ml-auto"></div>
+                    </td>
                   </tr>
                 ))
               ) : inventory.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                  <td
+                    colSpan={4}
+                    className="p-8 text-center text-muted-foreground"
+                  >
                     No finished stock found.
                   </td>
                 </tr>
               ) : (
                 inventory.map((item) => (
-                  <tr key={item.color_id} className="hover:bg-muted/50 transition-colors">
+                  <tr
+                    key={item.color_id}
+                    className="hover:bg-muted/50 transition-colors"
+                  >
                     <td className="p-4 font-medium">
                       <div className="flex items-center gap-3">
                         <div
@@ -151,7 +190,9 @@ export default function Inventory() {
                         ))}
                       </div>
                     </td>
-                    <td className="p-4 text-right font-semibold">{item.total_quantity_units}</td>
+                    <td className="p-4 text-right font-semibold">
+                      {item.total_quantity_units}
+                    </td>
                     <td className="p-4 text-right font-semibold">
                       {Number(item.total_volume_liters).toFixed(2)}L
                     </td>

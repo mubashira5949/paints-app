@@ -11,7 +11,7 @@ import {
   PaintBucket,
   Clock,
   Bell,
-  Users
+  Users,
 } from "lucide-react";
 
 interface Stats {
@@ -28,7 +28,7 @@ export default function Dashboard() {
     lowStockResources: 0,
     totalFinishedStock: 0,
     activeProductionRuns: 0,
-    recentRunsCount: 0
+    recentRunsCount: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -38,15 +38,21 @@ export default function Dashboard() {
       const [resources, inventory, runs] = await Promise.all([
         apiRequest<any[]>("/resources"),
         apiRequest<{ data: any[] }>("/inventory/finished-stock"),
-        apiRequest<any[]>("/production-runs")
+        apiRequest<any[]>("/production-runs"),
       ]);
 
       setStats({
         totalResources: resources.length,
-        lowStockResources: resources.filter(r => Number(r.current_stock) < 20).length,
-        totalFinishedStock: inventory.data.reduce((acc, item) => acc + item.total_quantity_units, 0),
-        activeProductionRuns: runs.filter(r => r.status === 'in_progress' || r.status === 'planned').length,
-        recentRunsCount: runs.length
+        lowStockResources: resources.filter((r) => Number(r.current_stock) < 20)
+          .length,
+        totalFinishedStock: inventory.data.reduce(
+          (acc, item) => acc + item.total_quantity_units,
+          0,
+        ),
+        activeProductionRuns: runs.filter(
+          (r) => r.status === "in_progress" || r.status === "planned",
+        ).length,
+        recentRunsCount: runs.length,
       });
     } catch (err) {
       console.error("Failed to fetch dashboard stats", err);
@@ -66,7 +72,9 @@ export default function Dashboard() {
           <div className="bg-blue-600 p-2 rounded-lg shadow-sm">
             <PaintBucket className="h-6 w-6 text-white" />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">Paint Production Management System</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Paint Production Management System
+          </h1>
         </div>
         <p className="mt-2 text-muted-foreground">
           System health, factory operations, and production metrics at a glance.
@@ -76,30 +84,62 @@ export default function Dashboard() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Raw Materials"
-          value={<span className="text-3xl font-semibold">{stats.totalResources} <span className="text-sm font-normal text-gray-500">Resources</span></span>}
+          value={
+            <span className="text-3xl font-semibold">
+              {stats.totalResources}{" "}
+              <span className="text-sm font-normal text-gray-500">
+                Resources
+              </span>
+            </span>
+          }
           subtitle="Tracked in inventory"
           icon={<Layers className="h-4 w-4 text-blue-600" />}
           loading={isLoading}
         />
         <StatCard
           title="Low Stock Alerts"
-          value={<span className="text-3xl font-semibold">{stats.lowStockResources} <span className="text-sm font-normal text-gray-500">Items</span></span>}
-          subtitle={stats.lowStockResources > 0 ? "< 20 units remaining" : "Inventory healthy"}
-          icon={<AlertTriangle className={`h-4 w-4 ${stats.lowStockResources > 0 ? "text-destructive" : "text-muted-foreground"}`} />}
+          value={
+            <span className="text-3xl font-semibold">
+              {stats.lowStockResources}{" "}
+              <span className="text-sm font-normal text-gray-500">Items</span>
+            </span>
+          }
+          subtitle={
+            stats.lowStockResources > 0
+              ? "< 20 units remaining"
+              : "Inventory healthy"
+          }
+          icon={
+            <AlertTriangle
+              className={`h-4 w-4 ${stats.lowStockResources > 0 ? "text-destructive" : "text-muted-foreground"}`}
+            />
+          }
           loading={isLoading}
           trend={stats.lowStockResources > 0 ? "Critical" : "Good"}
-          trendColor={stats.lowStockResources > 0 ? "text-destructive" : "text-green-600"}
+          trendColor={
+            stats.lowStockResources > 0 ? "text-destructive" : "text-green-600"
+          }
         />
         <StatCard
           title="Finished Paint Stock"
-          value={<span className="text-3xl font-semibold">{stats.totalFinishedStock} <span className="text-sm font-normal text-gray-500">Units</span></span>}
+          value={
+            <span className="text-3xl font-semibold">
+              {stats.totalFinishedStock}{" "}
+              <span className="text-sm font-normal text-gray-500">Units</span>
+            </span>
+          }
           subtitle="Ready for sale"
           icon={<Package className="h-4 w-4 text-blue-600" />}
           loading={isLoading}
         />
         <StatCard
           title="Production Runs"
-          value={<span className="text-3xl font-semibold">{stats.activeProductionRuns} <span className="text-sm font-normal text-gray-500">Active</span></span>}
+          value={
+            <span className="text-3xl font-semibold">
+              {stats.activeProductionRuns}{" "}
+              <span className="text-sm font-normal text-gray-500">Active</span>
+            </span>
+          }
           subtitle="Batches in progress"
           icon={<Activity className="h-4 w-4 text-blue-600" />}
           loading={isLoading}
@@ -164,30 +204,62 @@ export default function Dashboard() {
               <Clock className="mr-2 h-4 w-4 text-blue-600" />
               Recent Production Runs
             </h3>
-            <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">View All</button>
+            <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+              View All
+            </button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/20">
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">Batch ID</th>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">Color</th>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">Output</th>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">Operator</th>
+                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
+                    Batch ID
+                  </th>
+                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
+                    Color
+                  </th>
+                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
+                    Output
+                  </th>
+                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
+                    Operator
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {[
-                  { id: "B-102", color: "Blue 401", output: "120kg", operator: "John" },
-                  { id: "B-103", color: "Red 120", output: "90kg", operator: "Maria" },
-                  { id: "B-104", color: "White Base", output: "250kg", operator: "David" },
-                  { id: "B-105", color: "Green 302", output: "110kg", operator: "Sarah" }
+                  {
+                    id: "B-102",
+                    color: "Blue 401",
+                    output: "120kg",
+                    operator: "John",
+                  },
+                  {
+                    id: "B-103",
+                    color: "Red 120",
+                    output: "90kg",
+                    operator: "Maria",
+                  },
+                  {
+                    id: "B-104",
+                    color: "White Base",
+                    output: "250kg",
+                    operator: "David",
+                  },
+                  {
+                    id: "B-105",
+                    color: "Green 302",
+                    output: "110kg",
+                    operator: "Sarah",
+                  },
                 ].map((run, i) => (
                   <tr key={i} className="hover:bg-muted/50 transition-colors">
                     <td className="p-4 font-medium text-blue-600">{run.id}</td>
                     <td className="p-4">{run.color}</td>
                     <td className="p-4 font-mono">{run.output}</td>
-                    <td className="p-4 text-muted-foreground">{run.operator}</td>
+                    <td className="p-4 text-muted-foreground">
+                      {run.operator}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -202,16 +274,35 @@ export default function Dashboard() {
           </h3>
           <div className="space-y-4">
             {[
-              { material: "Titanium Dioxide", remaining: "5kg remaining", status: "critical" },
-              { material: "Binder A", remaining: "3kg remaining", status: "critical" },
-              { material: "Solvent X", remaining: "12kg remaining", status: "warning" }
+              {
+                material: "Titanium Dioxide",
+                remaining: "5kg remaining",
+                status: "critical",
+              },
+              {
+                material: "Binder A",
+                remaining: "3kg remaining",
+                status: "critical",
+              },
+              {
+                material: "Solvent X",
+                remaining: "12kg remaining",
+                status: "warning",
+              },
             ].map((alert, i) => (
-              <div key={i} className="flex justify-between items-start pb-3 border-b last:border-0 last:pb-0">
+              <div
+                key={i}
+                className="flex justify-between items-start pb-3 border-b last:border-0 last:pb-0"
+              >
                 <div>
                   <p className="font-medium text-sm">{alert.material}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{alert.remaining}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {alert.remaining}
+                  </p>
                 </div>
-                <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${alert.status === 'critical' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
+                <div
+                  className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${alert.status === "critical" ? "bg-red-100 text-red-700" : "bg-orange-100 text-orange-700"}`}
+                >
                   {alert.status}
                 </div>
               </div>
@@ -223,7 +314,15 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ title, value, subtitle, icon, loading, trend, trendColor }: any) {
+function StatCard({
+  title,
+  value,
+  subtitle,
+  icon,
+  loading,
+  trend,
+  trendColor,
+}: any) {
   return (
     <div className="rounded-xl border border-gray-200 bg-card text-card-foreground shadow-sm hover:shadow-md transition-shadow duration-200 border-t-4 border-t-blue-500 p-6 overflow-hidden relative">
       <div className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -237,7 +336,11 @@ function StatCard({ title, value, subtitle, icon, loading, trend, trendColor }: 
           <div className="mt-2">{value}</div>
           <div className="flex items-center gap-2 mt-1">
             <p className="text-xs text-muted-foreground">{subtitle}</p>
-            {trend && <span className={`text-[10px] font-bold uppercase ${trendColor}`}>{trend}</span>}
+            {trend && (
+              <span className={`text-[10px] font-bold uppercase ${trendColor}`}>
+                {trend}
+              </span>
+            )}
           </div>
         </>
       )}
