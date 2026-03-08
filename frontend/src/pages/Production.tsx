@@ -330,8 +330,8 @@ export default function Production() {
 
         <div className="md:col-span-2 space-y-10">
           {/* Active Runs Table */}
-          <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-            <div className="p-5 border-b flex items-center justify-between bg-muted/20">
+          <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+            <div className="p-5 border-b flex items-center justify-between bg-slate-50">
               <h2 className="text-lg font-bold flex items-center">
                 <Droplets className="mr-3 h-5 w-5 text-blue-500" />
                 Active Production Runs
@@ -381,7 +381,7 @@ export default function Production() {
                     activeRuns.map((run) => (
                       <tr
                         key={run.id}
-                        className="hover:bg-slate-50 transition-colors"
+                        className="hover:bg-gray-50 transition-colors"
                       >
                         <td className="p-6 font-bold text-blue-600 tracking-tight">
                           PR-{run.id}
@@ -398,11 +398,11 @@ export default function Production() {
                         <td className="p-6 text-center">
                           <span
                             className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${run.status === "completed"
-                                ? "bg-emerald-100 text-emerald-800"
-                                : run.status === "variance" ||
-                                  run.status === "flagged"
-                                  ? "bg-red-100 text-red-800"
-                                  : "bg-blue-100 text-blue-800"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : run.status === "variance" ||
+                                run.status === "flagged"
+                                ? "bg-red-100 text-red-800"
+                                : "bg-blue-100 text-blue-800"
                               }`}
                           >
                             {run.status === "pending" ||
@@ -421,8 +421,8 @@ export default function Production() {
           </div>
 
           {/* History Runs Table */}
-          <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-            <div className="p-5 border-b flex flex-col gap-4">
+          <div className="rounded-xl border bg-white shadow-sm overflow-hidden mt-6">
+            <div className="p-5 border-b flex flex-col gap-4 bg-slate-50">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold flex items-center">
                   <Activity className="mr-2 h-5 w-5 text-green-500" />
@@ -571,7 +571,7 @@ export default function Production() {
                       return (
                         <tr
                           key={run.id}
-                          className="hover:bg-muted/50 transition-colors border-b last:border-0"
+                          className="hover:bg-gray-50 transition-colors border-b last:border-0"
                         >
                           <td className="p-4 border-r">
                             <div className="flex items-center gap-1">
@@ -579,10 +579,10 @@ export default function Production() {
                                 <div
                                   key={step}
                                   className={`h-1.5 w-3 rounded-full ${step <= timelineStep
-                                      ? step === 4
-                                        ? "bg-green-500"
-                                        : "bg-blue-500"
-                                      : "bg-muted"
+                                    ? step === 4
+                                      ? "bg-green-500"
+                                      : "bg-blue-500"
+                                    : "bg-muted"
                                     }`}
                                   title={
                                     step === 1
@@ -641,11 +641,11 @@ export default function Production() {
                           <td className="p-4 border-r">
                             <span
                               className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${run.status === "completed"
-                                  ? "bg-emerald-100 text-emerald-800"
-                                  : run.status === "variance" ||
-                                    run.status === "flagged"
-                                    ? "bg-red-100 text-red-800"
-                                    : "bg-blue-100 text-blue-800"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : run.status === "variance" ||
+                                  run.status === "flagged"
+                                  ? "bg-red-100 text-red-800"
+                                  : "bg-blue-100 text-blue-800"
                                 }`}
                             >
                               {run.status === "pending" ||

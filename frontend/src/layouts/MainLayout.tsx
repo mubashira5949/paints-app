@@ -8,8 +8,8 @@ export function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { role } = useAuth();
 
-  // Provide a safe fallback for the navigation config rendering check
-  const activeRole = role || "worker";
+  // Pass the actual role from JWT — sidebar filters nav items based on this
+  const activeRole = (role as any) || "worker";
 
   return (
     <div className="bg-background min-h-screen">

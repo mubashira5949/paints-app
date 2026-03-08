@@ -181,16 +181,16 @@ export default function Dashboard() {
             Quick Actions
           </h3>
           <div className="space-y-3">
-            <button className="w-full flex items-center p-3 rounded-lg border border-gray-100 bg-white hover:bg-blue-50 hover:border-blue-200 transition-all text-sm font-medium shadow-sm group">
-              <Package className="mr-3 h-5 w-5 text-blue-600 group-hover:scale-110 transition-transform" />
+            <button className="w-full flex items-center p-3 rounded-lg border border-transparent bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-sm group">
+              <Package className="mr-3 h-5 w-5 text-blue-100 group-hover:scale-110 transition-transform" />
               <span>Create Production Run</span>
             </button>
-            <button className="w-full flex items-center p-3 rounded-lg border border-gray-100 bg-white hover:bg-blue-50 hover:border-blue-200 transition-all text-sm font-medium shadow-sm group">
-              <FileText className="mr-3 h-5 w-5 text-blue-600 group-hover:scale-110 transition-transform" />
+            <button className="w-full flex items-center p-3 rounded-lg border border-transparent bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-sm group">
+              <FileText className="mr-3 h-5 w-5 text-blue-100 group-hover:scale-110 transition-transform" />
               <span>Generate Stock Report</span>
             </button>
-            <button className="w-full flex items-center p-3 rounded-lg border border-gray-100 bg-white hover:bg-blue-50 hover:border-blue-200 transition-all text-sm font-medium shadow-sm group">
-              <Users className="mr-3 h-5 w-5 text-blue-600 group-hover:scale-110 transition-transform" />
+            <button className="w-full flex items-center p-3 rounded-lg border border-transparent bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-sm group">
+              <Users className="mr-3 h-5 w-5 text-blue-100 group-hover:scale-110 transition-transform" />
               <span>Manage User Access</span>
             </button>
           </div>
@@ -208,7 +208,7 @@ export default function Dashboard() {
               View All
             </button>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-xl shadow-sm border border-slate-100">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-slate-50/50">
@@ -253,7 +253,7 @@ export default function Dashboard() {
                     operator: "Sarah",
                   },
                 ].map((run, i) => (
-                  <tr key={i} className="hover:bg-slate-50 transition-colors">
+                  <tr key={i} className="hover:bg-gray-50 transition-colors">
                     <td className="p-6 font-bold text-blue-600 tracking-tight">{run.id}</td>
                     <td className="p-6 font-extrabold text-slate-900">{run.color}</td>
                     <td className="p-6 font-black text-slate-700 tracking-tight">{run.output}</td>
@@ -272,7 +272,7 @@ export default function Dashboard() {
             <Bell className="mr-2 h-5 w-5" />
             Inventory Alerts
           </h3>
-          <div className="overflow-hidden rounded-lg border border-slate-100">
+          <div className="overflow-hidden rounded-xl shadow-sm border border-slate-100">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50">
                 <tr>
@@ -298,16 +298,16 @@ export default function Dashboard() {
                     status: "warning",
                   },
                 ].map((alert, i) => (
-                  <tr key={i} className="hover:bg-slate-50 transition-colors">
+                  <tr key={i} className="hover:bg-gray-50 transition-colors">
                     <td className="px-3 py-3">
                       <p className="font-extrabold text-slate-900">{alert.material}</p>
                       <p className="text-[10px] text-slate-500 font-medium">{alert.remaining} left</p>
                     </td>
                     <td className="px-3 py-3 text-right">
                       <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${alert.status === "critical"
-                            ? "bg-red-100 text-red-700"
-                            : "bg-amber-100 text-amber-700"
+                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-black uppercase tracking-wider ${alert.status === "critical"
+                          ? "bg-red-100 text-red-700"
+                          : "bg-amber-100 text-amber-700"
                           }`}
                       >
                         {alert.status}

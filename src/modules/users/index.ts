@@ -23,6 +23,13 @@ export default async function (fastifyRaw: FastifyInstance) {
         id: Type.Integer()
     })
 
+    const UpdateUserSchema = Type.Object({
+        username: Type.Optional(Type.String()),
+        email: Type.Optional(Type.String({ format: 'email' })),
+        role: Type.Optional(Type.String()),
+        is_active: Type.Optional(Type.Boolean())
+    })
+
     /**
      * POST /users - Create a new user.
      * Only accessible by users with 'manager' role.
@@ -88,6 +95,140 @@ export default async function (fastifyRaw: FastifyInstance) {
                 return reply.status(500).send({
                     error: 'Internal Server Error',
                     message: 'Failed to create user'
+                })
+            }
+        }
+    })
+
+    /**
+     * GET /users - Get all users.
+     */
+    fastify.get('/users', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager', 'admin'])],
+        handler: async (request, reply) => {
+            try {
+                const result = await fastify.db.query(`
+                    SELECT u.id, u.username, u.email, u.is_active, u.last_login, u.created_at, r.name as role
+                    FROM users u
+                    JOIN roles r ON u.role_id = r.id
+                    ORDER BY u.id ASC
+                `)
+                return result.rows
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({
+                    error: 'Internal Server Error',
+                    message: 'Failed to fetch users'
+                })
+            }
+        }
+    })
+
+    /**
+     * GET /users/summary - Get users summary statistics.
+     */
+    fastify.get('/users/summary', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager', 'admin'])],
+        handler: async (request, reply) => {
+            try {
+                const result = await fastify.db.query(`
+                    SELECT 
+                        count(*) as total_users,
+                        count(*) filter (where r.name = 'manager') as managers,
+                        count(*) filter (where r.name = 'operator') as operators,
+                        count(*) filter (where r.name = 'sales') as sales
+                    FROM users u
+                    JOIN roles r ON u.role_id = r.id
+                `)
+                return result.rows[0]
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({
+                    error: 'Internal Server Error',
+                    message: 'Failed to fetch users summary'
+                })
+            }
+        }
+    })
+
+    /**
+     * GET /roles - Get all available roles.
+     */
+    fastify.get('/roles', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager', 'admin'])],
+        handler: async (request, reply) => {
+            try {
+                const result = await fastify.db.query('SELECT id, name, description FROM roles')
+                return result.rows
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({
+                    error: 'Internal Server Error',
+                    message: 'Failed to fetch roles'
+                })
+            }
+        }
+    })
+
+    /**
+     * PATCH /users/:id - Update a user.
+     */
+    fastify.patch('/users/:id', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager', 'admin'])],
+        schema: {
+            params: UserIdSchema,
+            body: UpdateUserSchema
+        },
+        handler: async (request, reply) => {
+            const { id } = request.params
+            const updates = request.body
+
+            try {
+                const fields = []
+                const values = []
+                let index = 1
+
+                if (updates.username) {
+                    fields.push(`username = $${index++}`)
+                    values.push(updates.username)
+                }
+                if (updates.email) {
+                    fields.push(`email = $${index++}`)
+                    values.push(updates.email)
+                }
+                if (updates.is_active !== undefined) {
+                    fields.push(`is_active = $${index++}`)
+                    values.push(updates.is_active)
+                }
+                if (updates.role) {
+                    const roleResult = await fastify.db.query('SELECT id FROM roles WHERE name = $1', [updates.role])
+                    if (roleResult.rows.length > 0) {
+                        fields.push(`role_id = $${index++}`)
+                        values.push(roleResult.rows[0].id)
+                    }
+                }
+
+                if (fields.length === 0) {
+                    return reply.status(400).send({ message: 'No fields to update' })
+                }
+
+                values.push(id)
+                const query = `UPDATE users SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${index} RETURNING *`
+                const result = await fastify.db.query(query, values)
+
+                if (result.rows.length === 0) {
+                    return reply.status(404).send({ message: 'User not found' })
+                }
+
+                return {
+                    message: 'User updated successfully',
+                    user: result.rows[0]
+                }
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({
+                    error: 'Internal Server Error',
+                    message: 'Failed to update user'
                 })
             }
         }

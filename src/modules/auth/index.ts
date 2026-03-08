@@ -56,7 +56,13 @@ export default async function (fastifyRaw: FastifyInstance) {
                     })
                 }
 
-                // 3. Generate a JWT token containing user identity and role.
+                // 3. Update the last_login timestamp for the user.
+                await fastify.db.query(
+                    'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1',
+                    [user.id]
+                )
+
+                // 4. Generate a JWT token containing user identity and role.
                 // This token will be used for subsequent authenticated requests.
                 const token = fastify.jwt.sign({
                     id: user.id,

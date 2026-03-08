@@ -466,7 +466,7 @@ export default function Inventory() {
               </thead>
               <tbody className="divide-y">
                 {alerts.map(alert => (
-                  <tr key={alert.id} className="hover:bg-amber-50/30 transition-colors">
+                  <tr key={alert.id} className="hover:bg-amber-50/50 transition-colors">
                     <td className="p-4 px-6 font-extrabold text-slate-900">{alert.name}</td>
                     <td className="p-4 px-6">
                       <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold uppercase tracking-wider">
