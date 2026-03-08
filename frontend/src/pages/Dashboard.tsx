@@ -181,16 +181,16 @@ export default function Dashboard() {
             Quick Actions
           </h3>
           <div className="space-y-3">
-            <button className="w-full flex items-center p-3 rounded-lg border border-gray-100 bg-white hover:bg-blue-50 hover:border-blue-200 transition-all text-sm font-medium shadow-sm group">
-              <Package className="mr-3 h-5 w-5 text-blue-600 group-hover:scale-110 transition-transform" />
+            <button className="w-full flex items-center p-3 rounded-lg border border-transparent bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-sm group">
+              <Package className="mr-3 h-5 w-5 text-blue-100 group-hover:scale-110 transition-transform" />
               <span>Create Production Run</span>
             </button>
-            <button className="w-full flex items-center p-3 rounded-lg border border-gray-100 bg-white hover:bg-blue-50 hover:border-blue-200 transition-all text-sm font-medium shadow-sm group">
-              <FileText className="mr-3 h-5 w-5 text-blue-600 group-hover:scale-110 transition-transform" />
+            <button className="w-full flex items-center p-3 rounded-lg border border-transparent bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-sm group">
+              <FileText className="mr-3 h-5 w-5 text-blue-100 group-hover:scale-110 transition-transform" />
               <span>Generate Stock Report</span>
             </button>
-            <button className="w-full flex items-center p-3 rounded-lg border border-gray-100 bg-white hover:bg-blue-50 hover:border-blue-200 transition-all text-sm font-medium shadow-sm group">
-              <Users className="mr-3 h-5 w-5 text-blue-600 group-hover:scale-110 transition-transform" />
+            <button className="w-full flex items-center p-3 rounded-lg border border-transparent bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-sm group">
+              <Users className="mr-3 h-5 w-5 text-blue-100 group-hover:scale-110 transition-transform" />
               <span>Manage User Access</span>
             </button>
           </div>
@@ -208,20 +208,20 @@ export default function Dashboard() {
               View All
             </button>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-xl shadow-sm border border-slate-100">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-muted/20">
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
+                <tr className="border-b bg-slate-50/50">
+                  <th className="h-12 px-6 text-left align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
                     Batch ID
                   </th>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
+                  <th className="h-12 px-6 text-left align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
                     Color
                   </th>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
+                  <th className="h-12 px-6 text-left align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
                     Output
                   </th>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
+                  <th className="h-12 px-6 text-left align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
                     Operator
                   </th>
                 </tr>
@@ -253,11 +253,11 @@ export default function Dashboard() {
                     operator: "Sarah",
                   },
                 ].map((run, i) => (
-                  <tr key={i} className="hover:bg-muted/50 transition-colors">
-                    <td className="p-4 font-medium text-blue-600">{run.id}</td>
-                    <td className="p-4">{run.color}</td>
-                    <td className="p-4 font-mono">{run.output}</td>
-                    <td className="p-4 text-muted-foreground">
+                  <tr key={i} className="hover:bg-gray-50 transition-colors">
+                    <td className="p-6 font-bold text-blue-600 tracking-tight">{run.id}</td>
+                    <td className="p-6 font-extrabold text-slate-900">{run.color}</td>
+                    <td className="p-6 font-black text-slate-700 tracking-tight">{run.output}</td>
+                    <td className="p-6 text-slate-500 font-medium text-xs uppercase tracking-wide">
                       {run.operator}
                     </td>
                   </tr>
@@ -272,41 +272,51 @@ export default function Dashboard() {
             <Bell className="mr-2 h-5 w-5" />
             Inventory Alerts
           </h3>
-          <div className="space-y-4">
-            {[
-              {
-                material: "Titanium Dioxide",
-                remaining: "5kg remaining",
-                status: "critical",
-              },
-              {
-                material: "Binder A",
-                remaining: "3kg remaining",
-                status: "critical",
-              },
-              {
-                material: "Solvent X",
-                remaining: "12kg remaining",
-                status: "warning",
-              },
-            ].map((alert, i) => (
-              <div
-                key={i}
-                className="flex justify-between items-start pb-3 border-b last:border-0 last:pb-0"
-              >
-                <div>
-                  <p className="font-medium text-sm">{alert.material}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {alert.remaining}
-                  </p>
-                </div>
-                <div
-                  className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${alert.status === "critical" ? "bg-red-100 text-red-700" : "bg-orange-100 text-orange-700"}`}
-                >
-                  {alert.status}
-                </div>
-              </div>
-            ))}
+          <div className="overflow-hidden rounded-xl shadow-sm border border-slate-100">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-3 py-2 font-bold text-slate-500 uppercase tracking-widest">Material</th>
+                  <th className="px-3 py-2 font-bold text-slate-500 uppercase tracking-widest text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {[
+                  {
+                    material: "Titanium Dioxide",
+                    remaining: "5kg",
+                    status: "critical",
+                  },
+                  {
+                    material: "Binder A",
+                    remaining: "3kg",
+                    status: "critical",
+                  },
+                  {
+                    material: "Solvent X",
+                    remaining: "12kg",
+                    status: "warning",
+                  },
+                ].map((alert, i) => (
+                  <tr key={i} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-3 py-3">
+                      <p className="font-extrabold text-slate-900">{alert.material}</p>
+                      <p className="text-[10px] text-slate-500 font-medium">{alert.remaining} left</p>
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <span
+                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-black uppercase tracking-wider ${alert.status === "critical"
+                          ? "bg-red-100 text-red-700"
+                          : "bg-amber-100 text-amber-700"
+                          }`}
+                      >
+                        {alert.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

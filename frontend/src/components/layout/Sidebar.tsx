@@ -3,6 +3,7 @@ import { navigation, type UserRole } from "../../config/navigation";
 import { X } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { useAuth } from "../../contexts/AuthContext";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -15,6 +16,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ userRole, isOpen, setIsOpen }: SidebarProps) {
+  const { user } = useAuth();
   // Filter navigation items based on the current user's role
   const filteredNavigation = navigation.filter((item) =>
     item.roles.includes(userRole),
@@ -57,7 +59,7 @@ export function Sidebar({ userRole, isOpen, setIsOpen }: SidebarProps) {
             <NavLink
               key={item.title}
               to={item.path}
-              onClick={() => setIsOpen(false)} // Close on mobile navigation
+              onClick={() => setIsOpen(false)}
               className={({ isActive }) =>
                 cn(
                   "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
@@ -73,14 +75,16 @@ export function Sidebar({ userRole, isOpen, setIsOpen }: SidebarProps) {
           ))}
         </nav>
 
-        {/* User preview snippet at the bottom */}
+        {/* User info at bottom */}
         <div className="p-4 border-t border-border mt-auto">
           <div className="flex items-center gap-3 rounded-md px-3 py-2 bg-secondary/50">
-            <div className="size-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
-              {userRole === "manager" ? "M" : "W"}
+            <div className="size-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm">
+              {(user?.username || userRole).charAt(0).toUpperCase()}
             </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-medium leading-none">Jane Doe</span>
+            <div className="flex flex-col overflow-hidden">
+              <span className="text-sm font-medium leading-none truncate">
+                {user?.username || "User"}
+              </span>
               <span className="text-xs text-muted-foreground capitalize mt-1">
                 {userRole}
               </span>

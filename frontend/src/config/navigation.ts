@@ -6,7 +6,7 @@ import {
   Factory,
 } from "lucide-react";
 
-export type UserRole = "manager" | "worker";
+export type UserRole = "manager" | "operator" | "sales" | "admin" | "worker";
 
 export interface NavItem {
   title: string;
@@ -20,30 +20,30 @@ export const navigation: NavItem[] = [
     title: "Dashboard",
     path: "/",
     icon: LayoutDashboard,
-    roles: ["manager", "worker"],
+    roles: ["manager", "operator", "sales", "admin", "worker"],
   },
   {
     title: "Production",
     path: "/production",
     icon: Factory,
-    roles: ["manager", "worker"],
+    roles: ["manager", "operator", "admin", "worker"],
   },
   {
     title: "Inventory",
     path: "/inventory",
     icon: Package,
-    roles: ["manager", "worker"],
+    roles: ["manager", "operator", "sales", "admin", "worker"],
   },
   {
     title: "Users",
     path: "/users",
     icon: Users,
-    roles: ["manager"],
+    roles: ["manager"],  // Manager only
   },
   {
     title: "Settings",
     path: "/settings",
     icon: Settings,
-    roles: ["manager"],
+    roles: ["manager", "admin"],  // Manager only
   },
 ];

@@ -5,7 +5,7 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
-type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 interface RequestOptions {
   method?: HttpMethod;
