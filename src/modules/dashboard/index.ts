@@ -35,7 +35,11 @@ export default async function (fastifyRaw: FastifyInstance) {
     fastify.get('/dashboard', {
         schema: {
             response: {
-                200: DashboardResponseSchema
+                200: DashboardResponseSchema,
+                500: Type.Object({
+                    error: Type.String(),
+                    message: Type.String()
+                })
             },
             security: [{ bearerAuth: [] }]
         },
