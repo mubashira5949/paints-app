@@ -61,6 +61,8 @@ export default function Production() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const [showAllActive, setShowAllActive] = useState(false);
 
   // Filters State
   const [filterSearch, setFilterSearch] = useState("");
@@ -336,6 +338,14 @@ export default function Production() {
                 <Droplets className="mr-3 h-5 w-5 text-blue-500" />
                 Active Production Runs
               </h2>
+              {activeRuns.length > 2 && (
+                <button 
+                  onClick={() => setShowAllActive(!showAllActive)}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  {showAllActive ? 'View Less' : 'View All'}
+                </button>
+              )}
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -378,7 +388,7 @@ export default function Production() {
                       </td>
                     </tr>
                   ) : (
-                    activeRuns.map((run) => (
+                    activeRuns.slice(0, showAllActive ? undefined : 2).map((run) => (
                       <tr
                         key={run.id}
                         className="hover:bg-gray-50 transition-colors"
@@ -428,6 +438,14 @@ export default function Production() {
                   <Activity className="mr-2 h-5 w-5 text-green-500" />
                   Recent Production History
                 </h2>
+                {historyRuns.length > 2 && (
+                  <button 
+                    onClick={() => setShowAllHistory(!showAllHistory)}
+                    className="text-sm text-green-600 hover:text-green-700 font-medium"
+                  >
+                    {showAllHistory ? 'View Less' : 'View All'}
+                  </button>
+                )}
               </div>
 
               {/* Filters Bar */}
@@ -543,7 +561,7 @@ export default function Production() {
                       </td>
                     </tr>
                   ) : (
-                    historyRuns.map((run) => {
+                    historyRuns.slice(0, showAllHistory ? undefined : 2).map((run) => {
                       const expected = run.planned_quantity_liters;
                       const actual = run.actual_quantity_liters || expected;
                       const variance = actual - expected;

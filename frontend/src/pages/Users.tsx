@@ -69,6 +69,8 @@ export default function Users() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [resetTargetUser, setResetTargetUser] = useState<User | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showAllUsers, setShowAllUsers] = useState(false);
+  const [showAllRequests, setShowAllRequests] = useState(false);
   const [deviceRequests, setDeviceRequests] = useState<DeviceRequest[]>(MOCK_DEVICE_REQUESTS);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -278,7 +280,17 @@ export default function Users() {
         {/* Table toolbar */}
         <div className="p-5 border-b bg-slate-50 space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <h2 className="text-base font-bold text-slate-800">System Users</h2>
+            <div className="flex items-center gap-4">
+              <h2 className="text-base font-bold text-slate-800">System Users</h2>
+              {filteredUsers.length > 2 && (
+                <button 
+                  onClick={() => setShowAllUsers(!showAllUsers)}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  {showAllUsers ? 'View Less' : 'View All'}
+                </button>
+              )}
+            </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <input
@@ -362,7 +374,7 @@ export default function Users() {
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((user) => (
+                filteredUsers.slice(0, showAllUsers ? undefined : 2).map((user) => (
                   <tr key={user.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -433,11 +445,21 @@ export default function Users() {
               <p className="text-xs text-slate-500">Approve or reject new device login requests</p>
             </div>
           </div>
-          {deviceRequests.length > 0 && (
-            <span className="px-2 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
-              {deviceRequests.length} Pending
-            </span>
-          )}
+          <div className="flex items-center gap-4">
+            {deviceRequests.length > 2 && (
+              <button 
+                onClick={() => setShowAllRequests(!showAllRequests)}
+                className="text-sm text-amber-600 hover:text-amber-700 font-medium"
+              >
+                {showAllRequests ? 'View Less' : 'View All'}
+              </button>
+            )}
+            {deviceRequests.length > 0 && (
+              <span className="px-2 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                {deviceRequests.length} Pending
+              </span>
+            )}
+          </div>
         </div>
         {deviceRequests.length === 0 ? (
           <div className="py-12 flex flex-col items-center gap-3 text-center">
@@ -460,7 +482,7 @@ export default function Users() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {deviceRequests.map((req) => (
+                {deviceRequests.slice(0, showAllRequests ? undefined : 2).map((req) => (
                   <tr key={req.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
