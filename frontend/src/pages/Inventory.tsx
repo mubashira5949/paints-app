@@ -38,6 +38,8 @@ export default function Inventory() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedRowId, setExpandedRowId] = useState<number | null>(null);
+  const [showAllInventory, setShowAllInventory] = useState(false);
+  const [showAllAlerts, setShowAllAlerts] = useState(false);
 
   // Filter States
   const [searchTerm, setSearchTerm] = useState("");
@@ -170,8 +172,18 @@ export default function Inventory() {
 
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
         <div className="p-5 border-b bg-slate-50/50 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900 uppercase tracking-tight">Inventory Table</h2>
-          <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-full uppercase tracking-widest">{filteredInventory.length} Entries</span>
+          <div className="flex items-center gap-4">
+            <h2 className="text-lg font-bold text-slate-900 uppercase tracking-tight">Inventory Table</h2>
+            <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-full uppercase tracking-widest">{filteredInventory.length} Entries</span>
+          </div>
+          {filteredInventory.length > 2 && (
+            <button 
+              onClick={() => setShowAllInventory(!showAllInventory)}
+              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+            >
+              {showAllInventory ? 'View Less' : 'View All'}
+            </button>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -216,7 +228,7 @@ export default function Inventory() {
                   </td>
                 </tr>
               ) : (
-                filteredInventory.map((item) => (
+                filteredInventory.slice(0, showAllInventory ? undefined : 2).map((item) => (
                   <>
                     <tr
                       key={item.color_id}
@@ -450,9 +462,19 @@ export default function Inventory() {
       {/* Raw Material alerts moved to bottom to follow "Ideal Layout" focus */}
       {alerts.length > 0 && (
         <div className="rounded-xl border bg-white p-0 overflow-hidden border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-2 p-5 border-b bg-slate-50/30">
-            <AlertTriangle className="h-5 w-5 text-amber-500" />
-            <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Secondary Alerts: Raw Materials</h2>
+          <div className="flex items-center justify-between p-5 border-b bg-slate-50/30">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Secondary Alerts: Raw Materials</h2>
+            </div>
+            {alerts.length > 2 && (
+              <button 
+                onClick={() => setShowAllAlerts(!showAllAlerts)}
+                className="text-sm text-amber-600 hover:text-amber-700 font-medium"
+              >
+                {showAllAlerts ? 'View Less' : 'View All'}
+              </button>
+            )}
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -465,7 +487,7 @@ export default function Inventory() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {alerts.map(alert => (
+                {alerts.slice(0, showAllAlerts ? undefined : 2).map(alert => (
                   <tr key={alert.id} className="hover:bg-amber-50/50 transition-colors">
                     <td className="p-4 px-6 font-extrabold text-slate-900">{alert.name}</td>
                     <td className="p-4 px-6">

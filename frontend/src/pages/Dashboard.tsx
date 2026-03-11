@@ -1,4 +1,6 @@
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { apiRequest } from "../services/api";
 import {
   Package,
@@ -14,59 +16,118 @@ import {
   Users,
 } from "lucide-react";
 
-interface Stats {
-  totalResources: number;
-  lowStockResources: number;
-  totalFinishedStock: number;
-  activeProductionRuns: number;
-  recentRunsCount: number;
+interface DashboardData {
+  metrics: {
+    rawMaterials: number;
+    lowStock: number;
+    finishedStock: number;
+    activeRuns: number;
+  };
+  productionChart: {
+    month: string;
+    runs: number;
+  }[];
+  recentRuns: {
+    batchId: string;
+    color: string;
+    output: number | null;
+    operator: string;
+  }[];
+  inventoryAlerts: {
+    material: string;
+    remaining: string;
+    status: string;
+  }[];
 }
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<Stats>({
-    totalResources: 0,
-    lowStockResources: 0,
-    totalFinishedStock: 0,
-    activeProductionRuns: 0,
-    recentRunsCount: 0,
-  });
+  const navigate = useNavigate();
+  const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchStats = async () => {
-    setIsLoading(true);
+  // Toggle states for tables
+  const [showAllRuns, setShowAllRuns] = useState(false);
+  const [showAllAlerts, setShowAllAlerts] = useState(false);
+
+  const fetchDashboardData = async (isBackgroundPolling = false) => {
+    // Only show global loading spinners on initial manual load
+    if (!isBackgroundPolling && !data) {
+      setIsLoading(true);
+    }
+
     try {
-      const [resources, inventory, runs] = await Promise.all([
-        apiRequest<any[]>("/resources"),
-        apiRequest<{ data: any[] }>("/inventory/finished-stock"),
-        apiRequest<any[]>("/production-runs"),
-      ]);
-
-      setStats({
-        totalResources: resources.length,
-        lowStockResources: resources.filter((r) => Number(r.current_stock) < 20)
-          .length,
-        totalFinishedStock: inventory.data.reduce(
-          (acc, item) => acc + item.total_quantity_units,
-          0,
-        ),
-        activeProductionRuns: runs.filter(
-          (r) => r.status === "in_progress" || r.status === "planned",
-        ).length,
-        recentRunsCount: runs.length,
-      });
+      const dashboardData = await apiRequest<DashboardData>("/api/dashboard");
+      setData(dashboardData);
+      setError(null); // Clear errors on success
     } catch (err) {
-      console.error("Failed to fetch dashboard stats", err);
+      console.error("Failed to fetch dashboard data", err);
+      setError("Failed to load dashboard data. Retrying in background...");
     } finally {
       setIsLoading(false);
     }
   };
 
+  const generateStockReport = async () => {
+    try {
+      const res = await apiRequest<any[]>("/inventory/stock-report");
+
+      if (!res || !Array.isArray(res) || res.length === 0) {
+        alert("No stock data available to export.");
+        return;
+      }
+
+      // Convert array of objects to CSV
+      const headers = Object.keys(res[0]);
+      const csvRows = [headers.join(',')]; // Header row
+
+      for (const row of res) {
+        const values = headers.map(header => {
+          const val = row[header];
+          // Escape quotes and wrap strings in quotes if they contain commas
+          const escaped = String(val).replace(/"/g, '""');
+          return `"${escaped}"`;
+        });
+        csvRows.push(values.join(','));
+      }
+
+      const csvString = csvRows.join('\n');
+
+      // Trigger download
+      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `stock-report-${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Failed to generate report", err);
+      alert("Failed to generate report. Please try again.");
+    }
+  };
+
   useEffect(() => {
-    fetchStats();
+    fetchDashboardData();
+
+    // Auto Refresh: Poll backend every 30 seconds for live updates
+    const interval = setInterval(() => fetchDashboardData(true), 30000);
+
+    // Cleanup interval on component unmount
+    return () => clearInterval(interval);
   }, []);
 
   return (
     <div className="space-y-8">
+      {/* Error Banner */}
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 p-4 flex items-center shadow-sm animate-in fade-in slide-in-from-top-2">
+          <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 mr-3 shrink-0" />
+          <p className="text-sm font-medium text-red-800 dark:text-red-300">{error}</p>
+        </div>
+      )}
+
       <div>
         <div className="flex items-center gap-3">
           <div className="bg-blue-600 p-2 rounded-lg shadow-sm">
@@ -86,7 +147,7 @@ export default function Dashboard() {
           title="Raw Materials"
           value={
             <span className="text-3xl font-semibold">
-              {stats.totalResources}{" "}
+              {data?.metrics.rawMaterials || 0}{" "}
               <span className="text-sm font-normal text-gray-500">
                 Resources
               </span>
@@ -100,31 +161,31 @@ export default function Dashboard() {
           title="Low Stock Alerts"
           value={
             <span className="text-3xl font-semibold">
-              {stats.lowStockResources}{" "}
+              {data?.metrics.lowStock || 0}{" "}
               <span className="text-sm font-normal text-gray-500">Items</span>
             </span>
           }
           subtitle={
-            stats.lowStockResources > 0
-              ? "< 20 units remaining"
+            (data?.metrics.lowStock || 0) > 0
+              ? "Action required soon"
               : "Inventory healthy"
           }
           icon={
             <AlertTriangle
-              className={`h-4 w-4 ${stats.lowStockResources > 0 ? "text-destructive" : "text-muted-foreground"}`}
+              className={`h-4 w-4 ${(data?.metrics.lowStock || 0) > 0 ? "text-destructive" : "text-muted-foreground"}`}
             />
           }
           loading={isLoading}
-          trend={stats.lowStockResources > 0 ? "Critical" : "Good"}
+          trend={(data?.metrics.lowStock || 0) > 0 ? "Critical" : "Good"}
           trendColor={
-            stats.lowStockResources > 0 ? "text-destructive" : "text-green-600"
+            (data?.metrics.lowStock || 0) > 0 ? "text-destructive" : "text-green-600"
           }
         />
         <StatCard
           title="Finished Paint Stock"
           value={
             <span className="text-3xl font-semibold">
-              {stats.totalFinishedStock}{" "}
+              {data?.metrics.finishedStock || 0}{" "}
               <span className="text-sm font-normal text-gray-500">Units</span>
             </span>
           }
@@ -136,7 +197,7 @@ export default function Dashboard() {
           title="Production Runs"
           value={
             <span className="text-3xl font-semibold">
-              {stats.activeProductionRuns}{" "}
+              {data?.metrics.activeRuns || 0}{" "}
               <span className="text-sm font-normal text-gray-500">Active</span>
             </span>
           }
@@ -153,25 +214,26 @@ export default function Dashboard() {
               <TrendingUp className="mr-2 h-4 w-4 text-blue-600" />
               Production Runs
             </h3>
-            <span className="text-xs text-muted-foreground">Last 30 Days</span>
+            <span className="text-xs text-muted-foreground">Last 6 Months</span>
           </div>
-          <div className="flex items-end justify-around h-48 gap-2">
-            {/* Visual placeholder for activity chart */}
-            {Array.from({ length: 12 }).map((_, i) => (
-              <div
-                key={i}
-                className="bg-gradient-to-t from-blue-600 to-blue-400 hover:from-blue-700 hover:to-blue-500 transition-colors rounded-t-sm w-full shadow-sm"
-                style={{ height: `${Math.floor(Math.random() * 80) + 20}%` }}
-              />
-            ))}
-          </div>
-          <div className="flex justify-between mt-4 text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
-            <span>Jan</span>
-            <span>Feb</span>
-            <span>Mar</span>
-            <span>Apr</span>
-            <span>May</span>
-            <span>Jun</span>
+          <div className="h-48 w-full mt-4">
+            {isLoading ? (
+              <div className="w-full h-full flex items-center justify-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data?.productionChart || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                  <Tooltip
+                    cursor={{ fill: '#f1f5f9' }}
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)' }}
+                  />
+                  <Bar dataKey="runs" fill="#2563eb" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 
@@ -181,15 +243,24 @@ export default function Dashboard() {
             Quick Actions
           </h3>
           <div className="space-y-3">
-            <button className="w-full flex items-center p-3 rounded-lg border border-transparent bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-sm group">
+            <button
+              onClick={() => navigate("/production/new")}
+              className="w-full flex items-center p-3 rounded-lg border border-transparent bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-sm group"
+            >
               <Package className="mr-3 h-5 w-5 text-blue-100 group-hover:scale-110 transition-transform" />
               <span>Create Production Run</span>
             </button>
-            <button className="w-full flex items-center p-3 rounded-lg border border-transparent bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-sm group">
+            <button
+              onClick={generateStockReport}
+              className="w-full flex items-center p-3 rounded-lg border border-transparent bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-sm group"
+            >
               <FileText className="mr-3 h-5 w-5 text-blue-100 group-hover:scale-110 transition-transform" />
               <span>Generate Stock Report</span>
             </button>
-            <button className="w-full flex items-center p-3 rounded-lg border border-transparent bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-sm group">
+            <button
+              onClick={() => navigate("/users")}
+              className="w-full flex items-center p-3 rounded-lg border border-transparent bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-sm group"
+            >
               <Users className="mr-3 h-5 w-5 text-blue-100 group-hover:scale-110 transition-transform" />
               <span>Manage User Access</span>
             </button>
@@ -204,9 +275,14 @@ export default function Dashboard() {
               <Clock className="mr-2 h-4 w-4 text-blue-600" />
               Recent Production Runs
             </h3>
-            <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">
-              View All
-            </button>
+            {data?.recentRuns && data.recentRuns.length > 3 && (
+              <button
+                onClick={() => setShowAllRuns(!showAllRuns)}
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              >
+                {showAllRuns ? 'View Less' : 'View All'}
+              </button>
+            )}
           </div>
           <div className="overflow-x-auto rounded-xl shadow-sm border border-slate-100">
             <table className="w-full text-sm">
@@ -227,51 +303,50 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {[
-                  {
-                    id: "B-102",
-                    color: "Blue 401",
-                    output: "120kg",
-                    operator: "John",
-                  },
-                  {
-                    id: "B-103",
-                    color: "Red 120",
-                    output: "90kg",
-                    operator: "Maria",
-                  },
-                  {
-                    id: "B-104",
-                    color: "White Base",
-                    output: "250kg",
-                    operator: "David",
-                  },
-                  {
-                    id: "B-105",
-                    color: "Green 302",
-                    output: "110kg",
-                    operator: "Sarah",
-                  },
-                ].map((run, i) => (
-                  <tr key={i} className="hover:bg-gray-50 transition-colors">
-                    <td className="p-6 font-bold text-blue-600 tracking-tight">{run.id}</td>
-                    <td className="p-6 font-extrabold text-slate-900">{run.color}</td>
-                    <td className="p-6 font-black text-slate-700 tracking-tight">{run.output}</td>
-                    <td className="p-6 text-slate-500 font-medium text-xs uppercase tracking-wide">
-                      {run.operator}
-                    </td>
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={4} className="p-6 text-center text-slate-400">Loading runs...</td>
                   </tr>
-                ))}
+                ) : data?.recentRuns.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="p-6 text-center text-slate-400">No recent runs</td>
+                  </tr>
+                ) : (
+                  data?.recentRuns
+                    .slice(0, showAllRuns ? undefined : 3)
+                    .map((run, i) => (
+                      <tr key={i} className="hover:bg-gray-50 transition-colors">
+                        <td className="p-6 font-bold text-blue-600 tracking-tight">{run.batchId}</td>
+                        <td className="p-6 font-extrabold text-slate-900">{run.color}</td>
+                        <td className="p-6 font-black text-slate-700 tracking-tight">
+                          {run.output !== null ? `${run.output}L` : '—'}
+                        </td>
+                        <td className="p-6 text-slate-500 font-medium text-xs uppercase tracking-wide">
+                          {run.operator}
+                        </td>
+                      </tr>
+                    ))
+                )}
               </tbody>
             </table>
           </div>
         </div>
 
         <div className="col-span-1 rounded-xl border bg-card p-6 shadow-sm border-t-4 border-t-orange-500">
-          <h3 className="font-semibold flex items-center mb-4 text-orange-600">
-            <Bell className="mr-2 h-5 w-5" />
-            Inventory Alerts
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold flex items-center text-orange-600">
+              <Bell className="mr-2 h-5 w-5" />
+              Inventory Alerts
+            </h3>
+            {data?.inventoryAlerts && data.inventoryAlerts.length > 3 && (
+              <button
+                onClick={() => setShowAllAlerts(!showAllAlerts)}
+                className="text-sm text-orange-600 hover:text-orange-700 font-medium"
+              >
+                {showAllAlerts ? 'View Less' : 'View All'}
+              </button>
+            )}
+          </div>
           <div className="overflow-hidden rounded-xl shadow-sm border border-slate-100">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50">
@@ -281,40 +356,36 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
-                {[
-                  {
-                    material: "Titanium Dioxide",
-                    remaining: "5kg",
-                    status: "critical",
-                  },
-                  {
-                    material: "Binder A",
-                    remaining: "3kg",
-                    status: "critical",
-                  },
-                  {
-                    material: "Solvent X",
-                    remaining: "12kg",
-                    status: "warning",
-                  },
-                ].map((alert, i) => (
-                  <tr key={i} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-3 py-3">
-                      <p className="font-extrabold text-slate-900">{alert.material}</p>
-                      <p className="text-[10px] text-slate-500 font-medium">{alert.remaining} left</p>
-                    </td>
-                    <td className="px-3 py-3 text-right">
-                      <span
-                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-black uppercase tracking-wider ${alert.status === "critical"
-                          ? "bg-red-100 text-red-700"
-                          : "bg-amber-100 text-amber-700"
-                          }`}
-                      >
-                        {alert.status}
-                      </span>
-                    </td>
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={2} className="px-3 py-3 text-center text-slate-400">Loading...</td>
                   </tr>
-                ))}
+                ) : data?.inventoryAlerts.length === 0 ? (
+                  <tr>
+                    <td colSpan={2} className="px-3 py-3 text-center text-slate-400">No alerts</td>
+                  </tr>
+                ) : (
+                  data?.inventoryAlerts
+                    .slice(0, showAllAlerts ? undefined : 3)
+                    .map((alert, i) => (
+                      <tr key={i} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-3 py-3">
+                          <p className="font-extrabold text-slate-900">{alert.material}</p>
+                          <p className="text-[10px] text-slate-500 font-medium">{alert.remaining} left</p>
+                        </td>
+                        <td className="px-3 py-3 text-right">
+                          <span
+                            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-black uppercase tracking-wider ${alert.status === "critical"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-amber-100 text-amber-700"
+                              }`}
+                          >
+                            {alert.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                )}
               </tbody>
             </table>
           </div>

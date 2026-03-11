@@ -5,6 +5,7 @@ import { MainLayout } from "./layouts/MainLayout";
 import Dashboard from "./pages/Dashboard";
 import Inventory from "./pages/Inventory";
 import Production from "./pages/Production";
+import ProductionRunForm from "./pages/ProductionRunForm";
 import Users from "./pages/Users";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
@@ -27,7 +28,7 @@ function App() {
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="inventory" element={<Inventory />} />
               <Route path="production" element={<Production />} />
-
+              <Route path="production/new" element={<ProductionRunForm />} />
               {/* Feature routes strictly restricted to "manager" role */}
               <Route element={<ProtectedRoute allowedRoles={["manager"]} />}>
                 <Route path="users" element={<Users />} />

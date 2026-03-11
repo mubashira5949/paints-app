@@ -87,6 +87,14 @@ import resourcesModule from './modules/resources'
 import colorsModule from './modules/colors'
 import recipesModule from './modules/recipes'
 import productionModule from './modules/production'
+import dashboardModule from './modules/dashboard'
+
+/**
+ * Register dashboard module with a '/api' prefix (since user asked for /api/dashboard).
+ * Actually, usually we prefix feature modules. Let's see how others are done.
+ * The user asked for GET /api/dashboard.
+ */
+fastify.register(dashboardModule, { prefix: '/api' })
 
 /**
  * Register user management module.
