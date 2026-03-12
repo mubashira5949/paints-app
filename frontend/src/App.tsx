@@ -5,30 +5,34 @@ import { MainLayout } from "./layouts/MainLayout";
 import Dashboard from "./pages/Dashboard";
 import Inventory from "./pages/Inventory";
 import Production from "./pages/Production";
+import ProductionDetail from "./pages/ProductionDetail";
+import ProductionPackaging from "./pages/ProductionPackaging";
+import ProductionRunForm from "./pages/ProductionRunForm";
 import Users from "./pages/Users";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 
 function App() {
   return (
-    // AuthProvider initializes the user state and provides the JWT context
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Public Route: The login page sits outside the MainLayout so it occupies the full screen */}
+          {/* Public Route */}
           <Route path="/login" element={<Login />} />
 
-          {/* Protected Routes Wrapper: Ensures user is authenticated before hitting MainLayout */}
+          {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<MainLayout />}>
               <Route index element={<Navigate to="/dashboard" replace />} />
 
-              {/* Feature routes available to both managers and workers */}
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="inventory" element={<Inventory />} />
               <Route path="production" element={<Production />} />
+              <Route path="production/new" element={<ProductionRunForm />} />
+              <Route path="production/:batchId" element={<ProductionDetail />} />
+              <Route path="production/:batchId/packaging" element={<ProductionPackaging />} />
 
-              {/* Feature routes strictly restricted to "manager" role */}
+              {/* Manager-only routes */}
               <Route element={<ProtectedRoute allowedRoles={["manager"]} />}>
                 <Route path="users" element={<Users />} />
                 <Route path="settings" element={<Settings />} />

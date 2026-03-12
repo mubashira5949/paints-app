@@ -131,4 +131,35 @@ export default async function (fastifyRaw: FastifyInstance) {
             }
         }
     })
+
+    /**
+     * GET /inventory/stock-report
+     * Returns a flattened view of all finished stock suitable for CSV export.
+     */
+    fastify.get('/stock-report', {
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'sales'])],
+        handler: async (request, reply) => {
+            try {
+                const query = `
+                    SELECT 
+                        c.name AS "Color", 
+                        c.business_code AS "Product Code",
+                        fs.pack_size_liters AS "Pack Size (L)",
+                        fs.quantity_units AS "Units in Stock",
+                        (fs.pack_size_liters * fs.quantity_units) AS "Total Volume (L)"
+                    FROM finished_stock fs
+                    JOIN colors c ON fs.color_id = c.id
+                    ORDER BY c.name ASC, fs.pack_size_liters ASC;
+                `
+                const result = await fastify.db.query(query)
+                return reply.send(result.rows)
+            } catch (err: any) {
+                fastify.log.error(err)
+                return reply.status(500).send({
+                    error: 'Internal Server Error',
+                    message: 'Failed to generate stock report'
+                })
+            }
+        }
+    })
 }
