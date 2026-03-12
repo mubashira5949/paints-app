@@ -248,7 +248,7 @@ export default function Dashboard() {
               className="w-full flex items-center p-3 rounded-lg border border-transparent bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-sm group"
             >
               <Package className="mr-3 h-5 w-5 text-blue-100 group-hover:scale-110 transition-transform" />
-              <span>Create Production Run</span>
+              <span>Start New Production Batch</span>
             </button>
             <button
               onClick={generateStockReport}

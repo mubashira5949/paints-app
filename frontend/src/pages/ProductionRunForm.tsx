@@ -1,7 +1,16 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiRequest } from "../services/api";
-import { ArrowLeft, Check, AlertCircle, Save } from "lucide-react";
+import {
+  ArrowLeft,
+  AlertCircle,
+  FlaskConical,
+  CheckCircle2,
+  ChevronRight,
+  Loader2,
+} from "lucide-react";
+
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 interface Color {
   id: number;
@@ -15,268 +24,380 @@ interface Recipe {
   batch_size_liters: number;
 }
 
-interface Resource {
+interface Operator {
   id: number;
+  username: string;
+  role: string;
+}
+
+interface ExpectedResource {
+  resource_id: number;
   name: string;
   unit: string;
-  current_stock: number;
+  expected_quantity: number;
 }
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export default function ProductionRunForm() {
   const navigate = useNavigate();
 
+  // Form options
   const [colors, setColors] = useState<Color[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [resources, setResources] = useState<Resource[]>([]);
+  const [operators, setOperators] = useState<Operator[]>([]);
 
+  // Form values
   const [selectedColor, setSelectedColor] = useState<number | "">("");
   const [selectedRecipe, setSelectedRecipe] = useState<number | "">("");
-  const [expectedOutput, setExpectedOutput] = useState<number>(0);
+  const [targetQty, setTargetQty] = useState<string>("");
+  const [selectedOperator, setSelectedOperator] = useState<number | "">("");
 
-  const [actualResources, setActualResources] = useState<{ resourceId: number; quantity: number }[]>([]);
+  // Result state
+  const [expectedResources, setExpectedResources] = useState<ExpectedResource[]>([]);
+  const [successRunId, setSuccessRunId] = useState<number | null>(null);
 
+  // UI state
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingRecipes, setIsLoadingRecipes] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ── Fetch colors + operators on mount ──
   useEffect(() => {
-    // Fetch initial data for dropdowns
-    const fetchFormData = async () => {
+    const fetchInitialData = async () => {
       try {
-        const [colorsData, resourcesData] = await Promise.all([
+        const [colorsData, usersData] = await Promise.all([
           apiRequest<Color[]>("/colors"),
-          apiRequest<Resource[]>("/resources"),
+          apiRequest<Operator[]>("/users"),
         ]);
         setColors(colorsData);
-        setResources(resourcesData);
+        // Filter to operator/manager roles only
+        setOperators(
+          usersData.filter((u) =>
+            ["operator", "manager", "admin"].includes(u.role)
+          )
+        );
       } catch (err) {
-        console.error("Failed to load form data", err);
-        setError("Failed to load required data. Please try again.");
+        setError("Failed to load form data. Please refresh and try again.");
       }
     };
-    fetchFormData();
+    fetchInitialData();
   }, []);
 
+  // ── Fetch recipes when color changes ──
   useEffect(() => {
-    // When color changes, fetch recipes for that color
-    if (selectedColor) {
-      const fetchRecipes = async () => {
-        try {
-          // The backend expects `/recipes/:colorId` and returns an array of Recipes
-          const recipesData = await apiRequest<Recipe[]>(`/recipes/${selectedColor}`);
-          setRecipes(recipesData);
-        } catch (err) {
-          console.error("Failed to load recipes", err);
-        }
-      };
-      fetchRecipes();
-    } else {
+    if (!selectedColor) {
       setRecipes([]);
       setSelectedRecipe("");
-      setExpectedOutput(0);
-    }
-  }, [selectedColor]);
-
-  useEffect(() => {
-    if (selectedRecipe) {
-      const recipe = recipes.find(r => r.id === Number(selectedRecipe));
-      if (recipe) {
-        setExpectedOutput(Number(recipe.batch_size_liters));
-      }
-    }
-  }, [selectedRecipe, recipes]);
-
-  const handleResourceChange = (index: number, field: "resourceId" | "quantity", value: number) => {
-    const newResources = [...actualResources];
-    newResources[index] = { ...newResources[index], [field]: value };
-    setActualResources(newResources);
-  };
-
-  const addResourceRow = () => {
-    setActualResources([...actualResources, { resourceId: 0, quantity: 0 }]);
-  };
-
-  const removeResourceRow = (index: number) => {
-    const newResources = [...actualResources];
-    newResources.splice(index, 1);
-    setActualResources(newResources);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedRecipe) {
-      setError("Please select a recipe.");
       return;
     }
-    
-    // Filter out incomplete resource rows
-    const validResources = actualResources.filter(r => r.resourceId > 0 && r.quantity > 0);
-    
-    setIsLoading(true);
+    const fetchRecipes = async () => {
+      setIsLoadingRecipes(true);
+      try {
+        const recipesData = await apiRequest<Recipe[]>(`/recipes/${selectedColor}`);
+        setRecipes(recipesData);
+      } catch {
+        setRecipes([]);
+      } finally {
+        setIsLoadingRecipes(false);
+      }
+    };
+    fetchRecipes();
+  }, [selectedColor]);
+
+  // ── Handle form submission ──
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError(null);
+
+    if (!selectedColor || !selectedRecipe || !targetQty || !selectedOperator) {
+      setError("Please fill in all fields before submitting.");
+      return;
+    }
+    if (Number(targetQty) <= 0) {
+      setError("Target quantity must be greater than 0.");
+      return;
+    }
+
+    setIsLoading(true);
     try {
-      await apiRequest("/production-runs", {
+      const result = await apiRequest<{
+        production_run_id: number;
+        status: string;
+        expected_resources: ExpectedResource[];
+      }>("/production-runs/plan", {
         method: "POST",
         body: {
           recipeId: Number(selectedRecipe),
-          expectedOutput: expectedOutput,
-          actualResources: validResources
-        }
+          colorId: Number(selectedColor),
+          targetQty: Number(targetQty),
+          operatorId: Number(selectedOperator),
+        },
       });
-      // Navigate back to dashboard or production list on success
-      navigate("/dashboard");
+
+      setExpectedResources(result.expected_resources || []);
+      setSuccessRunId(result.production_run_id);
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Failed to create production run.");
+      setError(err.message || "Failed to create production batch. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center gap-4">
-        <button 
-          onClick={() => navigate(-1)}
-          className="p-2 border rounded-md hover:bg-slate-50 text-slate-500"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <h1 className="text-2xl font-bold">Create Production Run</h1>
-      </div>
-
-      {error && (
-        <div className="bg-red-50 text-red-700 p-4 rounded-lg flex items-center gap-3">
-          <AlertCircle className="w-5 h-5" />
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl border shadow-sm space-y-6">
-        
-        {/* Step 1: Configuration */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold border-b pb-2">1. Select Output Configuration</h2>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Target Color</label>
-              <select 
-                value={selectedColor} 
-                onChange={(e) => setSelectedColor(e.target.value ? Number(e.target.value) : "")}
-                className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                required
-              >
-                <option value="">-- Select Color --</option>
-                {colors.map(c => (
-                  <option key={c.id} value={c.id}>{c.name} ({c.business_code})</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Recipe</label>
-              <select 
-                value={selectedRecipe} 
-                onChange={(e) => setSelectedRecipe(e.target.value ? Number(e.target.value) : "")}
-                className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                disabled={!selectedColor}
-                required
-              >
-                <option value="">-- Select Recipe --</option>
-                {recipes.map(r => (
-                  <option key={r.id} value={r.id}>{r.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">Expected Quantity (Liters)</label>
-            <input 
-              type="number" 
-              value={expectedOutput}
-              disabled
-              className="w-full p-2.5 border rounded-lg bg-slate-50 text-slate-600"
-            />
-            <p className="text-xs text-slate-500">Auto-filled based on recipe batch size.</p>
+  // ── Success screen ──
+  if (successRunId !== null) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-6">
+        {/* Success Banner */}
+        <div className="rounded-2xl border border-green-200 bg-green-50 p-6 flex items-start gap-4">
+          <CheckCircle2 className="w-8 h-8 text-green-600 shrink-0 mt-0.5" />
+          <div>
+            <h2 className="text-lg font-bold text-green-800">
+              Batch Planned Successfully!
+            </h2>
+            <p className="text-sm text-green-700 mt-1">
+              Production run{" "}
+              <span className="font-bold">#{successRunId}</span> has been
+              created with status{" "}
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 uppercase tracking-wide">
+                Planned
+              </span>
+            </p>
           </div>
         </div>
 
-        {/* Step 2: Resource Actuals */}
-        <div className="space-y-4">
-          <div className="flex justify-between items-end border-b pb-2">
-            <h2 className="text-lg font-semibold">2. Actual Resource Inputs</h2>
-            <button 
-              type="button" 
-              onClick={addResourceRow}
-              className="text-sm text-blue-600 font-medium hover:underline"
-            >
-              + Add Material
-            </button>
-          </div>
-          
-          {actualResources.length === 0 ? (
-            <div className="text-center py-6 text-sm text-slate-500 border-2 border-dashed rounded-lg">
-              No materials added. Click "+ Add Material" to track usage and variance.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {actualResources.map((row, index) => (
-                <div key={index} className="flex gap-3 items-end">
-                  <div className="flex-1 space-y-1">
-                    <label className="text-xs text-slate-500">Material</label>
-                    <select
-                      value={row.resourceId || ""}
-                      onChange={(e) => handleResourceChange(index, "resourceId", Number(e.target.value))}
-                      className="w-full p-2 border rounded-lg"
-                    >
-                      <option value="">Select material...</option>
-                      {resources.map(r => (
-                        <option key={r.id} value={r.id}>{r.name} (Stock: {r.current_stock}{r.unit})</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="w-32 space-y-1">
-                    <label className="text-xs text-slate-500">Quantity Used</label>
-                    <input 
-                      type="number" 
-                      step="0.01"
-                      min="0"
-                      value={row.quantity || ""}
-                      onChange={(e) => handleResourceChange(index, "quantity", Number(e.target.value))}
-                      className="w-full p-2 border rounded-lg"
-                      placeholder="Amount"
-                    />
-                  </div>
-                  <button 
-                    type="button"
-                    onClick={() => removeResourceRow(index)}
-                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg mb-px"
-                  >
-                    ×
-                  </button>
+        {/* Expected Resources */}
+        {expectedResources.length > 0 && (
+          <div className="rounded-xl border bg-white shadow-sm p-6 space-y-4">
+            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+              <FlaskConical className="w-5 h-5 text-blue-600" />
+              Expected Material Requirements
+            </h3>
+            <div className="divide-y rounded-lg border overflow-hidden">
+              {expectedResources.map((res) => (
+                <div
+                  key={res.resource_id}
+                  className="flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50 transition-colors"
+                >
+                  <span className="font-medium text-slate-800">{res.name}</span>
+                  <span className="text-sm font-bold text-blue-700">
+                    {Number(res.expected_quantity).toFixed(2)}{" "}
+                    <span className="text-slate-500 font-normal">{res.unit}</span>
+                  </span>
                 </div>
               ))}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Submit */}
-        <div className="pt-4 border-t">
-          <button 
-            type="submit"
-            disabled={isLoading || !selectedRecipe}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+        {/* Actions */}
+        <div className="flex gap-3">
+          <button
+            onClick={() => navigate("/production")}
+            className="flex-1 inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl transition-colors shadow-sm"
           >
-            {isLoading ? "Processing..." : (
-              <>
-                <Save className="w-5 h-5" />
-                Start Production & Deduct Inventory
-              </>
-            )}
+            View Production Runs
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => {
+              setSuccessRunId(null);
+              setSelectedColor("");
+              setSelectedRecipe("");
+              setTargetQty("");
+              setSelectedOperator("");
+              setExpectedResources([]);
+            }}
+            className="px-6 py-3 border rounded-xl font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+          >
+            Start Another
           </button>
         </div>
+      </div>
+    );
+  }
 
+  // ── Form screen ──
+  return (
+    <div className="max-w-2xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <button
+          onClick={() => navigate(-1)}
+          className="p-2 border rounded-xl hover:bg-slate-50 text-slate-500 transition-colors"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Start New Production Batch
+          </h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            Plan a new batch — status will be set to <strong>Planned</strong>.
+          </p>
+        </div>
+      </div>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+
+      {/* Form Card */}
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-2xl border shadow-sm p-6 space-y-6"
+      >
+        {/* Row 1: Color + Recipe */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          {/* Select Color */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-slate-700">
+              Select Color <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={selectedColor}
+              onChange={(e) => {
+                setSelectedColor(e.target.value ? Number(e.target.value) : "");
+                setSelectedRecipe("");
+              }}
+              required
+              className="w-full p-2.5 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm transition-shadow"
+            >
+              <option value="">— Select Color —</option>
+              {colors.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.business_code})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Select Recipe */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-slate-700">
+              Select Recipe <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <select
+                value={selectedRecipe}
+                onChange={(e) =>
+                  setSelectedRecipe(e.target.value ? Number(e.target.value) : "")
+                }
+                disabled={!selectedColor || isLoadingRecipes}
+                required
+                className="w-full p-2.5 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm transition-shadow disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <option value="">
+                  {isLoadingRecipes
+                    ? "Loading recipes..."
+                    : selectedColor
+                    ? "— Select Recipe —"
+                    : "— Select a color first —"}
+                </option>
+                {recipes.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name} (batch: {r.batch_size_liters}L)
+                  </option>
+                ))}
+              </select>
+              {isLoadingRecipes && (
+                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-slate-400 pointer-events-none" />
+              )}
+            </div>
+            {selectedColor && !isLoadingRecipes && recipes.length === 0 && (
+              <p className="text-xs text-amber-600">
+                No recipes found for this color.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Row 2: Target Quantity + Operator */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          {/* Target Quantity */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-slate-700">
+              Target Quantity (Liters) <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={targetQty}
+              onChange={(e) => setTargetQty(e.target.value)}
+              placeholder="e.g. 100"
+              required
+              className="w-full p-2.5 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-shadow"
+            />
+            {selectedRecipe && recipes.length > 0 && (
+              <p className="text-xs text-slate-500">
+                Standard batch size:{" "}
+                <strong>
+                  {recipes.find((r) => r.id === Number(selectedRecipe))
+                    ?.batch_size_liters ?? "—"}
+                  L
+                </strong>
+              </p>
+            )}
+          </div>
+
+          {/* Operator */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-slate-700">
+              Operator <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={selectedOperator}
+              onChange={(e) =>
+                setSelectedOperator(e.target.value ? Number(e.target.value) : "")
+              }
+              required
+              className="w-full p-2.5 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm transition-shadow"
+            >
+              <option value="">— Select Operator —</option>
+              {operators.map((op) => (
+                <option key={op.id} value={op.id}>
+                  {op.username} ({op.role})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Hint */}
+        <p className="text-xs text-slate-400 border-t pt-4">
+          Expected material requirements will be calculated automatically from
+          the selected recipe and shown after submission.
+        </p>
+
+        {/* Submit */}
+        <button
+          type="submit"
+          disabled={
+            isLoading ||
+            !selectedColor ||
+            !selectedRecipe ||
+            !targetQty ||
+            !selectedOperator
+          }
+          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2"
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Planning Batch...
+            </>
+          ) : (
+            <>
+              <FlaskConical className="w-5 h-5" />
+              Start Batch
+            </>
+          )}
+        </button>
       </form>
     </div>
   );

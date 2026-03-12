@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { apiRequest } from "../services/api";
+import { useAuth } from "../contexts/AuthContext";
 import {
   Play,
+  Pause,
   Plus,
   X,
   FlaskConical,
@@ -11,6 +14,9 @@ import {
   Search,
   Calendar,
   Settings,
+  Eye,
+  CheckCircle2,
+  Loader2,
 } from "lucide-react";
 
 interface Resource {
@@ -34,35 +40,53 @@ interface Color {
   color_code: string;
 }
 
-interface ProductionRun {
+interface Metrics {
+  activeRuns: number;
+  todayProduction: number;
+  resourceConsumption: number;
+  variance: number;
+}
+
+interface HistoryRun {
   id: number;
+  batchId: string;
   status: string;
   planned_quantity_liters: number;
   actual_quantity_liters: number;
-  started_at: string;
-  completed_at: string;
+  variance: number;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
   recipe_name: string;
   color_name: string;
-  created_at: string;
   packaging?: { pack_size_liters: number; quantity_units: number }[];
 }
 
-interface ProductionSummary {
-  active_runs: number;
-  todays_production_liters: number;
-  resource_consumption_kg: number;
-  production_variance_percent: number;
+interface ActiveRun {
+  id: number;
+  batchId: string;
+  color: string;
+  recipe: string;
+  targetQty: number;
+  status: "planned" | "running" | "paused" | "completed" | "packaging";
+  started_at: string | null;
+  operator: string | null;
 }
 
+
 export default function Production() {
-  const [runs, setRuns] = useState<ProductionRun[]>([]);
-  const [summary, setSummary] = useState<ProductionSummary | null>(null);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [historyRuns, setHistoryRuns] = useState<HistoryRun[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [colors, setColors] = useState<Color[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [activeRuns, setActiveRuns] = useState<ActiveRun[]>([]);
+  const [isActiveLoading, setIsActiveLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
-  const [showAllActive, setShowAllActive] = useState(false);
 
   // Filters State
   const [filterSearch, setFilterSearch] = useState("");
@@ -79,34 +103,34 @@ export default function Production() {
     { resource_id: number; actual_quantity_used: number }[]
   >([]);
 
-  const activeRuns = runs.filter((r) => r.status !== "completed");
-  const historyRuns = runs.filter((r) => r.status === "completed");
 
-  const fetchRuns = async () => {
+  const fetchMetrics = async () => {
     try {
-      const params = new URLSearchParams();
-      if (filterSearch) params.append("search", filterSearch);
-      if (filterColor) params.append("color_id", filterColor.toString());
-      if (filterStatus) params.append("status", filterStatus);
-      if (filterFromDate) params.append("from_date", filterFromDate);
-      if (filterToDate) params.append("to_date", filterToDate);
-
-      const url = `/production-runs?${params.toString()}`;
-      const data = await apiRequest<ProductionRun[]>(url);
-      setRuns(data);
+      const data = await apiRequest<Metrics>("/production-runs/metrics");
+      setMetrics(data);
     } catch (err) {
-      console.error("Failed to fetch runs", err);
+      console.error("Failed to fetch metrics", err);
     }
   };
 
-  const fetchSummary = async () => {
+  const fetchHistory = async () => {
+    setIsHistoryLoading(true);
     try {
-      const data = await apiRequest<ProductionSummary>(
-        "/production-runs/summary",
-      );
-      setSummary(data);
+      const params = new URLSearchParams();
+      if (filterSearch) params.append("search", filterSearch);
+      if (filterColor) {
+        const colorObj = colors.find((c) => c.id === filterColor);
+        if (colorObj) params.append("color", colorObj.name);
+      }
+      if (filterStatus && filterStatus !== "All") params.append("status", filterStatus);
+      if (filterFromDate) params.append("start", filterFromDate);
+      if (filterToDate) params.append("end", filterToDate);
+      const data = await apiRequest<HistoryRun[]>(`/production-runs/history?${params.toString()}`);
+      setHistoryRuns(data);
     } catch (err) {
-      console.error("Failed to fetch summary", err);
+      console.error("Failed to fetch history", err);
+    } finally {
+      setIsHistoryLoading(false);
     }
   };
 
@@ -119,14 +143,51 @@ export default function Production() {
     }
   };
 
+  // ── Fetch active (non-completed) runs from dedicated endpoint ──
+  const fetchActiveRuns = async () => {
+    setIsActiveLoading(true);
+    try {
+      const data = await apiRequest<ActiveRun[]>("/production-runs/active");
+      setActiveRuns(data);
+    } catch (err) {
+      console.error("Failed to fetch active runs", err);
+    } finally {
+      setIsActiveLoading(false);
+    }
+  };
+
+  // ── Update a run's status via PATCH ──
+  const updateStatus = async (id: number, status: ActiveRun["status"]) => {
+    setUpdatingId(id);
+    try {
+      await apiRequest(`/production-runs/${id}/status`, {
+        method: "PATCH",
+        body: { status },
+      });
+      await Promise.all([fetchActiveRuns(), fetchMetrics(), fetchHistory()]);
+    } catch (err: any) {
+      alert(err.message || "Failed to update status");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   useEffect(() => {
-    fetchRuns();
+    fetchHistory();
   }, [filterSearch, filterColor, filterStatus, filterFromDate, filterToDate]);
 
   useEffect(() => {
-    Promise.all([fetchSummary(), fetchColors()]).finally(() =>
-      setIsLoading(false),
-    );
+    fetchMetrics();
+  }, []);
+
+  useEffect(() => {
+    Promise.all([fetchColors(), fetchActiveRuns()]);
+  }, []);
+
+  // Auto-refresh active runs every 10 seconds
+  useEffect(() => {
+    const interval = setInterval(fetchActiveRuns, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -170,20 +231,20 @@ export default function Production() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedRecipe) return;
+    if (!selectedRecipe || !selectedColor) return;
 
     try {
-      await apiRequest("/production-runs", {
+      await apiRequest("/production-runs/plan", {
         method: "POST",
         body: {
-          recipe_id: selectedRecipe.id,
-          planned_quantity_liters: plannedQuantity,
-          actual_resources: actualResources,
+          recipeId: selectedRecipe.id,
+          colorId: Number(selectedColor),
+          targetQty: plannedQuantity,
+          operatorId: user?.id ?? 1,
         },
       });
       setIsModalOpen(false);
-      fetchRuns();
-      fetchSummary();
+      await Promise.all([fetchActiveRuns(), fetchMetrics(), fetchHistory()]);
       // Reset form
       setSelectedColor("");
       setSelectedRecipe(null);
@@ -192,30 +253,7 @@ export default function Production() {
     }
   };
 
-  const handlePackage = async (runId: number, volume: number) => {
-    const packSize = prompt("Enter pack size in liters (e.g. 5):", "5");
-    if (!packSize) return;
 
-    const units = Math.floor(volume / Number(packSize));
-    if (units === 0) {
-      alert("Volume too small for this pack size");
-      return;
-    }
-
-    try {
-      await apiRequest(`/production-runs/${runId}/packaging`, {
-        method: "POST",
-        body: {
-          packaging_details: [
-            { pack_size_liters: Number(packSize), quantity_units: units },
-          ],
-        },
-      });
-      fetchRuns();
-    } catch (err: any) {
-      alert(err.message);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -231,7 +269,7 @@ export default function Production() {
         </div>
       </div>
 
-      {/* Summary Cards */}
+      {/* Metrics Cards */}
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-xl border bg-card p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition">
           <div className="flex items-center justify-between space-y-0 pb-2">
@@ -242,7 +280,7 @@ export default function Production() {
           </div>
           <div>
             <div className="text-3xl font-bold">
-              {summary?.active_runs || 0}
+              {metrics?.activeRuns ?? 0}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Currently running batches
@@ -258,10 +296,8 @@ export default function Production() {
           </div>
           <div>
             <div className="text-3xl font-bold">
-              {summary?.todays_production_liters?.toLocaleString() || 0}{" "}
-              <span className="text-base text-muted-foreground font-normal">
-                L
-              </span>
+              {(metrics?.todayProduction ?? 0).toLocaleString()}{" "}
+              <span className="text-base text-muted-foreground font-normal">L</span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Paint produced today
@@ -277,10 +313,8 @@ export default function Production() {
           </div>
           <div>
             <div className="text-3xl font-bold">
-              {summary?.resource_consumption_kg?.toLocaleString() || 0}{" "}
-              <span className="text-base text-muted-foreground font-normal">
-                KG
-              </span>
+              {(metrics?.resourceConsumption ?? 0).toLocaleString()}{" "}
+              <span className="text-base text-muted-foreground font-normal">KG</span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Raw material used today
@@ -296,13 +330,19 @@ export default function Production() {
           </div>
           <div>
             <div
-              className={`text-3xl font-bold ${summary && (summary.production_variance_percent || 0) > 0 ? "text-red-500" : "text-green-500"}`}
+              className={`text-3xl font-bold ${
+                (metrics?.variance ?? 0) > 0
+                  ? "text-green-600"
+                  : (metrics?.variance ?? 0) < 0
+                  ? "text-orange-500"
+                  : "text-muted-foreground"
+              }`}
             >
-              {(summary?.production_variance_percent || 0) > 0 ? "+" : ""}
-              {(summary?.production_variance_percent || 0).toFixed(1)}%
+              {(metrics?.variance ?? 0) > 0 ? "+" : ""}
+              {(metrics?.variance ?? 0).toFixed(1)}L
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Actual vs Expected (Today)
+              Actual vs Planned (Today)
             </p>
           </div>
         </div>
@@ -338,92 +378,120 @@ export default function Production() {
                 <Droplets className="mr-3 h-5 w-5 text-blue-500" />
                 Active Production Runs
               </h2>
-              {activeRuns.length > 2 && (
-                <button 
-                  onClick={() => setShowAllActive(!showAllActive)}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  {showAllActive ? 'View Less' : 'View All'}
-                </button>
+              {activeRuns.length > 0 && (
+                <span className="text-xs font-semibold bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full">
+                  {activeRuns.length} batch{activeRuns.length !== 1 ? "es" : ""}
+                </span>
               )}
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-slate-50/50">
-                    <th className="h-12 px-6 text-left align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
-                      Batch ID
-                    </th>
-                    <th className="h-12 px-6 text-left align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
-                      Color
-                    </th>
-                    <th className="h-12 px-6 text-left align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
-                      Recipe
-                    </th>
-                    <th className="h-12 px-6 text-center align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
-                      Target Qty
-                    </th>
-                    <th className="h-12 px-6 text-center align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
-                      Status
-                    </th>
+                    <th className="h-12 px-4 text-left align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">Batch ID</th>
+                    <th className="h-12 px-4 text-left align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">Color</th>
+                    <th className="h-12 px-4 text-left align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">Recipe</th>
+                    <th className="h-12 px-4 text-center align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">Target Qty</th>
+                    <th className="h-12 px-4 text-center align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">Status</th>
+                    <th className="h-12 px-4 text-right align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {isLoading ? (
+                  {isActiveLoading ? (
                     <tr>
-                      <td
-                        colSpan={4}
-                        className="p-6 text-center animate-pulse text-muted-foreground"
-                      >
+                      <td colSpan={6} className="p-6 text-center text-muted-foreground">
+                        <Loader2 className="inline w-4 h-4 animate-spin mr-2" />
                         Loading active runs...
                       </td>
                     </tr>
                   ) : activeRuns.length === 0 ? (
                     <tr>
-                      <td
-                        colSpan={4}
-                        className="p-6 text-center text-muted-foreground"
-                      >
-                        No active runs.
+                      <td colSpan={6} className="p-8 text-center">
+                        <div className="flex flex-col items-center gap-2 text-slate-400">
+                          <FlaskConical className="w-8 h-8 opacity-30" />
+                          <p className="text-sm font-medium">No active runs</p>
+                          <p className="text-xs">Plan a new batch to get started.</p>
+                        </div>
                       </td>
                     </tr>
                   ) : (
-                    activeRuns.slice(0, showAllActive ? undefined : 2).map((run) => (
-                      <tr
-                        key={run.id}
-                        className="hover:bg-gray-50 transition-colors"
-                      >
-                        <td className="p-6 font-bold text-blue-600 tracking-tight">
-                          PR-{run.id}
-                        </td>
-                        <td className="p-6 font-extrabold text-slate-900">
-                          {run.color_name}
-                        </td>
-                        <td className="p-6 text-slate-500 font-medium text-xs">
-                          {run.recipe_name}
-                        </td>
-                        <td className="p-6 text-center font-black text-slate-700">
-                          {run.planned_quantity_liters}L
-                        </td>
-                        <td className="p-6 text-center">
-                          <span
-                            className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${run.status === "completed"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : run.status === "variance" ||
-                                run.status === "flagged"
-                                ? "bg-red-100 text-red-800"
-                                : "bg-blue-100 text-blue-800"
-                              }`}
-                          >
-                            {run.status === "pending" ||
-                              run.status === "in_progress" ||
-                              run.status === "running"
-                              ? "Running"
-                              : run.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
+                    activeRuns.map((run) => {
+                      const isUpdating = updatingId === run.id;
+                      const statusConfig: Record<string, { label: string; className: string }> = {
+                        planned:   { label: "Planned",   className: "bg-slate-100 text-slate-700" },
+                        running:   { label: "Running",   className: "bg-blue-100 text-blue-800" },
+                        paused:    { label: "Paused",    className: "bg-amber-100 text-amber-800" },
+                        packaging: { label: "Packaging", className: "bg-purple-100 text-purple-800" },
+                        completed: { label: "Completed", className: "bg-emerald-100 text-emerald-800" },
+                      };
+                      const sc = statusConfig[run.status] ?? statusConfig.planned;
+
+                      return (
+                        <tr key={run.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-4 py-3 font-bold text-blue-600 tracking-tight font-mono">
+                            {run.batchId}
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-slate-900">{run.color}</td>
+                          <td className="px-4 py-3 text-slate-500 text-xs">{run.recipe}</td>
+                          <td className="px-4 py-3 text-center font-bold text-slate-700">
+                            {Number(run.targetQty).toLocaleString()}L
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${sc.className}`}>
+                              {sc.label}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {isUpdating ? (
+                                <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+                              ) : (
+                                <>
+                                  {/* Start: only when planned or paused */}
+                                  {(run.status === "planned" || run.status === "paused") && (
+                                    <button
+                                      onClick={() => updateStatus(run.id, "running")}
+                                      title="Start"
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-sm"
+                                    >
+                                      <Play className="w-3 h-3" /> Start
+                                    </button>
+                                  )}
+                                  {/* Pause: only when running */}
+                                  {run.status === "running" && (
+                                    <button
+                                      onClick={() => updateStatus(run.id, "paused")}
+                                      title="Pause"
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition-colors shadow-sm"
+                                    >
+                                      <Pause className="w-3 h-3" /> Pause
+                                    </button>
+                                  )}
+                                  {/* Complete: when running or paused */}
+                                  {(run.status === "running" || run.status === "paused") && (
+                                    <button
+                                      onClick={() => updateStatus(run.id, "completed")}
+                                      title="Complete"
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors shadow-sm"
+                                    >
+                                      <CheckCircle2 className="w-3 h-3" /> Complete
+                                    </button>
+                                  )}
+                                  {/* View Details: always */}
+                                  <button
+                                    onClick={() => navigate(`/production/${run.batchId}`)}
+                                    title="View Details"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 transition-colors"
+                                  >
+                                    <Eye className="w-3 h-3" /> Details
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -436,16 +504,11 @@ export default function Production() {
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold flex items-center">
                   <Activity className="mr-2 h-5 w-5 text-green-500" />
-                  Recent Production History
+                  Production History
                 </h2>
-                {historyRuns.length > 2 && (
-                  <button 
-                    onClick={() => setShowAllHistory(!showAllHistory)}
-                    className="text-sm text-green-600 hover:text-green-700 font-medium"
-                  >
-                    {showAllHistory ? 'View Less' : 'View All'}
-                  </button>
-                )}
+                <span className="text-xs text-muted-foreground">
+                  {historyRuns.length} run{historyRuns.length !== 1 ? "s" : ""}
+                </span>
               </div>
 
               {/* Filters Bar */}
@@ -542,38 +605,43 @@ export default function Production() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {isLoading ? (
+                  {isHistoryLoading ? (
                     <tr>
                       <td
-                        colSpan={10}
+                        colSpan={9}
                         className="p-6 text-center animate-pulse text-muted-foreground"
                       >
+                        <Loader2 className="inline w-4 h-4 animate-spin mr-2" />
                         Loading history...
                       </td>
                     </tr>
                   ) : historyRuns.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={10}
+                        colSpan={9}
                         className="p-6 text-center text-muted-foreground"
                       >
-                        No completed runs found.
+                        No production runs found.
                       </td>
                     </tr>
                   ) : (
-                    historyRuns.slice(0, showAllHistory ? undefined : 2).map((run) => {
+                    (showAllHistory ? historyRuns : historyRuns.slice(0, 2)).map((run) => {
                       const expected = run.planned_quantity_liters;
-                      const actual = run.actual_quantity_liters || expected;
-                      const variance = actual - expected;
-                      const variancePercentage =
-                        expected > 0 ? (variance / expected) * 100 : 0;
+                      const actual = run.actual_quantity_liters ?? expected;
+                      // variance comes pre-computed from the server
+                      const variance = typeof run.variance === "number" ? run.variance : (actual - expected);
+                      const variancePct = expected > 0 ? (variance / expected) * 100 : 0;
 
+                      // Color thresholds: green ≤ 2%, yellow ≤ 5%, red > 5%
                       let varianceColorClass = "text-green-600 bg-green-50/50";
-                      if (Math.abs(variancePercentage) > 5) {
-                        varianceColorClass =
-                          "text-red-700 bg-red-100 font-bold";
-                      } else if (Math.abs(variancePercentage) > 2) {
-                        varianceColorClass = "text-yellow-700 bg-yellow-100";
+                      if (variance < 0) {
+                        varianceColorClass = Math.abs(variancePct) > 5
+                          ? "text-red-700 bg-red-100 font-bold"
+                          : "text-orange-600 bg-orange-50";
+                      } else if (variance > 0) {
+                        varianceColorClass = "text-green-600 bg-green-50";
+                      } else {
+                        varianceColorClass = "text-slate-500 bg-slate-50";
                       }
 
                       const timelineStep =
@@ -581,27 +649,28 @@ export default function Production() {
                           ? run.packaging && run.packaging.length > 0
                             ? 4
                             : 3
-                          : run.status === "running" ||
-                            run.status === "in_progress"
+                          : run.status === "running"
                             ? 2
                             : 1;
 
                       return (
                         <tr
                           key={run.id}
-                          className="hover:bg-gray-50 transition-colors border-b last:border-0"
+                          className="hover:bg-gray-50 transition-colors border-b last:border-0 cursor-pointer"
+                          onClick={() => navigate(`/production/${run.batchId}`)}
                         >
                           <td className="p-4 border-r">
                             <div className="flex items-center gap-1">
                               {[1, 2, 3, 4].map((step) => (
                                 <div
                                   key={step}
-                                  className={`h-1.5 w-3 rounded-full ${step <= timelineStep
-                                    ? step === 4
-                                      ? "bg-green-500"
-                                      : "bg-blue-500"
-                                    : "bg-muted"
-                                    }`}
+                                  className={`h-1.5 w-3 rounded-full ${
+                                    step <= timelineStep
+                                      ? step === 4
+                                        ? "bg-green-500"
+                                        : "bg-blue-500"
+                                      : "bg-muted"
+                                  }`}
                                   title={
                                     step === 1
                                       ? "Planned"
@@ -616,7 +685,7 @@ export default function Production() {
                             </div>
                           </td>
                           <td className="p-4 text-muted-foreground font-mono font-medium border-r">
-                            PR-{run.id}
+                            {run.batchId}
                           </td>
                           <td className="p-4 font-medium text-foreground border-r">
                             {run.color_name}
@@ -625,63 +694,53 @@ export default function Production() {
                             {run.recipe_name}
                           </td>
                           <td className="p-4 text-center font-mono text-muted-foreground border-r">
-                            {expected}kg
+                            {Number(expected).toLocaleString()}L
                           </td>
                           <td className="p-4 text-center font-mono text-foreground font-semibold border-r">
-                            {actual}kg
+                            {actual != null ? Number(actual).toLocaleString() + "L" : "—"}
                           </td>
                           <td className="p-4 text-center border-r">
                             <span
                               className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-bold ${varianceColorClass}`}
                             >
                               {variance > 0 ? "+" : ""}
-                              {variance.toFixed(1)}kg
+                              {Number(variance).toFixed(1)}L
                             </span>
                           </td>
                           <td className="p-4 text-center border-r">
-                            {run.packaging && run.packaging.length > 0 ? (
-                              <div className="flex flex-col gap-0.5">
-                                {run.packaging.map((p, idx) => (
-                                  <span
-                                    key={idx}
-                                    className="text-[10px] text-muted-foreground whitespace-nowrap"
-                                  >
-                                    {p.pack_size_liters}L x {p.quantity_units}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-[10px] text-muted-foreground italic">
-                                Ready to pack
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-4 border-r">
                             <span
-                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${run.status === "completed"
-                                ? "bg-emerald-100 text-emerald-800"
-                                : run.status === "variance" ||
-                                  run.status === "flagged"
-                                  ? "bg-red-100 text-red-800"
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                                run.status === "completed"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : run.status === "planned"
+                                  ? "bg-slate-100 text-slate-700"
+                                  : run.status === "paused"
+                                  ? "bg-amber-100 text-amber-800"
+                                  : run.status === "packaging"
+                                  ? "bg-purple-100 text-purple-800"
                                   : "bg-blue-100 text-blue-800"
-                                }`}
+                              }`}
                             >
-                              {run.status === "pending" ||
-                                run.status === "in_progress" ||
-                                run.status === "running"
-                                ? "Running"
-                                : run.status}
+                              {run.status}
                             </span>
                           </td>
                           <td className="p-4 text-right">
                             <button
-                              onClick={() => handlePackage(run.id, actual)}
-                              disabled={run.status !== "completed"}
-                              className="inline-flex items-center text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline disabled:opacity-30 disabled:no-underline"
+                              onClick={() => navigate(`/production/${run.batchId}`)}
+                              className="inline-flex items-center text-xs font-semibold text-slate-500 hover:text-blue-700 hover:underline"
                             >
-                              <PackageCheck className="mr-1 h-3.5 w-3.5" />
-                              Package
+                              <Eye className="mr-1 h-3.5 w-3.5" />
+                              Details
                             </button>
+                            {run.status === "completed" && (
+                              <button
+                                onClick={() => navigate(`/production/${run.batchId}/packaging`)}
+                                className="ml-3 inline-flex items-center text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+                              >
+                                <PackageCheck className="mr-1 h-3.5 w-3.5" />
+                                Package
+                              </button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -690,11 +749,21 @@ export default function Production() {
                 </tbody>
               </table>
             </div>
+            {historyRuns.length > 2 && (
+              <div className="p-3 border-t bg-slate-50 flex justify-center">
+                <button
+                  onClick={() => setShowAllHistory(!showAllHistory)}
+                  className="text-sm font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                >
+                  {showAllHistory ? "View Less" : `View All (${historyRuns.length})`}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Modal for New Production Run */}
+      {/* New Production Run Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-card w-full max-w-2xl rounded-xl shadow-2xl border overflow-hidden animate-in fade-in zoom-in duration-200">
