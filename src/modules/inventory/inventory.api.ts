@@ -30,7 +30,7 @@ export default async function (fastifyRaw: FastifyInstance) {
             security: [{ bearerAuth: [] }]
         },
         preHandler: [fastify.authenticate],
-        handler: async (request, reply) => {
+        handler: async (request, reply): Promise<any> => {
             try {
                 // Total Volume and Packaged Units
                 const totalsQuery = `
@@ -108,7 +108,7 @@ export default async function (fastifyRaw: FastifyInstance) {
             }
         },
         preHandler: [fastify.authenticate],
-        handler: async (request, reply) => {
+        handler: async (request, reply): Promise<any> => {
             try {
                 const { search, status, packSize, series } = request.query;
 
