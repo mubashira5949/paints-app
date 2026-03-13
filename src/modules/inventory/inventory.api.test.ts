@@ -68,7 +68,8 @@ describe('Inventory API Module', () => {
                 return Promise.resolve({ rows: [] })
             })
 
-            const result = await getRoute.handler(req, rep)
+            await getRoute.handler(req, rep)
+            const result = (rep as any).getBody()
 
             expect(result).toEqual({
                 totalVolume: 146,
@@ -102,7 +103,8 @@ describe('Inventory API Module', () => {
                 ]
             })
 
-            const result = await getRoute.handler(req, rep)
+            await getRoute.handler(req, rep)
+            const result = (rep as any).getBody()
 
             expect(result).toHaveLength(1)
             expect(result[0].color).toBe('Blue 401')
