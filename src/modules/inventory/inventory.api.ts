@@ -57,11 +57,11 @@ export default async function (fastifyRaw: FastifyInstance) {
                 const lowStockResult = await fastify.db.query(lowStockQuery);
                 const lowStockColors = parseInt(lowStockResult.rows[0].lowStockColors);
 
-                return {
-                    totalVolume: totals.totalVolume,
-                    packagedUnits: totals.packagedUnits,
-                    lowStockColors
-                };
+                return reply.status(200).send({
+                    totalVolume: Number(totals.totalVolume),
+                    packagedUnits: Number(totals.packagedUnits),
+                    lowStockColors: Number(lowStockColors)
+                });
             } catch (err) {
                 fastify.log.error(err);
                 return reply.status(500).send({
@@ -190,7 +190,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                 query += ` ORDER BY color ASC`;
 
                 const result = await fastify.db.query(query, params);
-                return result.rows;
+                return reply.status(200).send(result.rows);
 
             } catch (err) {
                 fastify.log.error(err);
