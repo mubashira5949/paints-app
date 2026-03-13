@@ -28,7 +28,9 @@ const fastify = Fastify({
 
 // Allow Cross-Origin requests from the frontend
 fastify.register(cors, {
-    origin: true // Allow all origins for development, can be configured securely later
+    origin: true, // Allow all origins for development
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
 })
 
 // Global Error Handler to catch and format TypeBox Validation Failures
@@ -87,6 +89,14 @@ import resourcesModule from './modules/resources'
 import colorsModule from './modules/colors'
 import recipesModule from './modules/recipes'
 import productionModule from './modules/production'
+import dashboardModule from './modules/dashboard'
+
+/**
+ * Register dashboard module with a '/api' prefix (since user asked for /api/dashboard).
+ * Actually, usually we prefix feature modules. Let's see how others are done.
+ * The user asked for GET /api/dashboard.
+ */
+fastify.register(dashboardModule, { prefix: '/api' })
 
 /**
  * Register user management module.
@@ -124,6 +134,13 @@ import inventoryModule from './modules/inventory'
  * Register inventory module with a '/inventory' prefix.
  */
 fastify.register(inventoryModule, { prefix: '/inventory' })
+
+import inventoryApi from './modules/inventory/inventory.api'
+
+/**
+ * Register core inventory API with '/api/inventory' prefix.
+ */
+fastify.register(inventoryApi, { prefix: '/api/inventory' })
 
 /**
  * Root endpoint - returns basic API information.

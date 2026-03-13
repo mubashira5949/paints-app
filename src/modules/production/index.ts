@@ -12,12 +12,12 @@ export default async function (fastifyRaw: FastifyInstance) {
     const fastify = fastifyRaw.withTypeProvider<TypeBoxTypeProvider>()
 
     const CreateProductionRunSchema = Type.Object({
-        recipe_id: Type.Integer(),
-        planned_quantity_liters: Type.Number({ exclusiveMinimum: 0 }),
-        actual_resources: Type.Array(
+        recipeId: Type.Integer(),
+        expectedOutput: Type.Number({ exclusiveMinimum: 0 }),
+        actualResources: Type.Array(
             Type.Object({
-                resource_id: Type.Integer(),
-                actual_quantity_used: Type.Number({ exclusiveMinimum: 0 })
+                resourceId: Type.Integer(),
+                quantity: Type.Number({ exclusiveMinimum: 0 })
             }),
             { minItems: 1 }
         )
@@ -182,7 +182,7 @@ export default async function (fastifyRaw: FastifyInstance) {
             body: CreateProductionRunSchema
         },
         handler: async (request, reply) => {
-            const { recipe_id, planned_quantity_liters, actual_resources } = request.body
+            const { recipeId, expectedOutput, actualResources } = request.body
             const user = request.user as any
             const user_id = user.id
 
@@ -194,8 +194,8 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 // 1. Fetch the recipe to validate it exists and get its batch specifications
                 const recipeResult = await client.query(
-                    'SELECT id, color_id, batch_size_liters FROM recipes WHERE id = $1 AND is_active = TRUE',
-                    [recipe_id]
+                    'SELECT id, color_id, batch_size_liters FROM recipes WHERE id = $1',
+                    [recipeId]
                 )
 
                 if (recipeResult.rows.length === 0) {
@@ -212,13 +212,13 @@ export default async function (fastifyRaw: FastifyInstance) {
                 // 2. Fetch expected recipe resources to validate the components provided
                 const expectedResourcesResult = await client.query(
                     'SELECT resource_id, quantity_required FROM recipe_resources WHERE recipe_id = $1',
-                    [recipe_id]
+                    [recipeId]
                 )
                 const expectedResources = expectedResourcesResult.rows
-                const expectedResourceIds = expectedResources.map(r => r.resource_id)
+                const expectedResourceIds = expectedResources.map((r: any) => r.resource_id)
 
                 // Validate that all submitted actual resources belong to the recipe
-                const providedResourceIds = actual_resources.map((ar: any) => ar.resource_id)
+                const providedResourceIds = actualResources.map((ar: any) => ar.resourceId)
                 const hasInvalidResources = providedResourceIds.some((id: number) => !expectedResourceIds.includes(id))
 
                 if (hasInvalidResources) {
@@ -234,20 +234,20 @@ export default async function (fastifyRaw: FastifyInstance) {
                     `INSERT INTO production_runs (recipe_id, status, planned_quantity_liters, actual_quantity_liters, started_at, completed_at, created_by) 
                       VALUES ($1, 'completed', $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $4)
                       RETURNING id, created_at`,
-                    [recipe_id, planned_quantity_liters, planned_quantity_liters, user_id] // assume perfectly yielded run
+                    [recipeId, expectedOutput, expectedOutput, user_id] // assume perfectly yielded run
                 )
                 const runId = productionRunResult.rows[0].id
 
                 // 4. Iterate over actual resources: track actuals, write stock audit, deduct stock
-                const scaleFactor = planned_quantity_liters / recipe.batch_size_liters
+                const scaleFactor = expectedOutput / recipe.batch_size_liters
 
-                for (const actual of actual_resources) {
+                for (const actual of actualResources) {
                     // Find expected mapping requirements
-                    const expectedRes = expectedResources.find(er => er.resource_id === actual.resource_id)
+                    const expectedRes = expectedResources.find((er: any) => er.resource_id === actual.resourceId)
                     const expectedQuantity = expectedRes ? expectedRes.quantity_required * scaleFactor : 0
 
                     // Calculate numeric variance
-                    const variance = actual.actual_quantity_used - expectedQuantity
+                    const variance = actual.quantity - expectedQuantity
                     // Flag variance exceeding 5% threshold
                     const varianceFlag = Math.abs(variance / expectedQuantity) > 0.05
 
@@ -256,14 +256,14 @@ export default async function (fastifyRaw: FastifyInstance) {
                         `INSERT INTO production_resource_actuals 
                          (production_run_id, resource_id, actual_quantity_used, expected_quantity, variance, variance_flag)
                           VALUES ($1, $2, $3, $4, $5, $6)`,
-                        [runId, actual.resource_id, actual.actual_quantity_used, expectedQuantity, variance, varianceFlag]
+                        [runId, actual.resourceId, actual.quantity, expectedQuantity, variance, varianceFlag]
                     )
 
                     // b. Audit the stock decrement (trigger auto-updates the resources table)
                     await client.query(
                         `INSERT INTO resource_stock_transactions (resource_id, transaction_type, quantity, reference_id, notes)
                           VALUES ($1, 'production_usage', $2, $3, 'Consumed in Production Run')`,
-                        [actual.resource_id, -actual.actual_quantity_used, runId]
+                        [actual.resourceId, -actual.quantity, runId]
                     )
                 }
 
@@ -288,7 +288,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                 }
 
                 // Catch DB Constraint violation for negative stock bounds
-                if (err.code === '23514') {
+                if (err.code === '23514' || err.message === 'check_violation') {
                     return reply.status(400).send({
                         error: 'Bad Request',
                         message: 'Insufficient raw materials stock exists in inventory to complete this run.'
