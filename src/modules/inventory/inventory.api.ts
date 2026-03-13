@@ -21,6 +21,10 @@ export default async function (fastifyRaw: FastifyInstance) {
                     totalVolume: Type.Number(),
                     packagedUnits: Type.Number(),
                     lowStockColors: Type.Number()
+                }),
+                500: Type.Object({
+                    error: Type.String(),
+                    message: Type.String()
                 })
             },
             security: [{ bearerAuth: [] }]
@@ -80,7 +84,28 @@ export default async function (fastifyRaw: FastifyInstance) {
                 packSize: Type.Optional(Type.String()),
                 series: Type.Optional(Type.String())
             }),
-            security: [{ bearerAuth: [] }]
+            security: [{ bearerAuth: [] }],
+            response: {
+                200: Type.Array(Type.Object({
+                    id: Type.Number(),
+                    color: Type.String(),
+                    color_code: Type.Union([Type.String(), Type.Null()]),
+                    business_code: Type.Union([Type.String(), Type.Null()]),
+                    series: Type.Union([Type.String(), Type.Null()]),
+                    min_threshold_liters: Type.Number(),
+                    packDistribution: Type.Array(Type.Object({
+                        size: Type.String(),
+                        units: Type.Number()
+                    })),
+                    units: Type.Number(),
+                    volume: Type.Number(),
+                    status: Type.String()
+                })),
+                500: Type.Object({
+                    error: Type.String(),
+                    message: Type.String()
+                })
+            }
         },
         preHandler: [fastify.authenticate],
         handler: async (request, reply) => {
