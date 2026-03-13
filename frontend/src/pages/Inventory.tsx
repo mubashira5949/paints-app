@@ -1,11 +1,7 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { apiRequest } from "../services/api";
 import { BarChart3, Package, Droplets, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, AlertCircle, Search } from "lucide-react";
 
-interface Pack {
-  pack_size_liters: number;
-  quantity_units: number;
-}
 
 interface ResourceAlert {
   id: number;
@@ -16,24 +12,27 @@ interface ResourceAlert {
 }
 
 interface InventoryItem {
-  color_id: number;
-  color_name: string;
+  id: number;
+  color: string;
   color_code: string;
   business_code: string;
   series: string;
   min_threshold_liters: number;
-  total_quantity_units: number;
-  total_volume_liters: string | number;
-  stock_status: 'healthy' | 'low' | 'critical';
-  packs: Pack[];
-  last_production_id: number | null;
-  last_produced_at: string | null;
-  last_sale_units: number | null;
-  last_sale_at: string | null;
+  packDistribution: { size: string, units: number }[];
+  units: number;
+  volume: number;
+  status: 'healthy' | 'low' | 'critical';
+}
+
+interface InventorySummary {
+  totalVolume: number;
+  packagedUnits: number;
+  lowStockColors: number;
 }
 
 export default function Inventory() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [summary, setSummary] = useState<InventorySummary | null>(null);
   const [alerts, setAlerts] = useState<ResourceAlert[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,9 +42,11 @@ export default function Inventory() {
 
   // Filter States
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [seriesFilter, setSeriesFilter] = useState("all");
-  const [packSizeFilter, setPackSizeFilter] = useState("all");
+  const [filters, setFilters] = useState({
+    status: "all",
+    packSize: "all",
+    series: "all"
+  });
 
   const toggleRow = (id: number) => {
     setExpandedRowId(expandedRowId === id ? null : id);
@@ -60,40 +61,48 @@ export default function Inventory() {
     }
   };
 
+  const fetchSummary = async () => {
+    try {
+      const response = await apiRequest<InventorySummary>("/api/inventory/summary");
+      setSummary(response);
+    } catch (err) {
+      console.error("Failed to fetch summary", err);
+    }
+  };
+
   const fetchInventory = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await apiRequest<{ data: InventoryItem[] }>(
-        "/inventory/finished-stock",
-      );
-      setInventory(response.data);
+      const params = new URLSearchParams();
+      if (searchTerm) params.append("search", searchTerm);
+      if (filters.status !== "all") params.append("status", filters.status);
+      if (filters.series !== "all") params.append("series", filters.series);
+      if (filters.packSize !== "all") params.append("packSize", filters.packSize);
+
+      const response = await apiRequest<InventoryItem[]>(`/api/inventory?${params.toString()}`);
+      setInventory(response);
     } catch (err: any) {
-      setError(err.message || "Failed to load inventory");
+      setError("Unable to load inventory. Please check server connection.");
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleRefresh = () => {
+    fetchInventory();
+    fetchSummary();
+    fetchAlerts();
+  };
+
   useEffect(() => {
     fetchInventory();
+    fetchSummary();
     fetchAlerts();
-  }, []);
-
-  const filteredInventory = inventory.filter((item) => {
-    const matchesSearch =
-      item.color_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.business_code && item.business_code.toLowerCase().includes(searchTerm.toLowerCase()));
-
-    const matchesStatus = statusFilter === "all" || item.stock_status === statusFilter;
-    const matchesSeries = seriesFilter === "all" || item.series === seriesFilter;
-    const matchesPackSize = packSizeFilter === "all" || item.packs?.some(p => p.pack_size_liters.toString() === packSizeFilter);
-
-    return matchesSearch && matchesStatus && matchesSeries && matchesPackSize;
-  });
+  }, [searchTerm, filters]);
 
   const activeSeries = Array.from(new Set(inventory.map(i => i.series).filter(Boolean)));
-  const allPackSizes = Array.from(new Set(inventory.flatMap(i => i.packs || []).map(p => p.pack_size_liters))).sort((a, b) => a - b);
+  const allPackSizes = Array.from(new Set(inventory.flatMap(i => i.packDistribution || []).map(p => parseFloat(p.size)))).sort((a, b) => a - b);
 
   return (
     <div className="space-y-6">
@@ -107,7 +116,7 @@ export default function Inventory() {
           </p>
         </div>
         <button
-          onClick={() => { fetchInventory(); fetchAlerts(); }}
+          onClick={handleRefresh}
           disabled={isLoading}
           className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-10 px-4 py-2"
         >
@@ -126,13 +135,7 @@ export default function Inventory() {
           </div>
           <div>
             <div className="text-2xl font-bold">
-              {inventory
-                .reduce(
-                  (acc, item) => acc + Number(item.total_volume_liters),
-                  0,
-                )
-                .toFixed(0)}
-              L
+              {summary ? summary.totalVolume.toFixed(0) : "0"}L
             </div>
             <p className="text-xs text-muted-foreground">Finished paint ready for sale</p>
           </div>
@@ -144,10 +147,7 @@ export default function Inventory() {
           </div>
           <div>
             <div className="text-2xl font-bold">
-              {inventory.reduce(
-                (acc, item) => acc + item.total_quantity_units,
-                0,
-              )}
+              {summary ? summary.packagedUnits : "0"}
               <span className="text-sm font-normal text-muted-foreground ml-1">Units</span>
             </div>
             <p className="text-xs text-muted-foreground">Across all pack sizes</p>
@@ -160,7 +160,7 @@ export default function Inventory() {
           </div>
           <div>
             <div className="text-2xl font-bold">
-              {inventory.filter(item => item.stock_status !== 'healthy').length}
+              {summary ? summary.lowStockColors : "0"}
               <span className="text-sm font-normal text-muted-foreground ml-1">Colors</span>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -174,9 +174,9 @@ export default function Inventory() {
         <div className="p-5 border-b bg-slate-50/50 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h2 className="text-lg font-bold text-slate-900 uppercase tracking-tight">Inventory Table</h2>
-            <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-full uppercase tracking-widest">{filteredInventory.length} Entries</span>
+            <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-full uppercase tracking-widest">{inventory.length} Entries</span>
           </div>
-          {filteredInventory.length > 2 && (
+          {inventory.length > 2 && (
             <button 
               onClick={() => setShowAllInventory(!showAllInventory)}
               className="text-sm text-blue-600 hover:text-blue-700 font-medium"
@@ -218,7 +218,7 @@ export default function Inventory() {
                     </td>
                   </tr>
                 ))
-              ) : filteredInventory.length === 0 ? (
+              ) : inventory.length === 0 ? (
                 <tr>
                   <td
                     colSpan={6}
@@ -228,11 +228,10 @@ export default function Inventory() {
                   </td>
                 </tr>
               ) : (
-                filteredInventory.slice(0, showAllInventory ? undefined : 2).map((item) => (
-                  <>
+                inventory.slice(0, showAllInventory ? undefined : 2).map((item) => (
+                  <React.Fragment key={item.id}>
                     <tr
-                      key={item.color_id}
-                      onClick={() => toggleRow(item.color_id)}
+                      onClick={() => toggleRow(item.id)}
                       className="hover:bg-gray-50 transition-colors cursor-pointer group"
                     >
                       <td className="p-6 font-medium">
@@ -244,11 +243,11 @@ export default function Inventory() {
                               textShadow: '0px 1px 2px rgba(0,0,0,0.5)'
                             }}
                           >
-                            {item.stock_status === 'critical' && "!"}
+                            {item.status === 'critical' && "!"}
                           </div>
                           <div className="flex flex-col">
                             <span className="font-extrabold text-[15px] text-slate-900">
-                              {item.color_name}
+                              {item.color}
                             </span>
                             <div className="flex gap-1.5 text-[11px] text-slate-500 font-medium">
                               <span>Code: {item.business_code || 'N/A'}</span>
@@ -260,60 +259,54 @@ export default function Inventory() {
                       </td>
                       <td className="p-6">
                         <div className="flex flex-wrap gap-2">
-                          {item.packs?.slice(0, 2).map((pack, idx) => (
+                          {item.packDistribution?.slice(0, 2).map((pack, idx) => (
                             <span
                               key={idx}
                               className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 shadow-sm"
                             >
-                              {pack.pack_size_liters}L ×{pack.quantity_units}
+                              {pack.size} ×{pack.units}
                             </span>
                           ))}
-                          {item.packs?.length > 2 && (
+                          {item.packDistribution?.length > 2 && (
                             <span className="text-xs text-muted-foreground self-center">
-                              +{item.packs.length - 2} more
+                              +{item.packDistribution.length - 2} more
                             </span>
                           )}
-                          {!item.packs && <span className="text-slate-400 text-sm italic font-medium">Out of stock</span>}
+                          {!item.packDistribution?.length && <span className="text-slate-400 text-sm italic font-medium">Out of stock</span>}
                         </div>
                       </td>
                       <td className="p-6 text-center font-black text-slate-700">
-                        {item.total_quantity_units}
+                        {item.units}
                       </td>
                       <td className="p-6 text-right">
                         <div className="flex flex-col items-end">
-                          <span className="text-lg font-black text-slate-900 tracking-tight">{Number(item.total_volume_liters).toFixed(1)}L</span>
+                          <span className="text-lg font-black text-slate-900 tracking-tight">{Number(item.volume).toFixed(1)}L</span>
                           <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter mt-0.5">
                             Total Stock
                           </span>
                         </div>
                       </td>
                       <td className="p-6">
-                        {item.stock_status === 'healthy' && (
+                        {item.status === 'healthy' && (
                           <div className="flex items-center justify-center gap-2 text-emerald-600 font-bold text-xs uppercase tracking-wide">
                             <CheckCircle2 className="h-5 w-5" />
                             <span>Healthy</span>
                           </div>
                         )}
-                        {item.stock_status === 'low' && (
-                          <div className="flex items-center justify-center gap-2 text-amber-600 font-bold text-xs uppercase tracking-wide">
-                            <AlertTriangle className="h-5 w-5" />
-                            <span>Low Stock</span>
-                          </div>
-                        )}
-                        {item.stock_status === 'critical' && (
-                          <div className="flex items-center justify-center gap-2 text-red-600 font-bold text-xs uppercase tracking-wide">
-                            <AlertCircle className="h-5 w-5" />
-                            <span>Critical</span>
+                        {(item.status === 'low' || item.status === 'critical') && (
+                          <div className={`flex items-center justify-center gap-2 ${item.status === 'critical' ? 'text-red-600' : 'text-amber-600'} font-bold text-xs uppercase tracking-wide`}>
+                            {item.status === 'critical' ? <AlertCircle className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+                            <span>{item.status === 'critical' ? 'Critical' : 'Low Stock'}</span>
                           </div>
                         )}
                       </td>
                       <td className="p-6 text-center">
                         <button
-                          onClick={(e) => { e.stopPropagation(); toggleRow(item.color_id); }}
+                          onClick={(e) => { e.stopPropagation(); toggleRow(item.id); }}
                           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-slate-900 text-[10px] font-bold uppercase transition-all hover:bg-slate-50 border border-slate-200 shadow-sm"
                         >
-                          {expandedRowId === item.color_id ? "CLOSE" : "VIEW"}
-                          {expandedRowId === item.color_id ? (
+                          {expandedRowId === item.id ? "CLOSE" : "VIEW"}
+                          {(expandedRowId === item.id) ? (
                             <ChevronUp className="h-3 w-3 text-slate-400" />
                           ) : (
                             <ChevronDown className="h-3 w-3 text-slate-400" />
@@ -321,7 +314,7 @@ export default function Inventory() {
                         </button>
                       </td>
                     </tr>
-                    {expandedRowId === item.color_id && (
+                    {expandedRowId === item.id && (
                       <tr className="bg-muted/30">
                         <td colSpan={6} className="p-6 border-b">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -330,64 +323,32 @@ export default function Inventory() {
                                 Pack Distribution
                               </h4>
                               <div className="space-y-2">
-                                {item.packs?.map((pack, idx) => (
+                                {item.packDistribution?.map((pack, idx) => (
                                   <div key={idx} className="flex items-center justify-between text-sm py-1 border-b border-border/50 last:border-0">
-                                    <span className="font-medium">{pack.pack_size_liters}L Size</span>
-                                    <span className="font-mono text-blue-600 bg-blue-50 px-2 rounded">{pack.quantity_units} units</span>
+                                    <span className="font-medium">{pack.size} Size</span>
+                                    <span className="font-mono text-blue-600 bg-blue-50 px-2 rounded">{pack.units} units</span>
                                   </div>
                                 ))}
-                                {!item.packs && <p className="text-sm text-muted-foreground italic">No units in stock.</p>}
+                                {!item.packDistribution?.length && <p className="text-sm text-muted-foreground italic">No units in stock.</p>}
                               </div>
                             </div>
                             <div>
                               <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
                                 Last Production
                               </h4>
-                              {item.last_production_id ? (
-                                <div className="space-y-2">
-                                  <div className="flex flex-col">
-                                    <span className="text-sm font-medium">Batch PR-{item.last_production_id}</span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {new Date(item.last_produced_at!).toLocaleDateString(undefined, {
-                                        year: 'numeric', month: 'short', day: 'numeric'
-                                      })}
-                                    </span>
-                                  </div>
-                                  <div className="text-xs bg-slate-100 p-2 rounded border">
-                                    Added to finished stock from production run.
-                                  </div>
-                                </div>
-                              ) : (
-                                <p className="text-sm text-muted-foreground italic">No production history.</p>
-                              )}
+                              <p className="text-sm text-muted-foreground italic">No production history.</p>
                             </div>
                             <div>
                               <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
                                 Recent Activity
                               </h4>
-                              {item.last_sale_at ? (
-                                <div className="space-y-2">
-                                  <div className="flex flex-col">
-                                    <span className="text-sm font-medium">{item.last_sale_units} Units Sold</span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {new Date(item.last_sale_at).toLocaleDateString(undefined, {
-                                        year: 'numeric', month: 'short', day: 'numeric'
-                                      })}
-                                    </span>
-                                  </div>
-                                  <div className="text-xs bg-green-50 text-green-700 p-2 rounded border border-green-100">
-                                    Last recorded sale transaction.
-                                  </div>
-                                </div>
-                              ) : (
-                                <p className="text-sm text-muted-foreground italic">No sales history.</p>
-                              )}
+                              <p className="text-sm text-muted-foreground italic">No sales history.</p>
                             </div>
                           </div>
                         </td>
                       </tr>
                     )}
-                  </>
+                  </React.Fragment>
                 ))
               )}
             </tbody>
@@ -414,8 +375,8 @@ export default function Inventory() {
           <div className="relative">
             <select
               className="w-full pl-4 pr-10 py-3 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none transition-all"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              value={filters.status}
+              onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
             >
               <option value="all">All</option>
               <option value="healthy">Healthy</option>
@@ -430,8 +391,8 @@ export default function Inventory() {
           <div className="relative">
             <select
               className="w-full pl-4 pr-10 py-3 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none transition-all"
-              value={packSizeFilter}
-              onChange={(e) => setPackSizeFilter(e.target.value)}
+              value={filters.packSize}
+              onChange={(e) => setFilters(prev => ({ ...prev, packSize: e.target.value }))}
             >
               <option value="all">All Sizes</option>
               {allPackSizes.map(size => (
@@ -446,8 +407,8 @@ export default function Inventory() {
           <div className="relative">
             <select
               className="w-full pl-4 pr-10 py-3 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none transition-all"
-              value={seriesFilter}
-              onChange={(e) => setSeriesFilter(e.target.value)}
+              value={filters.series}
+              onChange={(e) => setFilters(prev => ({ ...prev, series: e.target.value }))}
             >
               <option value="all">All</option>
               {activeSeries.map(series => (
@@ -507,8 +468,27 @@ export default function Inventory() {
       )}
 
       {error && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive text-sm shadow-sm">
-          {error}
+        <div className="rounded-xl border border-red-200 bg-red-50 p-6 shadow-sm animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="flex gap-4">
+            <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+              <AlertCircle className="h-6 w-6 text-red-600" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-red-900 uppercase tracking-widest mb-1">Attention Required</h3>
+              <p className="text-red-700 font-medium">
+                ⚠ {error}
+              </p>
+              <p className="text-red-600/70 text-xs mt-2 font-bold uppercase tracking-tighter">
+                Please check server connection.
+              </p>
+              <button 
+                onClick={handleRefresh}
+                className="mt-4 px-4 py-2 bg-red-600 text-white text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-red-700 transition-colors shadow-sm"
+              >
+                Retry Connection
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
