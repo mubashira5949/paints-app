@@ -32,8 +32,8 @@ function App() {
               <Route path="production/:batchId" element={<ProductionDetail />} />
               <Route path="production/:batchId/packaging" element={<ProductionPackaging />} />
 
-              {/* Manager-only routes */}
-              <Route element={<ProtectedRoute allowedRoles={["manager"]} />}>
+              {/* Manager and Admin routes */}
+              <Route element={<ProtectedRoute allowedRoles={["manager", "admin"]} />}>
                 <Route path="users" element={<Users />} />
                 <Route path="settings" element={<Settings />} />
               </Route>
