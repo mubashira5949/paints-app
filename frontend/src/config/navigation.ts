@@ -42,7 +42,7 @@ export const navigation: NavItem[] = [
   },
   {
     title: "Settings",
-    path: "/path", // the path mapping in config was /settings
+    path: "/settings",
     icon: Settings,
     roles: ["manager", "admin"],
   },
