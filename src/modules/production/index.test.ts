@@ -33,6 +33,9 @@ describe('Production Runs Module API', () => {
         get: (path: string, options: any) => {
             routes[`GET ${path}`] = options
         },
+        patch: (path: string, options: any) => {
+            routes[`PATCH ${path}`] = options
+        },
         withTypeProvider: () => mockFastify
     }
 

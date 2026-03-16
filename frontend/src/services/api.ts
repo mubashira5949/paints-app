@@ -18,8 +18,8 @@ export async function apiRequest<T>(
   options: RequestOptions = {},
 ): Promise<T> {
   const token = localStorage.getItem("token");
-  const headers = {
-    "Content-Type": "application/json",
+  const headers: Record<string, string> = {
+    ...(options.body ? { "Content-Type": "application/json" } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   };
