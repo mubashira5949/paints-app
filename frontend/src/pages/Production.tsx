@@ -87,6 +87,7 @@ export default function Production() {
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
+  const [showAllActive, setShowAllActive] = useState(false);
 
   // Filters State
   const [filterSearch, setFilterSearch] = useState("");
@@ -378,11 +379,21 @@ export default function Production() {
                 <Droplets className="mr-3 h-5 w-5 text-blue-500" />
                 Active Production Runs
               </h2>
-              {activeRuns.length > 0 && (
-                <span className="text-xs font-semibold bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full">
-                  {activeRuns.length} batch{activeRuns.length !== 1 ? "es" : ""}
-                </span>
-              )}
+              <div className="flex items-center gap-3">
+                {activeRuns.length > 0 && (
+                  <span className="text-xs font-semibold bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full">
+                    {activeRuns.length} batch{activeRuns.length !== 1 ? "es" : ""}
+                  </span>
+                )}
+                {activeRuns.length > 2 && (
+                  <button 
+                    onClick={() => setShowAllActive(!showAllActive)}
+                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    {showAllActive ? 'View Less' : 'View All'}
+                  </button>
+                )}
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -415,7 +426,7 @@ export default function Production() {
                       </td>
                     </tr>
                   ) : (
-                    activeRuns.map((run) => {
+                    activeRuns.slice(0, showAllActive ? undefined : 2).map((run) => {
                       const isUpdating = updatingId === run.id;
                       const statusConfig: Record<string, { label: string; className: string }> = {
                         planned:   { label: "Planned",   className: "bg-slate-100 text-slate-700" },
@@ -506,9 +517,19 @@ export default function Production() {
                   <Activity className="mr-2 h-5 w-5 text-green-500" />
                   Production History
                 </h2>
-                <span className="text-xs text-muted-foreground">
-                  {historyRuns.length} run{historyRuns.length !== 1 ? "s" : ""}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground">
+                    {historyRuns.length} run{historyRuns.length !== 1 ? "s" : ""}
+                  </span>
+                  {historyRuns.length > 2 && (
+                    <button 
+                      onClick={() => setShowAllHistory(!showAllHistory)}
+                      className="text-sm text-green-600 hover:text-green-700 font-medium"
+                    >
+                      {showAllHistory ? 'View Less' : 'View All'}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Filters Bar */}
