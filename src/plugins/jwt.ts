@@ -1,6 +1,10 @@
 /**
  * JWT Authentication Plugin
- * Configures JSON Web Token support for the application.
+ * Configures JSON Web Token support using ES256 (ECDSA P-256) asymmetric keypair.
+ *
+ * - Tokens are SIGNED with the private key (server only).
+ * - Tokens are VERIFIED with the public key (shareable with anyone).
+ * - The public key is exposed at GET /auth/public-key for external verification.
  */
 
 import fp from 'fastify-plugin'
@@ -8,35 +12,52 @@ import fastifyJwt from '@fastify/jwt'
 import { FastifyInstance } from 'fastify'
 
 async function jwtConnector(fastify: FastifyInstance) {
+    const rawPrivate = process.env.ES_PRIVATE_KEY
+    const rawPublic  = process.env.ES_PUBLIC_KEY
+
+    if (!rawPrivate || !rawPublic) {
+        throw new Error('ES_PRIVATE_KEY and ES_PUBLIC_KEY environment variables must be set')
+    }
+
+    // Support both JSON-escaped (\n) and literal newlines in the PEM strings
+    const privateKey = rawPrivate.replace(/\\n/g, '\n')
+    const publicKey  = rawPublic.replace(/\\n/g, '\n')
+
     /**
-     * Register the @fastify/jwt plugin with a secret key.
-     * The secret is stored in environment variables for security.
+     * Register @fastify/jwt with ES256 asymmetric keypair.
+     * sign   → uses privateKey
+     * verify → uses publicKey
      */
     fastify.register(fastifyJwt, {
-        secret: process.env.JWT_SECRET || 'supersecret'
+        secret: {
+            private: privateKey,
+            public:  publicKey,
+        },
+        sign: {
+            algorithm: 'ES256',
+            expiresIn: '24h',
+        },
+        verify: {
+            algorithms: ['ES256'],
+        },
     })
 
     /**
-     * Decorate the Fastify instance with an 'authenticate' method.
-     * This method can be used as a preHandler hook to protect routes.
+     * Decorate fastify with 'authenticate' — used as a preHandler on protected routes.
      */
-    fastify.decorate("authenticate", async function (request: any, reply: any) {
+    fastify.decorate('authenticate', async function (request: any, reply: any) {
         try {
-            // Verify the JWT token provided in the Authorization header.
             await request.jwtVerify()
         } catch (err) {
-            // Return error if verification fails (e.g., missing or invalid token).
             reply.send(err)
         }
     })
 }
 
-// Wrap with fastify-plugin to make decorators available globally.
 export default fp(jwtConnector)
 
 /**
  * TypeScript Declaration Merging
- * Adds the 'authenticate' method to the FastifyInstance type.
  */
 declare module 'fastify' {
     interface FastifyInstance {
