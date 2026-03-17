@@ -20,12 +20,23 @@ import { generateKeyPairSync } from 'crypto'
 
 /**
  * Parse an environment variable PEM string securely.
+ * Supports both raw PEM strings (with or without escaped newlines) and base64-encoded strings.
  */
 function parsePem(raw: string, label: string): string {
-    const pem = raw.replace(/\\n/g, '\n')
-    if (!pem.startsWith('-----BEGIN')) {
-        throw new Error(`${label} does not look like a valid PEM string. Ensure it starts with -----BEGIN ...`)
+    let pem = raw.trim()
+    
+    // If it doesn't look like a raw PEM, assume it's base64 encoded
+    if (!pem.startsWith('-----BEGIN') && !pem.includes('\\n-----BEGIN')) {
+        pem = Buffer.from(pem, 'base64').toString('utf-8')
     }
+    
+    // Replace escaped newlines for JSON configurations
+    pem = pem.replace(/\\n/g, '\n')
+    
+    if (!pem.startsWith('-----BEGIN')) {
+        throw new Error(`${label} does not look like a valid PEM string. Ensure it is either base64 encoded or a raw string starting with -----BEGIN ...`)
+    }
+    
     return pem
 }
 
