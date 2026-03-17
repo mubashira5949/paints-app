@@ -42,7 +42,7 @@ export default function Login() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ identifier: email, password }),
       });
 
       const data = await response.json();
@@ -137,7 +137,7 @@ export default function Login() {
           {/* Email Input Field Group */}
           <div className="space-y-2 group">
             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Email address
+              Email or Username
             </label>
             <div className="relative">
               {/* Overlay Icon - left aligned */}
@@ -145,10 +145,10 @@ export default function Login() {
                 <Mail className="h-5 w-5" />
               </div>
               <input
-                type="email"
+                type="text"
                 required // HTML5 form validation
                 disabled={isLoading} // Disable editing when submitting
-                placeholder="you@example.com"
+                placeholder="you@example.com or username"
                 className="w-full rounded-xl border border-slate-200 dark:border-input bg-white dark:bg-background/50 py-2.5 pl-10 pr-4 text-slate-900 dark:text-foreground placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20 transition-all disabled:opacity-50"
                 value={email} // Controlled component data binding
                 onChange={(e) => setEmail(e.target.value)}
