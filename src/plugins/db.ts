@@ -35,8 +35,22 @@ async function dbConnector(fastify: FastifyInstance) {
      */
     fastify.decorate('db', pool)
 
-    // Ensure the connection pool is closed when the Fastify instance is closed.
+    /**
+     * Keep-alive ping every 4 minutes to prevent Neon serverless DB from
+     * suspending its compute after 5 minutes of inactivity.
+     * Without this, the first query after idle takes 2-3 seconds (cold start).
+     */
+    const keepAlive = setInterval(async () => {
+        try {
+            await pool.query('SELECT 1')
+        } catch (err) {
+            fastify.log.warn({ err }, 'DB keep-alive ping failed')
+        }
+    }, 4 * 60 * 1000) // 4 minutes
+
+    // Ensure the connection pool and keep-alive are cleaned up on server close.
     fastify.addHook('onClose', async (instance) => {
+        clearInterval(keepAlive)
         await pool.end()
     })
 }

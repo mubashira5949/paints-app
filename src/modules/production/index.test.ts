@@ -33,6 +33,9 @@ describe('Production Runs Module API', () => {
         get: (path: string, options: any) => {
             routes[`GET ${path}`] = options
         },
+        patch: (path: string, options: any) => {
+            routes[`PATCH ${path}`] = options
+        },
         withTypeProvider: () => mockFastify
     }
 
@@ -141,9 +144,9 @@ describe('Production Runs Module API', () => {
                 headers: { authorization: 'Bearer operator:testoperator' },
                 user: { id: 10 },
                 body: {
-                    recipe_id: 1,
-                    planned_quantity_liters: 200,
-                    actual_resources: [{ resource_id: 101, actual_quantity_used: 10 }, { resource_id: 102, actual_quantity_used: 15 }]
+                    recipeId: 1,
+                    expectedOutput: 200,
+                    actualResources: [{ resourceId: 101, quantity: 10 }, { resourceId: 102, quantity: 15 }]
                 }
             } as unknown as FastifyRequest
             const rep = createMockReply()
@@ -169,9 +172,9 @@ describe('Production Runs Module API', () => {
                 headers: { authorization: 'Bearer manager:testuser' },
                 user: { id: 10 },
                 body: {
-                    recipe_id: 2, // will return empty due to our mock constraint
-                    planned_quantity_liters: 200,
-                    actual_resources: [{ resource_id: 101, actual_quantity_used: 10 }]
+                    recipeId: 2, // will return empty due to our mock constraint
+                    expectedOutput: 200,
+                    actualResources: [{ resourceId: 101, quantity: 10 }]
                 }
             } as unknown as FastifyRequest
             const rep = createMockReply()
@@ -193,9 +196,9 @@ describe('Production Runs Module API', () => {
                 headers: { authorization: 'Bearer admin:testuser' },
                 user: { id: 10 },
                 body: {
-                    recipe_id: 1,
-                    planned_quantity_liters: 200,
-                    actual_resources: [{ resource_id: 999, actual_quantity_used: 10 }] // Invalid payload component for this recipe
+                    recipeId: 1,
+                    expectedOutput: 200,
+                    actualResources: [{ resourceId: 999, quantity: 10 }] // Invalid payload component for this recipe
                 }
             } as unknown as FastifyRequest
             const rep = createMockReply()
@@ -231,9 +234,9 @@ describe('Production Runs Module API', () => {
                 headers: { authorization: 'Bearer manager:testuser' },
                 user: { id: 10 },
                 body: {
-                    recipe_id: 1,
-                    planned_quantity_liters: 200,
-                    actual_resources: [{ resource_id: 101, actual_quantity_used: 10000 }] // enormous depletion expected to trip bound 
+                    recipeId: 1,
+                    expectedOutput: 200,
+                    actualResources: [{ resourceId: 101, quantity: 10000 }] // enormous depletion expected to trip bound 
                 }
             } as unknown as FastifyRequest
             const rep = createMockReply()
@@ -271,11 +274,11 @@ describe('Production Runs Module API', () => {
                 headers: { authorization: 'Bearer manager:testuser' },
                 user: { id: 10 },
                 body: {
-                    recipe_id: 1,
-                    planned_quantity_liters: 200,
-                    actual_resources: [
-                        { resource_id: 101, actual_quantity_used: 20 }, // Exact expected amount (200 / 100 * 10) = 20
-                        { resource_id: 102, actual_quantity_used: 50 }  // Extreme deviation! (200 / 100 * 15) = 30. Diff is 20 > 5% limit!
+                    recipeId: 1,
+                    expectedOutput: 200,
+                    actualResources: [
+                        { resourceId: 101, quantity: 20 }, // Exact expected amount (200 / 100 * 10) = 20
+                        { resourceId: 102, quantity: 50 }  // Extreme deviation! (200 / 100 * 15) = 30. Diff is 20 > 5% limit!
                     ]
                 }
             } as unknown as FastifyRequest

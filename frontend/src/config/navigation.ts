@@ -38,12 +38,12 @@ export const navigation: NavItem[] = [
     title: "Users",
     path: "/users",
     icon: Users,
-    roles: ["manager"],  // Manager only
+    roles: ["manager", "admin"],  // Manager and Admin
   },
   {
     title: "Settings",
     path: "/settings",
     icon: Settings,
-    roles: ["manager", "admin"],  // Manager only
+    roles: ["manager", "admin"],
   },
 ];

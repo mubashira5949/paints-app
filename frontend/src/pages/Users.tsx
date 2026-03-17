@@ -28,7 +28,6 @@ interface User {
   email: string;
   role: string;
   is_active: boolean;
-  last_login: string | null;
   created_at: string;
 }
 
@@ -37,6 +36,7 @@ interface UserSummary {
   managers: string;
   operators: string;
   sales: string;
+  client: string;
 }
 
 interface Role {
@@ -57,6 +57,8 @@ interface DeviceRequest {
 const MOCK_DEVICE_REQUESTS: DeviceRequest[] = [
   { id: 1, user: "Mubashira Naaz", device: "Chrome / Windows", location: "Mumbai, IN", requested_at: new Date(Date.now() - 2 * 60000).toISOString(), status: "pending" },
   { id: 2, user: "initial_manager", device: "Firefox / Mac", location: "Mumbai, IN", requested_at: new Date(Date.now() - 15 * 60000).toISOString(), status: "pending" },
+  { id: 3, user: "Sales Pro", device: "Safari / iPhone", location: "Bangalore, IN", requested_at: new Date(Date.now() - 45 * 60000).toISOString(), status: "pending" },
+  { id: 4, user: "Client Alpha", device: "Chrome / Android", location: "Delhi, IN", requested_at: new Date(Date.now() - 120 * 60000).toISOString(), status: "pending" },
 ];
 
 export default function Users() {
@@ -69,6 +71,8 @@ export default function Users() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [resetTargetUser, setResetTargetUser] = useState<User | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showAllUsers, setShowAllUsers] = useState(false);
+  const [showAllRequests, setShowAllRequests] = useState(false);
   const [deviceRequests, setDeviceRequests] = useState<DeviceRequest[]>(MOCK_DEVICE_REQUESTS);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -184,24 +188,12 @@ export default function Users() {
       case "manager": return "bg-purple-100 text-purple-700 border-purple-200";
       case "operator": return "bg-blue-100 text-blue-700 border-blue-200";
       case "sales": return "bg-emerald-100 text-emerald-700 border-emerald-200";
+      case "client": return "bg-amber-100 text-amber-700 border-amber-200";
       case "admin": return "bg-red-100 text-red-700 border-red-200";
       default: return "bg-slate-100 text-slate-700 border-slate-200";
     }
   };
 
-  const formatLastLogin = (dateStr: string | null) => {
-    if (!dateStr) return "Never";
-    const date = new Date(dateStr);
-    const diffMs = Date.now() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays === 1) return "Yesterday";
-    return date.toLocaleDateString();
-  };
 
   const formatRequestTime = (dateStr: string) => {
     const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
@@ -241,8 +233,7 @@ export default function Users() {
         </div>
       )}
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-5">
         <div className="rounded-2xl border border-t-4 border-t-blue-500 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Users</span>
@@ -266,10 +257,17 @@ export default function Users() {
         </div>
         <div className="rounded-2xl border border-t-4 border-t-emerald-500 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Sales Team</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Sales</span>
             <BadgeDollarSign className="h-5 w-5 text-emerald-400" />
           </div>
           <div className="text-3xl font-bold text-slate-900">{summary?.sales ?? 0}</div>
+        </div>
+        <div className="rounded-2xl border border-t-4 border-t-amber-500 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Clients</span>
+            <UsersIcon className="h-5 w-5 text-amber-400" />
+          </div>
+          <div className="text-3xl font-bold text-slate-900">{summary?.client ?? 0}</div>
         </div>
       </div>
 
@@ -278,7 +276,17 @@ export default function Users() {
         {/* Table toolbar */}
         <div className="p-5 border-b bg-slate-50 space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <h2 className="text-base font-bold text-slate-800">System Users</h2>
+            <div className="flex items-center gap-4">
+              <h2 className="text-base font-bold text-slate-800">System Users</h2>
+              {filteredUsers.length > 10 && (
+                <button 
+                  onClick={() => setShowAllUsers(!showAllUsers)}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  {showAllUsers ? 'View Less' : 'View All'}
+                </button>
+              )}
+            </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <input
@@ -292,7 +300,7 @@ export default function Users() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold text-slate-400 uppercase">Role:</span>
-            {["all", "manager", "operator", "sales"].map((r) => (
+            {["all", "manager", "operator", "sales", "client", "admin"].map((r) => (
               <button
                 key={r}
                 onClick={() => setRoleFilter(r)}
@@ -323,7 +331,6 @@ export default function Users() {
                 <th className="px-6 py-3 font-semibold text-[11px] uppercase tracking-wider">User</th>
                 <th className="px-6 py-3 font-semibold text-[11px] uppercase tracking-wider">Role</th>
                 <th className="px-6 py-3 font-semibold text-[11px] uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 font-semibold text-[11px] uppercase tracking-wider">Last Login</th>
                 <th className="px-6 py-3 font-semibold text-[11px] uppercase tracking-wider text-right">Actions</th>
               </tr>
             </thead>
@@ -362,7 +369,7 @@ export default function Users() {
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((user) => (
+                filteredUsers.slice(0, showAllUsers ? undefined : 10).map((user) => (
                   <tr key={user.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -387,12 +394,6 @@ export default function Users() {
                         {user.is_active ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
                         {user.is_active ? "Active" : "Disabled"}
                       </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                        <Clock className="h-3.5 w-3.5 text-slate-400" />
-                        {formatLastLogin(user.last_login)}
-                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex justify-end items-center gap-1.5">
@@ -433,11 +434,21 @@ export default function Users() {
               <p className="text-xs text-slate-500">Approve or reject new device login requests</p>
             </div>
           </div>
-          {deviceRequests.length > 0 && (
-            <span className="px-2 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
-              {deviceRequests.length} Pending
-            </span>
-          )}
+          <div className="flex items-center gap-4">
+            {deviceRequests.length > 10 && (
+              <button 
+                onClick={() => setShowAllRequests(!showAllRequests)}
+                className="text-sm text-amber-600 hover:text-amber-700 font-medium"
+              >
+                {showAllRequests ? 'View Less' : 'View All'}
+              </button>
+            )}
+            {deviceRequests.length > 0 && (
+              <span className="px-2 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                {deviceRequests.length} Pending
+              </span>
+            )}
+          </div>
         </div>
         {deviceRequests.length === 0 ? (
           <div className="py-12 flex flex-col items-center gap-3 text-center">
@@ -460,7 +471,7 @@ export default function Users() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {deviceRequests.map((req) => (
+                {deviceRequests.slice(0, showAllRequests ? undefined : 10).map((req) => (
                   <tr key={req.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">

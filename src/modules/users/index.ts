@@ -27,6 +27,7 @@ export default async function (fastifyRaw: FastifyInstance) {
         username: Type.Optional(Type.String()),
         email: Type.Optional(Type.String({ format: 'email' })),
         role: Type.Optional(Type.String()),
+        password: Type.Optional(Type.String({ minLength: 6 })),
         is_active: Type.Optional(Type.Boolean())
     })
 
@@ -136,7 +137,8 @@ export default async function (fastifyRaw: FastifyInstance) {
                         count(*) as total_users,
                         count(*) filter (where r.name = 'manager') as managers,
                         count(*) filter (where r.name = 'operator') as operators,
-                        count(*) filter (where r.name = 'sales') as sales
+                        count(*) filter (where r.name = 'sales') as sales,
+                        count(*) filter (where r.name = 'client') as client
                     FROM users u
                     JOIN roles r ON u.role_id = r.id
                 `)
@@ -207,6 +209,12 @@ export default async function (fastifyRaw: FastifyInstance) {
                         values.push(roleResult.rows[0].id)
                     }
                 }
+                if (updates.password) {
+                    const saltRounds = 10
+                    const passwordHash = await bcrypt.hash(updates.password, saltRounds)
+                    fields.push(`password_hash = $${index++}`)
+                    values.push(passwordHash)
+                }
 
                 if (fields.length === 0) {
                     return reply.status(400).send({ message: 'No fields to update' })
@@ -239,7 +247,7 @@ export default async function (fastifyRaw: FastifyInstance) {
      * Only accessible by users with 'manager' role.
      */
     fastify.delete('/users/:id', {
-        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        preHandler: [fastify.authenticate, authorizeRole(['manager', 'admin'])],
         schema: {
             params: UserIdSchema
         },
