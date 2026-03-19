@@ -44,27 +44,37 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Toggle states for tables
   const [showAllRuns, setShowAllRuns] = useState(false);
   const [showAllAlerts, setShowAllAlerts] = useState(false);
 
-  const fetchDashboardData = async (isBackgroundPolling = false) => {
+  const fetchDashboardData = async (isBackgroundPolling = false, signal?: AbortSignal) => {
+    // Prevent overlapping API calls
+    if (isFetching) return;
+
     // Only show global loading spinners on initial manual load
     if (!isBackgroundPolling && !data) {
       setIsLoading(true);
     }
+    setIsFetching(true);
 
     try {
-      const dashboardData = await apiRequest<DashboardData>("/api/dashboard");
+      const dashboardData = await apiRequest<DashboardData>("/api/dashboard", { signal });
       setData(dashboardData);
       setError(null); // Clear errors on success
-    } catch (err) {
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.log("Fetch aborted");
+        return;
+      }
       console.error("Failed to fetch dashboard data", err);
       setError("Failed to load dashboard data. Retrying in background...");
     } finally {
       setIsLoading(false);
+      setIsFetching(false);
     }
   };
 
@@ -109,13 +119,17 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    fetchDashboardData();
+    const controller = new AbortController();
+    fetchDashboardData(false, controller.signal);
 
     // Auto Refresh: Poll backend every 30 seconds for live updates
-    const interval = setInterval(() => fetchDashboardData(true), 30000);
+    const interval = setInterval(() => fetchDashboardData(true, controller.signal), 30000);
 
     // Cleanup interval on component unmount
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      controller.abort();
+    };
   }, []);
 
   return (
