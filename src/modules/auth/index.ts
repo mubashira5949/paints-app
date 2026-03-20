@@ -10,6 +10,7 @@ import { FastifyInstance } from 'fastify'
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
 import { Type } from '@sinclair/typebox'
 import bcrypt from 'bcrypt'
+import { getDeviceFromUserAgent, getLocationFromIp } from '../../utils/deviceInfo'
 
 export default async function (fastifyRaw: FastifyInstance) {
     const fastify = fastifyRaw.withTypeProvider<TypeBoxTypeProvider>()
@@ -69,6 +70,32 @@ export default async function (fastifyRaw: FastifyInstance) {
                     'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1',
                     [user.id]
                 )
+
+                // Dynamic Device Enrollment: Check if there's an approved enrollment for this device
+                const userAgent = request.headers['user-agent']
+                const ip = request.ip
+                const deviceName = getDeviceFromUserAgent(userAgent)
+                
+                const enrollmentCheck = await fastify.db.query(
+                    "SELECT id FROM device_enrollment_requests WHERE user_id = $1 AND device = $2 AND status = 'approved'",
+                    [user.id, deviceName]
+                )
+
+                if (enrollmentCheck.rows.length === 0) {
+                    // Check if there's already a pending request for this device to avoid duplicates
+                    const pendingCheck = await fastify.db.query(
+                        "SELECT id FROM device_enrollment_requests WHERE user_id = $1 AND device = $2 AND status = 'pending'",
+                        [user.id, deviceName]
+                    )
+                    
+                    if (pendingCheck.rows.length === 0) {
+                        const location = await getLocationFromIp(ip, request.headers['x-forwarded-for'] as string)
+                        await fastify.db.query(
+                            "INSERT INTO device_enrollment_requests (user_id, device, location, status) VALUES ($1, $2, $3, 'pending')",
+                            [user.id, deviceName, location]
+                        )
+                    }
+                }
 
                 /**
                  * Sign a JWT using the ES256 private key.

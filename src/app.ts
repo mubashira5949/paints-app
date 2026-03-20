@@ -19,6 +19,7 @@ dotenv.config()
  * Initialize Fastify server with logging enabled.
  */
 const fastify = Fastify({
+    trustProxy: true,
     logger: {
         transport: {
             target: 'pino-pretty'
