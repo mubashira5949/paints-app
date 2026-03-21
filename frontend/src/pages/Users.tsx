@@ -11,7 +11,6 @@ import {
   X,
   CheckCircle2,
   XCircle,
-  Clock,
   Mail,
   Power,
   KeyRound,
@@ -194,12 +193,6 @@ export default function Users() {
   };
 
 
-  const formatRequestTime = (dateStr: string) => {
-    const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
-    if (mins < 1) return "Just now";
-    if (mins < 60) return `${mins} mins ago`;
-    return `${Math.floor(mins / 60)}h ago`;
-  };
 
   return (
     <div className="space-y-8">

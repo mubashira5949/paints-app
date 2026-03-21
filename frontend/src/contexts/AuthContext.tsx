@@ -34,8 +34,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const token = localStorage.getItem("token");
       if (token) {
-        const decoded = jwtDecode<User>(token);
-        setUser(decoded);
+        const decoded = jwtDecode<User & { exp?: number }>(token);
+        
+        // Check if token is expired
+        if (decoded.exp && decoded.exp * 1000 < Date.now()) {
+          console.warn("Token expired, logging out");
+          localStorage.removeItem("token");
+          setUser(null);
+        } else {
+          setUser(decoded);
+        }
       } else {
         setUser(null);
       }
