@@ -788,7 +788,7 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 // 1. Fetch current run and validate volume integrity
                 const runResult = await client.query(
-                    `SELECT pr.actual_quantity_liters, pr.status, r.color_id 
+                    `SELECT pr.actual_quantity_liters, pr.planned_quantity_liters, pr.status, r.color_id 
                       FROM production_runs pr
                       JOIN recipes r ON pr.recipe_id = r.id
                       WHERE pr.id = $1`,
@@ -800,7 +800,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                     return reply.status(404).send({ error: 'Not Found', message: 'Production run not found' })
                 }
 
-                const { actual_quantity_liters, status, color_id } = runResult.rows[0]
+                const { actual_quantity_liters, planned_quantity_liters, status, color_id } = runResult.rows[0]
 
                 // Ensure we don't package volumes we didn't theoretically produce
                 let requestedVolumeLiters = 0
@@ -810,11 +810,12 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 // Check against actual_quantity. In a real application, you might also query previous packages
                 // allocated to this run ID if packaging happens in stages rather than one bulk mapping
-                if (requestedVolumeLiters > actual_quantity_liters) {
+                const limitVolume = actual_quantity_liters ?? planned_quantity_liters;
+                if (requestedVolumeLiters > limitVolume) {
                     await client.query('ROLLBACK')
                     return reply.status(400).send({
                         error: 'Bad Request',
-                        message: `Requested packaged volume (${requestedVolumeLiters}L) exceeds actual production batch limits (${actual_quantity_liters}L).`
+                        message: `Requested packaged volume (${requestedVolumeLiters}L) exceeds production batch limits (${limitVolume}L).`
                     })
                 }
 
@@ -839,6 +840,12 @@ export default async function (fastifyRaw: FastifyInstance) {
                         [color_id, pack.pack_size_liters, pack.quantity_units]
                     )
                 }
+
+                // 3. Finalize run status to 'packaging'
+                await client.query(
+                    `UPDATE production_runs SET status = 'packaging', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+                    [id]
+                )
 
                 await client.query('COMMIT')
 
