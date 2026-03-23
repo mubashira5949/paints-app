@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { apiRequest } from "../services/api";
-import { Plus, Beaker, Palette, X, AlertCircle } from "lucide-react";
+import { Plus, Beaker, Palette, X, AlertCircle, Edit, Trash2 } from "lucide-react";
 
 interface Color {
   id: number;
@@ -40,6 +40,9 @@ export default function Recipes() {
   
   const [isColorModalOpen, setIsColorModalOpen] = useState(false);
   const [isRecipeModalOpen, setIsRecipeModalOpen] = useState(false);
+  
+  const [editingColor, setEditingColor] = useState<Color | null>(null);
+  const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
   
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,23 +95,48 @@ export default function Recipes() {
     }
   }, [selectedColor]);
 
-  const handleCreateColor = async (e: React.FormEvent) => {
+  const handleSaveColor = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const newColor = await apiRequest<{ message: string; color: Color }>("/colors", {
-        method: "POST",
-        body: colorForm
-      });
-      setColors(prev => [newColor.color, ...prev]);
-      setSelectedColor(newColor.color);
+      if (editingColor) {
+        const updated = await apiRequest<{ message: string; color: Color }>(`/colors/${editingColor.id}`, {
+          method: "PUT",
+          body: colorForm
+        });
+        setColors(prev => prev.map(c => c.id === updated.color.id ? updated.color : c));
+        if (selectedColor?.id === updated.color.id) setSelectedColor(updated.color);
+      } else {
+        const newColor = await apiRequest<{ message: string; color: Color }>("/colors", {
+          method: "POST",
+          body: colorForm
+        });
+        setColors(prev => [newColor.color, ...prev]);
+        setSelectedColor(newColor.color);
+      }
       setIsColorModalOpen(false);
+      setEditingColor(null);
       setColorForm({ name: "", color_code: "#000000", description: "" });
     } catch (err: any) {
-      alert(err.message || "Failed to create color");
+      alert(err.message || "Failed to save color");
     }
   };
 
-  const handleCreateRecipe = async (e: React.FormEvent) => {
+  const handleDeleteColor = async (e: React.MouseEvent, colorId: number) => {
+    e.stopPropagation();
+    if (!confirm("Are you sure you want to delete this color? It might have active recipes.")) return;
+    try {
+      await apiRequest(`/colors/${colorId}`, { method: "DELETE" });
+      setColors(prev => prev.filter(c => c.id !== colorId));
+      if (selectedColor?.id === colorId) {
+        setSelectedColor(null);
+        setRecipes([]);
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to delete color");
+    }
+  };
+
+  const handleSaveRecipe = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedColor) return;
     
@@ -120,18 +148,31 @@ export default function Recipes() {
     }
 
     try {
-      await apiRequest("/recipes", {
-        method: "POST",
-        body: {
-          color_id: selectedColor.id,
-          name: recipeForm.name,
-          version: recipeForm.version,
-          batch_size_liters: Number(recipeForm.batch_size_liters),
-          resources: validResources
-        }
-      });
+      if (editingRecipe) {
+        await apiRequest(`/recipes/${editingRecipe.id}`, {
+          method: "PUT",
+          body: {
+            name: recipeForm.name,
+            version: recipeForm.version,
+            batch_size_liters: Number(recipeForm.batch_size_liters),
+            resources: validResources
+          }
+        });
+      } else {
+        await apiRequest("/recipes", {
+          method: "POST",
+          body: {
+            color_id: selectedColor.id,
+            name: recipeForm.name,
+            version: recipeForm.version,
+            batch_size_liters: Number(recipeForm.batch_size_liters),
+            resources: validResources
+          }
+        });
+      }
       fetchRecipes(selectedColor.id);
       setIsRecipeModalOpen(false);
+      setEditingRecipe(null);
       setRecipeForm({
         name: "",
         version: "1.0.0",
@@ -139,8 +180,40 @@ export default function Recipes() {
         resources: [{ resource_id: 0, quantity_required: 0 }]
       });
     } catch (err: any) {
-      alert(err.message || "Failed to create recipe");
+      alert(err.message || "Failed to save recipe");
     }
+  };
+
+  const handleDeleteRecipe = async (recipeId: number) => {
+    if (!confirm("Are you sure you want to delete this recipe? (This will also delete the associated color!)")) return;
+    try {
+      await apiRequest(`/recipes/${recipeId}`, { method: "DELETE" });
+      if (selectedColor) {
+        setColors(prev => prev.filter(c => c.id !== selectedColor.id));
+        setSelectedColor(null);
+        setRecipes([]);
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to delete recipe");
+    }
+  };
+
+  const openEditColor = (e: React.MouseEvent, color: Color) => {
+    e.stopPropagation();
+    setEditingColor(color);
+    setColorForm({ name: color.name, color_code: color.color_code || "#000000", description: color.description || "" });
+    setIsColorModalOpen(true);
+  };
+
+  const openEditRecipe = (recipe: Recipe) => {
+    setEditingRecipe(recipe);
+    setRecipeForm({
+      name: recipe.name,
+      version: recipe.version,
+      batch_size_liters: recipe.batch_size_liters,
+      resources: recipe.resources.length > 0 ? recipe.resources.map(r => ({ resource_id: r.resource_id, quantity_required: r.quantity_required })) : [{ resource_id: 0, quantity_required: 0 }]
+    });
+    setIsRecipeModalOpen(true);
   };
 
   const addResourceRow = () => {
@@ -202,7 +275,11 @@ export default function Recipes() {
               Colors
             </h2>
             <button
-              onClick={() => setIsColorModalOpen(true)}
+              onClick={() => {
+                setEditingColor(null);
+                setColorForm({ name: "", color_code: "#000000", description: "" });
+                setIsColorModalOpen(true);
+              }}
               className="p-1.5 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors"
               title="Add New Color"
             >
@@ -229,8 +306,16 @@ export default function Recipes() {
                     className="h-6 w-6 rounded-full border shadow-sm shrink-0"
                     style={{ backgroundColor: color.color_code || "#cbd5e1" }}
                   />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-slate-900 truncate">{color.name}</p>
+                  <div className="flex-1 min-w-0 flex justify-between items-center group">
+                    <p className="text-sm font-bold text-slate-900 truncate pr-2">{color.name}</p>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={(e) => openEditColor(e, color)} className="p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-blue-600 transition-colors">
+                        <Edit className="h-3.5 w-3.5" />
+                      </button>
+                      <button onClick={(e) => handleDeleteColor(e, color.id)} className="p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-red-600 transition-colors">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </button>
               ))
@@ -259,7 +344,11 @@ export default function Recipes() {
                   </div>
                 </div>
                 <button
-                  onClick={() => setIsRecipeModalOpen(true)}
+                  onClick={() => {
+                    setEditingRecipe(null);
+                    setRecipeForm({ name: "", version: "1.0.0", batch_size_liters: 100, resources: [{ resource_id: 0, quantity_required: 0 }] });
+                    setIsRecipeModalOpen(true);
+                  }}
                   className="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-2"
                 >
                   <Plus className="h-4 w-4" />
@@ -277,13 +366,21 @@ export default function Recipes() {
                   <div className="space-y-6">
                     {recipes.map((recipe) => (
                       <div key={recipe.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div className="p-4 border-b bg-slate-50/80 flex items-center justify-between">
+                        <div className="p-4 border-b bg-slate-50/80 flex items-center justify-between group">
                           <div>
                             <h3 className="text-base font-bold text-slate-900">{recipe.name}</h3>
                             <div className="flex items-center gap-3 text-xs text-slate-500 font-medium mt-1">
                               <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">v{recipe.version}</span>
                               <span>Batch Size: {recipe.batch_size_liters}L</span>
                             </div>
+                          </div>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => openEditRecipe(recipe)} className="p-1.5 hover:bg-white border border-transparent hover:border-slate-200 rounded text-slate-500 hover:text-blue-600 shadow-sm transition-all">
+                              <Edit className="h-4 w-4" />
+                            </button>
+                            <button onClick={() => handleDeleteRecipe(recipe.id)} className="p-1.5 hover:bg-white border border-transparent hover:border-slate-200 rounded text-slate-500 hover:text-red-600 shadow-sm transition-all">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
                           </div>
                         </div>
                         <div className="p-0">
@@ -323,13 +420,13 @@ export default function Recipes() {
             <div className="flex items-center justify-between p-5 border-b bg-slate-50">
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 <Palette className="h-5 w-5 text-blue-600" />
-                Add New Color
+                {editingColor ? "Edit Color" : "Add New Color"}
               </h3>
               <button onClick={() => setIsColorModalOpen(false)} className="text-slate-400 hover:bg-slate-200 p-1.5 rounded-full transition-colors">
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <form onSubmit={handleCreateColor} className="p-6 space-y-4">
+            <form onSubmit={handleSaveColor} className="p-6 space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-bold text-slate-700">Color Name</label>
                 <input required type="text" className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. Royal Blue" value={colorForm.name} onChange={(e) => setColorForm({ ...colorForm, name: e.target.value })} />
@@ -347,7 +444,7 @@ export default function Recipes() {
               </div>
               <div className="flex gap-3 pt-4 border-t border-slate-100">
                 <button type="button" onClick={() => setIsColorModalOpen(false)} className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors">Cancel</button>
-                <button type="submit" className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 transition-colors shadow-sm">Save Color</button>
+                <button type="submit" className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 transition-colors shadow-sm">{editingColor ? "Save Changes" : "Save Color"}</button>
               </div>
             </form>
           </div>
@@ -361,14 +458,14 @@ export default function Recipes() {
             <div className="flex items-center justify-between p-5 border-b bg-slate-50 shrink-0">
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 <Beaker className="h-5 w-5 text-blue-600" />
-                Create Recipe for {selectedColor.name}
+                {editingRecipe ? "Edit Recipe" : `Create Recipe for ${selectedColor.name}`}
               </h3>
               <button onClick={() => setIsRecipeModalOpen(false)} className="text-slate-400 hover:bg-slate-200 p-1.5 rounded-full transition-colors">
                 <X className="h-5 w-5" />
               </button>
             </div>
             
-            <form onSubmit={handleCreateRecipe} className="flex-1 overflow-y-auto p-6 space-y-6">
+            <form onSubmit={handleSaveRecipe} className="flex-1 overflow-y-auto p-6 space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div className="space-y-1.5">
                   <label className="text-sm font-bold text-slate-700">Recipe Name</label>
@@ -419,7 +516,7 @@ export default function Recipes() {
             
             <div className="flex gap-3 p-5 border-t bg-slate-50 shrink-0">
               <button type="button" onClick={() => setIsRecipeModalOpen(false)} className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors">Cancel</button>
-              <button type="submit" onClick={handleCreateRecipe} className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 transition-colors shadow-sm">Save Recipe</button>
+              <button type="submit" onClick={handleSaveRecipe} className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 transition-colors shadow-sm">{editingRecipe ? "Save Changes" : "Save Recipe"}</button>
             </div>
           </div>
         </div>

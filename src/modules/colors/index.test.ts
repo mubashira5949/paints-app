@@ -82,6 +82,12 @@ describe('Colors Module API', () => {
         post: (path: string, options: any) => {
             routes[`POST ${path}`] = options
         },
+        put: (path: string, options: any) => {
+            routes[`PUT ${path}`] = options
+        },
+        delete: (path: string, options: any) => {
+            routes[`DELETE ${path}`] = options
+        },
         withTypeProvider: () => mockFastify
     }
 
