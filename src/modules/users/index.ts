@@ -8,6 +8,7 @@ import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
 import { Type } from '@sinclair/typebox'
 import bcrypt from 'bcrypt'
 import { authorizeRole } from '../../utils/authorizeRole'
+import { getDeviceFromUserAgent, getLocationFromIp } from '../../utils/deviceInfo'
 
 export default async function (fastifyRaw: FastifyInstance) {
     const fastify = fastifyRaw.withTypeProvider<TypeBoxTypeProvider>()
@@ -71,6 +72,22 @@ export default async function (fastifyRaw: FastifyInstance) {
                 )
 
                 const newUser = userResult.rows[0]
+
+                // 4. Create an initial device enrollment request for the new user.
+                const userAgent = request.headers['user-agent']
+                const ip = request.ip
+                
+                fastify.log.info({ userAgent, ip }, 'Capturing device enrollment info')
+                
+                const device = getDeviceFromUserAgent(userAgent)
+                const location = await getLocationFromIp(ip, request.headers['x-forwarded-for'] as string)
+                
+                fastify.log.info({ device, location }, 'Processed enrollment info')
+
+                await fastify.db.query(
+                    "INSERT INTO device_enrollment_requests (user_id, device, location, status) VALUES ($1, $2, $3, 'pending')",
+                    [newUser.id, device, location]
+                )
 
                 // Return the newly created user (excluding sensitive data like password hash).
                 return reply.status(201).send({
@@ -281,6 +298,83 @@ export default async function (fastifyRaw: FastifyInstance) {
                     error: 'Internal Server Error',
                     message: 'Failed to delete user'
                 })
+            }
+        }
+    })
+
+    /**
+     * GET /users/device-requests - Get all pending device enrollment requests.
+     */
+    fastify.get('/users/device-requests', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager', 'admin'])],
+        handler: async (request, reply) => {
+            try {
+                const result = await fastify.db.query(`
+                    SELECT dr.id, u.username as user, dr.device, dr.location, dr.requested_at, dr.status
+                    FROM device_enrollment_requests dr
+                    JOIN users u ON dr.user_id = u.id
+                    WHERE dr.status = 'pending'
+                    ORDER BY dr.requested_at DESC
+                `)
+                return result.rows
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({
+                    error: 'Internal Server Error',
+                    message: 'Failed to fetch device requests'
+                })
+            }
+        }
+    })
+
+    /**
+     * POST /users/device-requests/:id/approve - Approve a device request.
+     */
+    fastify.post('/users/device-requests/:id/approve', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager', 'admin'])],
+        schema: {
+            params: UserIdSchema
+        },
+        handler: async (request, reply) => {
+            const { id } = request.params
+            try {
+                const result = await fastify.db.query(
+                    "UPDATE device_enrollment_requests SET status = 'approved' WHERE id = $1 RETURNING *",
+                    [id]
+                )
+                if (result.rows.length === 0) {
+                    return reply.status(404).send({ message: 'Request not found' })
+                }
+                return { message: 'Device request approved' }
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({ message: 'Failed to approve request' })
+            }
+        }
+    })
+
+    /**
+     * POST /users/device-requests/:id/reject - Reject a device request.
+     */
+    fastify.post('/users/device-requests/:id/reject', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager', 'admin'])],
+        schema: {
+            params: UserIdSchema
+        },
+        handler: async (request, reply) => {
+            const { id } = request.params
+            try {
+                const result = await fastify.db.query(
+                    "UPDATE device_enrollment_requests SET status = 'rejected' WHERE id = $1 RETURNING *",
+                    [id]
+                )
+                if (result.rows.length === 0) {
+                    return reply.status(404).send({ message: 'Request not found' })
+                }
+                return { message: 'Device request rejected' }
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({ message: 'Failed to reject request' })
             }
         }
     })

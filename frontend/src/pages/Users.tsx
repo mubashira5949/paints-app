@@ -54,12 +54,7 @@ interface DeviceRequest {
   status: "pending" | "approved" | "rejected";
 }
 
-const MOCK_DEVICE_REQUESTS: DeviceRequest[] = [
-  { id: 1, user: "Mubashira Naaz", device: "Chrome / Windows", location: "Mumbai, IN", requested_at: new Date(Date.now() - 2 * 60000).toISOString(), status: "pending" },
-  { id: 2, user: "initial_manager", device: "Firefox / Mac", location: "Mumbai, IN", requested_at: new Date(Date.now() - 15 * 60000).toISOString(), status: "pending" },
-  { id: 3, user: "Sales Pro", device: "Safari / iPhone", location: "Bangalore, IN", requested_at: new Date(Date.now() - 45 * 60000).toISOString(), status: "pending" },
-  { id: 4, user: "Client Alpha", device: "Chrome / Android", location: "Delhi, IN", requested_at: new Date(Date.now() - 120 * 60000).toISOString(), status: "pending" },
-];
+// Device requests are now fetched from the backend.
 
 export default function Users() {
   const [users, setUsers] = useState<User[]>([]);
@@ -73,7 +68,7 @@ export default function Users() {
   const [error, setError] = useState<string | null>(null);
   const [showAllUsers, setShowAllUsers] = useState(false);
   const [showAllRequests, setShowAllRequests] = useState(false);
-  const [deviceRequests, setDeviceRequests] = useState<DeviceRequest[]>(MOCK_DEVICE_REQUESTS);
+  const [deviceRequests, setDeviceRequests] = useState<DeviceRequest[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -100,10 +95,14 @@ export default function Users() {
     const data = await apiRequest<Role[]>("/roles");
     setRoles(data);
   };
+  const fetchDeviceRequests = async () => {
+    const data = await apiRequest<DeviceRequest[]>("/users/device-requests");
+    setDeviceRequests(data);
+  };
 
   useEffect(() => {
     setIsLoading(true);
-    Promise.allSettled([fetchUsers(), fetchSummary(), fetchRoles()]).finally(() =>
+    Promise.allSettled([fetchUsers(), fetchSummary(), fetchRoles(), fetchDeviceRequests()]).finally(() =>
       setIsLoading(false)
     );
   }, []);
@@ -466,7 +465,6 @@ export default function Users() {
                   <th className="px-6 py-3 font-semibold text-[11px] uppercase tracking-wider">User</th>
                   <th className="px-6 py-3 font-semibold text-[11px] uppercase tracking-wider">Device</th>
                   <th className="px-6 py-3 font-semibold text-[11px] uppercase tracking-wider">Location</th>
-                  <th className="px-6 py-3 font-semibold text-[11px] uppercase tracking-wider">Request Time</th>
                   <th className="px-6 py-3 font-semibold text-[11px] uppercase tracking-wider text-right">Action</th>
                 </tr>
               </thead>
@@ -492,16 +490,27 @@ export default function Users() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                        <Clock className="h-3.5 w-3.5 text-slate-400" />{formatRequestTime(req.requested_at)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
                       <div className="flex justify-end gap-2">
-                        <button onClick={() => setDeviceRequests((p) => p.filter((r) => r.id !== req.id))} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors">
+                        <button 
+                          onClick={async () => {
+                            try {
+                              await apiRequest(`/users/device-requests/${req.id}/approve`, { method: "POST" });
+                              await fetchDeviceRequests();
+                            } catch (err: any) { alert(err.message); }
+                          }} 
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors"
+                        >
                           Approve
                         </button>
-                        <button onClick={() => setDeviceRequests((p) => p.filter((r) => r.id !== req.id))} className="px-3 py-1.5 rounded-lg bg-white text-red-700 border border-red-100 text-xs font-semibold hover:bg-red-50 transition-colors">
+                        <button 
+                          onClick={async () => {
+                            try {
+                              await apiRequest(`/users/device-requests/${req.id}/reject`, { method: "POST" });
+                              await fetchDeviceRequests();
+                            } catch (err: any) { alert(err.message); }
+                          }} 
+                          className="px-3 py-1.5 rounded-lg bg-white text-red-700 border border-red-100 text-xs font-semibold hover:bg-red-50 transition-colors"
+                        >
                           Reject
                         </button>
                       </div>
