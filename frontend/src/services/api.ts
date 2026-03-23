@@ -11,6 +11,7 @@ interface RequestOptions {
   method?: HttpMethod;
   body?: any;
   headers?: Record<string, string>;
+  signal?: AbortSignal;
 }
 
 export async function apiRequest<T>(
@@ -30,6 +31,7 @@ export async function apiRequest<T>(
     method: options.method || "GET",
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
+    signal: options.signal,
   });
 
   if (!response.ok) {
