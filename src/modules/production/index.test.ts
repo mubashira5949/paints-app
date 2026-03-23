@@ -311,10 +311,10 @@ describe('Production Runs Module API', () => {
                 if (query === 'BEGIN' || query === 'COMMIT' || query === 'ROLLBACK') return
                 if (query.includes('FROM production_runs')) {
                     // Fake valid run yielding 100 liters safely
-                    if (params![0] === 1) return { rows: [{ actual_quantity_liters: 100, status: 'completed', color_id: 10 }] }
+                    if (params![0] === 1) return { rows: [{ actual_quantity_liters: 100, planned_quantity_liters: 100, status: 'completed', color_id: 10 }] }
                     return { rows: [] }
                 }
-                if (query.includes('INSERT')) return { rowCount: 1 }
+                if (query.includes('INSERT') || query.includes('UPDATE')) return { rowCount: 1 }
                 return { rows: [] }
             })
         })
@@ -365,9 +365,39 @@ describe('Production Runs Module API', () => {
             await postPackagingRoute.handler(req, rep)
 
             expect((rep as any).getStatusCode()).toBe(400)
-            expect((rep as any).getBody().message).toBe('Requested packaged volume (500L) exceeds actual production batch limits (100L).')
+            expect((rep as any).getBody().message).toBe('Requested packaged volume (500L) exceeds production batch limits (100L).')
             expect(mockClient.query).toHaveBeenCalledWith('ROLLBACK')
             expect(mockClient.release).toHaveBeenCalledTimes(1)
+        })
+
+        it('should successfully package based on planned_quantity if actual_quantity is null (lifecycle transition scenario)', async () => {
+            mockClient.query.mockImplementation(async (query: string, params?: any[]) => {
+                if (query === 'BEGIN' || query === 'COMMIT' || query === 'ROLLBACK') return
+                if (query.includes('FROM production_runs')) {
+                    // Mock run with actual=null, planned=100
+                    if (params![0] === 1) return { rows: [{ actual_quantity_liters: null, planned_quantity_liters: 100, status: 'completed', color_id: 10 }] }
+                    return { rows: [] }
+                }
+                if (query.includes('INSERT') || query.includes('UPDATE')) return { rowCount: 1 }
+                return { rows: [] }
+            })
+
+            const req = {
+                params: { id: 1 },
+                headers: { authorization: 'Bearer manager:testuser' },
+                user: { id: 10, username: 'testuser', role: 'manager' },
+                body: {
+                    packaging_details: [{ pack_size_liters: 5.0, quantity_units: 10 }] // 50L
+                }
+            } as unknown as FastifyRequest
+            const rep = createMockReply()
+
+            for (const handler of postPackagingRoute.preHandler) { await handler(req, rep) }
+            await postPackagingRoute.handler(req, rep)
+
+            expect((rep as any).getStatusCode()).toBe(201)
+            // Verify that the status update to 'packaging' was called
+            expect(mockClient.query).toHaveBeenCalledWith(expect.stringContaining("UPDATE production_runs SET status = 'packaging'"), expect.any(Array))
         })
     })
 })
