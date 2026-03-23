@@ -19,15 +19,14 @@ async function dbConnector(fastify: FastifyInstance) {
         }
     })
 
-    // Verify the database connection on startup.
-    try {
-        await pool.query('SELECT 1')
+    // Verify the database connection on startup in the background (non-blocking).
+    pool.query('SELECT 1').then(() => {
         fastify.log.info('Database connected successfully')
-    } catch (err) {
-        // Fail the startup if the database connection cannot be established.
-        fastify.log.error({ err }, 'Database connection failed')
-        throw err
-    }
+    }).catch(err => {
+        // Log error but don't fail the startup if the database connection cannot be established yet.
+        // The first database query will naturally retry/wait for the pool or fail then.
+        fastify.log.error({ err }, 'Database connection background check failed')
+    })
 
     /**
      * Decorate the Fastify instance with the pool object.
