@@ -35,6 +35,14 @@ export async function apiRequest<T>(
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.removeItem("token");
+      // Use window.location as a fallback to force a full reload and redirect to login
+      // if the app is stuck in an invalid state.
+      window.location.href = "/login";
+      return Promise.reject(new Error("Session expired. Please login again."));
+    }
+
     const errorData = await response.json().catch(() => ({}));
     const errorMessage = errorData.message || response.statusText;
     throw new Error(
