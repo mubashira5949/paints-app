@@ -124,8 +124,8 @@ export default function Login() {
               <AlertCircle className="h-5 w-5" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-bold flex items-center gap-2">
-                <span>❌</span>
+              <p className="text-sm font-bold flex items-center gap-2 text-red-700">
+                <AlertCircle className="h-4 w-4" />
                 {error}
               </p>
             </div>
