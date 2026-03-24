@@ -11,6 +11,7 @@ import ProductionRunForm from "./pages/ProductionRunForm";
 import Users from "./pages/Users";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
+import Recipes from "./pages/Recipes";
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
 
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="inventory" element={<Inventory />} />
+              <Route path="recipes" element={<Recipes />} />
               <Route path="production" element={<Production />} />
               <Route path="production/new" element={<ProductionRunForm />} />
               <Route path="production/:batchId" element={<ProductionDetail />} />

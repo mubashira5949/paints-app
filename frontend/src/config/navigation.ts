@@ -4,6 +4,7 @@ import {
   Package,
   Settings,
   Factory,
+  Beaker,
 } from "lucide-react";
 
 export type UserRole = "manager" | "operator" | "sales" | "admin" | "worker";
@@ -33,6 +34,12 @@ export const navigation: NavItem[] = [
     path: "/inventory",
     icon: Package,
     roles: ["manager", "operator", "sales", "admin", "worker"],
+  },
+  {
+    title: "Recipes",
+    path: "/recipes",
+    icon: Beaker,
+    roles: ["manager", "admin", "operator"],
   },
   {
     title: "Users",
