@@ -371,7 +371,7 @@ export default function Recipes() {
                             <h3 className="text-base font-bold text-slate-900">{recipe.name}</h3>
                             <div className="flex items-center gap-3 text-xs text-slate-500 font-medium mt-1">
                               <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">v{recipe.version}</span>
-                              <span>Batch Size: {recipe.batch_size_kg}L</span>
+                              <span>Batch Size: {recipe.batch_size_kg}kg</span>
                             </div>
                           </div>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
