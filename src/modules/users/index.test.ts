@@ -43,7 +43,8 @@ describe('User Module - Device Enrollment', () => {
     })
 
     it('POST /users/device-requests/:id/approve should update status to approved', async () => {
-        app.db.query.mockResolvedValueOnce({ rows: [{ id: 1, status: 'approved' }] })
+        app.db.query.mockResolvedValueOnce({ rows: [{ user_id: 1 }] }) // Device request approval
+        app.db.query.mockResolvedValueOnce({ rows: [] }) // User activation
 
         const response = await app.inject({
             method: 'POST',
@@ -51,9 +52,13 @@ describe('User Module - Device Enrollment', () => {
         })
 
         expect(response.statusCode).toBe(200)
-        expect(JSON.parse(response.payload)).toEqual({ message: 'Device request approved' })
+        expect(JSON.parse(response.payload)).toEqual({ message: 'Device request approved and user activated' })
         expect(app.db.query).toHaveBeenCalledWith(
             expect.stringContaining("UPDATE device_enrollment_requests SET status = 'approved'"),
+            [1]
+        )
+        expect(app.db.query).toHaveBeenCalledWith(
+            expect.stringContaining("UPDATE users SET is_active = TRUE"),
             [1]
         )
     })
@@ -91,6 +96,10 @@ describe('User Module - Device Enrollment', () => {
         })
 
         expect(response.statusCode).toBe(201)
+        expect(app.db.query).toHaveBeenCalledWith(
+            expect.stringContaining("INSERT INTO users (username, email, password_hash, role_id, is_active) VALUES ($1, $2, $3, $4, FALSE)"),
+            ['newuser', 'new@test.com', expect.any(String), 10]
+        )
         expect(app.db.query).toHaveBeenCalledWith(
             expect.stringContaining("INSERT INTO device_enrollment_requests"),
             [1, 'Test Device', 'Test Location']

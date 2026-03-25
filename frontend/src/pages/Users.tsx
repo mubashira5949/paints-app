@@ -77,7 +77,7 @@ export default function Users() {
     role: "operator",
     password: "",
     confirmPassword: "",
-    is_active: true,
+    is_active: false,
   });
   const [resetPassword, setResetPassword] = useState("");
   const [resetConfirmPassword, setResetConfirmPassword] = useState("");
@@ -158,8 +158,8 @@ export default function Users() {
       }
       setIsModalOpen(false);
       setEditingUser(null);
-      setFormData({ username: "", email: "", role: "operator", password: "", confirmPassword: "", is_active: true });
-      await Promise.allSettled([fetchUsers(), fetchSummary()]);
+      setFormData({ username: "", email: "", role: "operator", password: "", confirmPassword: "", is_active: false });
+      await Promise.allSettled([fetchUsers(), fetchSummary(), fetchDeviceRequests()]);
     } catch (err: any) { alert(err.message); }
   };
 
@@ -177,7 +177,7 @@ export default function Users() {
 
   const openAddModal = () => {
     setEditingUser(null);
-    setFormData({ username: "", email: "", role: "operator", password: "", confirmPassword: "", is_active: true });
+    setFormData({ username: "", email: "", role: "operator", password: "", confirmPassword: "", is_active: false });
     setIsModalOpen(true);
   };
 
@@ -488,7 +488,7 @@ export default function Users() {
                           onClick={async () => {
                             try {
                               await apiRequest(`/users/device-requests/${req.id}/approve`, { method: "POST" });
-                              await fetchDeviceRequests();
+                              await Promise.allSettled([fetchUsers(), fetchSummary(), fetchDeviceRequests()]);
                             } catch (err: any) { alert(err.message); }
                           }} 
                           className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors"
@@ -499,7 +499,7 @@ export default function Users() {
                           onClick={async () => {
                             try {
                               await apiRequest(`/users/device-requests/${req.id}/reject`, { method: "POST" });
-                              await fetchDeviceRequests();
+                              await Promise.allSettled([fetchUsers(), fetchSummary(), fetchDeviceRequests()]);
                             } catch (err: any) { alert(err.message); }
                           }} 
                           className="px-3 py-1.5 rounded-lg bg-white text-red-700 border border-red-100 text-xs font-semibold hover:bg-red-50 transition-colors"
