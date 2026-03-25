@@ -62,7 +62,7 @@ async function runTest() {
 
         // Create Recipe
         const recipeResult = await pool.query(
-            "INSERT INTO recipes (color_id, name, batch_size_liters) VALUES ($1, 'Test Recipe', 100) RETURNING id",
+            "INSERT INTO recipes (color_id, name, batch_size_kg) VALUES ($1, 'Test Recipe', 100) RETURNING id",
             [colorId]
         );
         const recipeId = recipeResult.rows[0].id;
@@ -82,7 +82,7 @@ async function runTest() {
             headers: authHeader,
             body: JSON.stringify({
                 recipe_id: recipeId,
-                planned_quantity_liters: 50, // Should use 5kg of pigment (50/100 * 10)
+                planned_quantity_kg: 50, // Should use 5kg of pigment (50/100 * 10)
                 actual_resources: [
                     { resource_id: resourceId, actual_quantity_used: 5 }
                 ]
@@ -115,7 +115,7 @@ async function runTest() {
             headers: authHeader,
             body: JSON.stringify({
                 packaging_details: [
-                    { pack_size_liters: 5, quantity_units: 10 } // 50L total
+                    { pack_size_kg: 5, quantity_units: 10 } // 50L total
                 ]
             })
         });
@@ -139,10 +139,10 @@ async function runTest() {
             throw new Error('Color not found in inventory!');
         }
 
-        console.log(`Finished stock: ${colorStock.total_quantity_units} units, ${colorStock.total_volume_liters}L`);
+        console.log(`Finished stock: ${colorStock.total_quantity_units} units, ${colorStock.total_volume_kg}L`);
 
-        if (colorStock.total_quantity_units !== 10 || parseFloat(colorStock.total_volume_liters) !== 50) {
-            throw new Error(`Finished stock mismatch! Expected 10 units/50L, got ${colorStock.total_quantity_units} units/${colorStock.total_volume_liters}L`);
+        if (colorStock.total_quantity_units !== 10 || parseFloat(colorStock.total_volume_kg) !== 50) {
+            throw new Error(`Finished stock mismatch! Expected 10 units/50L, got ${colorStock.total_quantity_units} units/${colorStock.total_volume_kg}L`);
         }
         console.log('✅ Finished stock verified!');
 

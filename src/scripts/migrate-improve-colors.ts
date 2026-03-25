@@ -1,6 +1,6 @@
 /**
  * Database Migration Script: Improve Colors Table
- * This script adds 'business_code', 'series', and 'min_threshold_liters' columns to the 'colors' table.
+ * This script adds 'business_code', 'series', and 'min_threshold_kg' columns to the 'colors' table.
  */
 
 import { Pool } from 'pg';
@@ -30,8 +30,8 @@ async function migrate() {
         // Add series column
         await pool.query('ALTER TABLE colors ADD COLUMN IF NOT EXISTS series VARCHAR(100)');
 
-        // Add min_threshold_liters column
-        await pool.query('ALTER TABLE colors ADD COLUMN IF NOT EXISTS min_threshold_liters DECIMAL(12, 4) DEFAULT 0');
+        // Add min_threshold_kg column
+        await pool.query('ALTER TABLE colors ADD COLUMN IF NOT EXISTS min_threshold_kg DECIMAL(12, 4) DEFAULT 0');
 
         console.log('Database migrated successfully: "colors" table updated.');
         process.exit(0);

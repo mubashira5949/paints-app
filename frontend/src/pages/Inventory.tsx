@@ -17,7 +17,7 @@ interface InventoryItem {
   color_code: string;
   business_code: string;
   series: string;
-  min_threshold_liters: number;
+  min_threshold_kg: number;
   packDistribution: { size: string, units: number }[];
   units: number;
   volume: number;

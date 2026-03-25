@@ -105,7 +105,7 @@ describe('Recipes Module API', () => {
                     color_id: params![0],
                     name: params![1],
                     version: params![2],
-                    batch_size_liters: params![3],
+                    batch_size_kg: params![3],
                     is_active: true,
                     created_at: new Date().toISOString()
                 }
@@ -135,7 +135,7 @@ describe('Recipes Module API', () => {
                 body: {
                     color_id: 1,
                     name: 'Test Setup 1',
-                    batch_size_liters: 100,
+                    batch_size_kg: 100,
                     resources: [{ resource_id: 10, quantity_required: 5 }]
                 }
             } as unknown as FastifyRequest
@@ -167,7 +167,7 @@ describe('Recipes Module API', () => {
                 body: {
                     color_id: 2,
                     name: 'Bad Route',
-                    batch_size_liters: 10,
+                    batch_size_kg: 10,
                     resources: [{ resource_id: 5, quantity_required: 2 }]
                 }
             } as unknown as FastifyRequest
@@ -187,7 +187,7 @@ describe('Recipes Module API', () => {
             const postRoute = routes['POST /']
             const req = {
                 headers: { authorization: 'Bearer user:testuser' },
-                body: { color_id: 1, name: 'T', batch_size_liters: 1, resources: [{ resource_id: 1, quantity_required: 1 }] }
+                body: { color_id: 1, name: 'T', batch_size_kg: 1, resources: [{ resource_id: 1, quantity_required: 1 }] }
             } as unknown as FastifyRequest
             const rep = createMockReply()
 
@@ -202,7 +202,7 @@ describe('Recipes Module API', () => {
 
     describe('GET /recipes/:colorId', () => {
         it('should join and return aggregated recipe resources for authenticated personnel', async () => {
-            mockRecipes.push({ id: 99, color_id: 55, name: 'Existing Recipe', version: '1.0.0', batch_size_liters: 50, is_active: true })
+            mockRecipes.push({ id: 99, color_id: 55, name: 'Existing Recipe', version: '1.0.0', batch_size_kg: 50, is_active: true })
             mockRecipeResources.push({ recipe_id: 99, resource_id: 101, quantity_required: 15 })
 
             const getRoute = routes['GET /:colorId']

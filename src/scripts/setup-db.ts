@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS colors (
     color_code VARCHAR(50), -- e.g., HEX, RAL code
     business_code VARCHAR(50), -- e.g., TC-01
     series VARCHAR(100), -- e.g., Water-based
-    min_threshold_liters DECIMAL(12, 4) DEFAULT 0,
+    min_threshold_kg DECIMAL(12, 4) DEFAULT 0,
     description TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS recipes (
     color_id INTEGER REFERENCES colors(id) NOT NULL,
     name VARCHAR(255) NOT NULL,
     version VARCHAR(20) DEFAULT '1.0.0',
-    batch_size_liters DECIMAL(12, 4) NOT NULL,
+    batch_size_kg DECIMAL(12, 4) NOT NULL,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -96,8 +96,8 @@ CREATE TABLE IF NOT EXISTS production_runs (
     id SERIAL PRIMARY KEY,
     recipe_id INTEGER REFERENCES recipes(id) NOT NULL,
     status VARCHAR(50) DEFAULT 'planned', -- planned, in_progress, completed, cancelled
-    planned_quantity_liters DECIMAL(12, 4) NOT NULL,
-    actual_quantity_liters DECIMAL(12, 4),
+    planned_quantity_kg DECIMAL(12, 4) NOT NULL,
+    actual_quantity_kg DECIMAL(12, 4),
     started_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
     created_by INTEGER REFERENCES users(id),
@@ -132,9 +132,9 @@ CREATE TABLE IF NOT EXISTS resource_stock_transactions (
 CREATE TABLE IF NOT EXISTS finished_stock (
     id SERIAL PRIMARY KEY,
     color_id INTEGER REFERENCES colors(id) NOT NULL,
-    pack_size_liters DECIMAL(5, 2) NOT NULL,
+    pack_size_kg DECIMAL(5, 2) NOT NULL,
     quantity_units INTEGER DEFAULT 0,
-    UNIQUE(color_id, pack_size_liters),
+    UNIQUE(color_id, pack_size_kg),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -142,10 +142,10 @@ CREATE TABLE IF NOT EXISTS finished_stock (
 CREATE TABLE IF NOT EXISTS finished_stock_transactions (
     id SERIAL PRIMARY KEY,
     color_id INTEGER REFERENCES colors(id) NOT NULL,
-    pack_size_liters DECIMAL(5, 2) NOT NULL,
+    pack_size_kg DECIMAL(5, 2) NOT NULL,
     transaction_type VARCHAR(50) NOT NULL, -- production_entry, sale, adjustment, return
     quantity_units INTEGER NOT NULL,
-    quantity_liters DECIMAL(12, 4) NOT NULL,
+    quantity_kg DECIMAL(12, 4) NOT NULL,
     reference_id INT, -- e.g., production_run_id or sale_id
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

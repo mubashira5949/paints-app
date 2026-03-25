@@ -63,7 +63,7 @@ describe('Production Runs Module API', () => {
 
             if (query.includes('FROM recipes')) {
                 // If it asks for recipe_id 1, mock success
-                if (params![0] === 1) return { rows: [{ id: 1, color_id: 10, batch_size_liters: 100 }] }
+                if (params![0] === 1) return { rows: [{ id: 1, color_id: 10, batch_size_kg: 100 }] }
                 return { rows: [] }
             }
             if (query.includes('FROM recipe_resources')) {
@@ -90,7 +90,7 @@ describe('Production Runs Module API', () => {
             // Re-mock DB for summary
             mockClient.query.mockImplementation(async (query: string) => {
                 if (query.includes('COUNT(*)')) return { rows: [{ count: '2' }] }
-                if (query.includes('SUM(actual_quantity_liters)')) return { rows: [{ total: '340' }] }
+                if (query.includes('SUM(actual_quantity_kg)')) return { rows: [{ total: '340' }] }
                 if (query.includes('expected_quantity')) {
                     return { rows: [{ total_expected: '100', total_actual: '102.4' }] }
                 }
@@ -115,7 +115,7 @@ describe('Production Runs Module API', () => {
             const body = (rep as any).getBody()
 
             expect(body.active_runs).toBe(2)
-            expect(body.todays_production_liters).toBe(340)
+            expect(body.todays_production_kg).toBe(340)
             expect(body.resource_consumption_kg).toBe(28)
             expect(body.production_variance_percent).toBeCloseTo(2.4)
         })
@@ -219,7 +219,7 @@ describe('Production Runs Module API', () => {
 
             // Re-mock DB connection locally to intercept the constraint during log insertion
             mockClient.query.mockImplementationOnce(async (q) => { if (q === 'BEGIN') return })
-                .mockImplementationOnce(async () => { return { rows: [{ id: 1, color_id: 10, batch_size_liters: 100 }] } }) // fetch recipe
+                .mockImplementationOnce(async () => { return { rows: [{ id: 1, color_id: 10, batch_size_kg: 100 }] } }) // fetch recipe
                 .mockImplementationOnce(async () => { return { rows: [{ resource_id: 101, quantity_required: 10 }] } }) // fetch blueprint
                 .mockImplementationOnce(async () => { return { rows: [{ id: 999 }] } }) // fake prod id
                 .mockImplementationOnce(async () => { }) // Insert production_resource_actuals ok
@@ -310,8 +310,8 @@ describe('Production Runs Module API', () => {
             mockClient.query.mockImplementation(async (query: string, params?: any[]) => {
                 if (query === 'BEGIN' || query === 'COMMIT' || query === 'ROLLBACK') return
                 if (query.includes('FROM production_runs')) {
-                    // Fake valid run yielding 100 liters safely
-                    if (params![0] === 1) return { rows: [{ actual_quantity_liters: 100, planned_quantity_liters: 100, status: 'completed', color_id: 10 }] }
+                    // Fake valid run yielding 100 kg safely
+                    if (params![0] === 1) return { rows: [{ actual_quantity_kg: 100, planned_quantity_kg: 100, status: 'completed', color_id: 10 }] }
                     return { rows: [] }
                 }
                 if (query.includes('INSERT') || query.includes('UPDATE')) return { rowCount: 1 }
@@ -326,8 +326,8 @@ describe('Production Runs Module API', () => {
                 user: { id: 10, username: 'testuser', role: 'manager' },
                 body: {
                     packaging_details: [
-                        { pack_size_liters: 1.0, quantity_units: 50 }, // 50L
-                        { pack_size_liters: 5.0, quantity_units: 10 }  // 50L (100L total)
+                        { pack_size_kg: 1.0, quantity_units: 50 }, // 50L
+                        { pack_size_kg: 5.0, quantity_units: 10 }  // 50L (100L total)
                     ]
                 }
             } as unknown as FastifyRequest
@@ -343,7 +343,7 @@ describe('Production Runs Module API', () => {
             const insertFinishedCalls = mockClient.query.mock.calls.filter(call => call[0].includes('INSERT INTO finished_stock('))
             expect(insertFinishedCalls.length).toBe(2)
 
-            // Assert upsert arguments [color_id, pack_size_liters, quantity_units]
+            // Assert upsert arguments [color_id, pack_size_kg, quantity_units]
             expect(insertFinishedCalls[0][1]).toEqual([10, 1.0, 50])
             expect(insertFinishedCalls[1][1]).toEqual([10, 5.0, 10])
         })
@@ -355,7 +355,7 @@ describe('Production Runs Module API', () => {
                 user: { id: 10, username: 'testuser', role: 'operator' },
                 body: {
                     packaging_details: [
-                        { pack_size_liters: 10.0, quantity_units: 50 } // 500L exceeds 100L capacity
+                        { pack_size_kg: 10.0, quantity_units: 50 } // 500L exceeds 100L capacity
                     ]
                 }
             } as unknown as FastifyRequest
@@ -375,7 +375,7 @@ describe('Production Runs Module API', () => {
                 if (query === 'BEGIN' || query === 'COMMIT' || query === 'ROLLBACK') return
                 if (query.includes('FROM production_runs')) {
                     // Mock run with actual=null, planned=100
-                    if (params![0] === 1) return { rows: [{ actual_quantity_liters: null, planned_quantity_liters: 100, status: 'completed', color_id: 10 }] }
+                    if (params![0] === 1) return { rows: [{ actual_quantity_kg: null, planned_quantity_kg: 100, status: 'completed', color_id: 10 }] }
                     return { rows: [] }
                 }
                 if (query.includes('INSERT') || query.includes('UPDATE')) return { rowCount: 1 }
@@ -387,7 +387,7 @@ describe('Production Runs Module API', () => {
                 headers: { authorization: 'Bearer manager:testuser' },
                 user: { id: 10, username: 'testuser', role: 'manager' },
                 body: {
-                    packaging_details: [{ pack_size_liters: 5.0, quantity_units: 10 }] // 50L
+                    packaging_details: [{ pack_size_kg: 5.0, quantity_units: 10 }] // 50L
                 }
             } as unknown as FastifyRequest
             const rep = createMockReply()

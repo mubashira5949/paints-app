@@ -60,10 +60,10 @@ describe('Inventory Module API', () => {
                     color_name: 'Ruby Red',
                     color_code: '#E0115F',
                     total_quantity_units: 60,
-                    total_volume_liters: '100.00',
+                    total_volume_kg: '100.00',
                     packs: [
-                        { pack_size_liters: '1.00', quantity_units: 50 },
-                        { pack_size_liters: '5.00', quantity_units: 10 }
+                        { pack_size_kg: '1.00', quantity_units: 50 },
+                        { pack_size_kg: '5.00', quantity_units: 10 }
                     ]
                 }
             ]
@@ -92,9 +92,9 @@ describe('Inventory Module API', () => {
             expect(body.data).toHaveLength(1)
             expect(body.data[0].color_name).toBe('Ruby Red')
             expect(body.data[0].total_quantity_units).toBe(60)
-            expect(body.data[0].total_volume_liters).toBe('100.00')
+            expect(body.data[0].total_volume_kg).toBe('100.00')
             expect(body.data[0].packs).toHaveLength(2)
-            expect(body.data[0].packs[0].pack_size_liters).toBe('1.00')
+            expect(body.data[0].packs[0].pack_size_kg).toBe('1.00')
             expect(body.data[0].packs[0].quantity_units).toBe(50)
         })
 

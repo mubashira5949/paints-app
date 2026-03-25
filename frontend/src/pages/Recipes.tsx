@@ -27,7 +27,7 @@ interface Recipe {
   color_id: number;
   name: string;
   version: string;
-  batch_size_liters: number;
+  batch_size_kg: number;
   resources: RecipeResource[];
   is_active: boolean;
 }
@@ -52,7 +52,7 @@ export default function Recipes() {
   const [recipeForm, setRecipeForm] = useState({
     name: "",
     version: "1.0.0",
-    batch_size_liters: 100,
+    batch_size_kg: 100,
     resources: [{ resource_id: 0, quantity_required: 0 }]
   });
 
@@ -154,7 +154,7 @@ export default function Recipes() {
           body: {
             name: recipeForm.name,
             version: recipeForm.version,
-            batch_size_liters: Number(recipeForm.batch_size_liters),
+            batch_size_kg: Number(recipeForm.batch_size_kg),
             resources: validResources
           }
         });
@@ -165,7 +165,7 @@ export default function Recipes() {
             color_id: selectedColor.id,
             name: recipeForm.name,
             version: recipeForm.version,
-            batch_size_liters: Number(recipeForm.batch_size_liters),
+            batch_size_kg: Number(recipeForm.batch_size_kg),
             resources: validResources
           }
         });
@@ -176,7 +176,7 @@ export default function Recipes() {
       setRecipeForm({
         name: "",
         version: "1.0.0",
-        batch_size_liters: 100,
+        batch_size_kg: 100,
         resources: [{ resource_id: 0, quantity_required: 0 }]
       });
     } catch (err: any) {
@@ -210,7 +210,7 @@ export default function Recipes() {
     setRecipeForm({
       name: recipe.name,
       version: recipe.version,
-      batch_size_liters: recipe.batch_size_liters,
+      batch_size_kg: recipe.batch_size_kg,
       resources: recipe.resources.length > 0 ? recipe.resources.map(r => ({ resource_id: r.resource_id, quantity_required: r.quantity_required })) : [{ resource_id: 0, quantity_required: 0 }]
     });
     setIsRecipeModalOpen(true);
@@ -346,7 +346,7 @@ export default function Recipes() {
                 <button
                   onClick={() => {
                     setEditingRecipe(null);
-                    setRecipeForm({ name: "", version: "1.0.0", batch_size_liters: 100, resources: [{ resource_id: 0, quantity_required: 0 }] });
+                    setRecipeForm({ name: "", version: "1.0.0", batch_size_kg: 100, resources: [{ resource_id: 0, quantity_required: 0 }] });
                     setIsRecipeModalOpen(true);
                   }}
                   className="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-2"
@@ -371,7 +371,7 @@ export default function Recipes() {
                             <h3 className="text-base font-bold text-slate-900">{recipe.name}</h3>
                             <div className="flex items-center gap-3 text-xs text-slate-500 font-medium mt-1">
                               <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">v{recipe.version}</span>
-                              <span>Batch Size: {recipe.batch_size_liters}L</span>
+                              <span>Batch Size: {recipe.batch_size_kg}L</span>
                             </div>
                           </div>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -476,8 +476,8 @@ export default function Recipes() {
                   <input required type="text" className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="1.0.0" value={recipeForm.version} onChange={(e) => setRecipeForm({ ...recipeForm, version: e.target.value })} />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <label className="text-sm font-bold text-slate-700">Base Batch Size (Liters)</label>
-                  <input required type="number" min={1} className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. 100" value={recipeForm.batch_size_liters} onChange={(e) => setRecipeForm({ ...recipeForm, batch_size_liters: Number(e.target.value) })} />
+                  <label className="text-sm font-bold text-slate-700">Base Batch Size (kg)</label>
+                  <input required type="number" min={1} className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. 100" value={recipeForm.batch_size_kg} onChange={(e) => setRecipeForm({ ...recipeForm, batch_size_kg: Number(e.target.value) })} />
                 </div>
               </div>
 

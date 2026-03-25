@@ -21,7 +21,7 @@ interface Color {
 interface Recipe {
   id: number;
   name: string;
-  batch_size_liters: number;
+  batch_size_kg: number;
 }
 
 interface Operator {
@@ -300,7 +300,7 @@ export default function ProductionRunForm() {
                 </option>
                 {recipes.map((r) => (
                   <option key={r.id} value={r.id}>
-                    {r.name} (batch: {r.batch_size_liters}L)
+                    {r.name} (batch: {r.batch_size_kg}L)
                   </option>
                 ))}
               </select>
@@ -321,7 +321,7 @@ export default function ProductionRunForm() {
           {/* Target Quantity */}
           <div className="space-y-1.5">
             <label className="text-sm font-semibold text-slate-700">
-              Target Quantity (Liters) <span className="text-red-500">*</span>
+              Target Quantity (kg) <span className="text-red-500">*</span>
             </label>
             <input
               type="number"
@@ -338,7 +338,7 @@ export default function ProductionRunForm() {
                 Standard batch size:{" "}
                 <strong>
                   {recipes.find((r) => r.id === Number(selectedRecipe))
-                    ?.batch_size_liters ?? "—"}
+                    ?.batch_size_kg ?? "—"}
                   L
                 </strong>
               </p>

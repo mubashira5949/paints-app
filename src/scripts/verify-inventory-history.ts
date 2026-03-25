@@ -33,7 +33,7 @@ async function seed() {
             // Seed a production entry
             await pool.query(`
                 INSERT INTO finished_stock_transactions 
-                (color_id, pack_size_liters, transaction_type, quantity_units, quantity_liters, reference_id, created_at)
+                (color_id, pack_size_kg, transaction_type, quantity_units, quantity_kg, reference_id, created_at)
                 VALUES ($1, 5.0, 'production_entry', 20, 100.0, 102, NOW() - INTERVAL '1 day')
             `, [color.id]);
 
@@ -41,7 +41,7 @@ async function seed() {
             if (color.name.toLowerCase().includes('red') || color.name.toLowerCase().includes('test')) {
                 await pool.query(`
                     INSERT INTO finished_stock_transactions 
-                    (color_id, pack_size_liters, transaction_type, quantity_units, quantity_liters, reference_id, created_at)
+                    (color_id, pack_size_kg, transaction_type, quantity_units, quantity_kg, reference_id, created_at)
                     VALUES ($1, 5.0, 'sale', 5, 25.0, 501, NOW() - INTERVAL '2 hours')
                 `, [color.id]);
             }
