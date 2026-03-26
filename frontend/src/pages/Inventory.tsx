@@ -17,6 +17,8 @@ interface InventoryItem {
   color_code: string;
   business_code: string;
   series: string;
+  hsn_code: string | null;
+  tags: string[] | null;
   min_threshold_liters: number;
   packDistribution: { size: string, units: number }[];
   units: number;
@@ -246,14 +248,24 @@ export default function Inventory() {
                             {item.status === 'critical' && "!"}
                           </div>
                           <div className="flex flex-col">
-                            <span className="font-extrabold text-[15px] text-slate-900">
+                             <span className="font-extrabold text-[15px] text-slate-900">
                               {item.color}
                             </span>
-                            <div className="flex gap-1.5 text-[11px] text-slate-500 font-medium">
-                              <span>Code: {item.business_code || 'N/A'}</span>
-                              <span>•</span>
-                              <span>Series: {item.series || 'N/A'}</span>
+                            <div className="flex flex-wrap gap-1.5 text-[11px] text-slate-500 font-medium mt-0.5">
+                              {item.business_code && <span>Code: {item.business_code}</span>}
+                              {item.business_code && item.series && <span>•</span>}
+                              {item.series && <span>Series: {item.series}</span>}
+                              {item.hsn_code && <><span>•</span><span>HSN: {item.hsn_code}</span></>}
                             </div>
+                            {item.tags && item.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {item.tags.map((tag, i) => (
+                                  <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide bg-blue-50 text-blue-700 border border-blue-100">
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -318,6 +330,37 @@ export default function Inventory() {
                       <tr className="bg-muted/30">
                         <td colSpan={6} className="p-6 border-b">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                             <div>
+                               <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                                 Product Specifications
+                               </h4>
+                               <div className="space-y-2 text-sm">
+                                 <div className="flex justify-between py-1 border-b border-border/50">
+                                   <span className="text-muted-foreground font-medium">Product Code</span>
+                                   <span className="font-mono font-semibold">{item.business_code || '—'}</span>
+                                 </div>
+                                 <div className="flex justify-between py-1 border-b border-border/50">
+                                   <span className="text-muted-foreground font-medium">HSN Code</span>
+                                   <span className="font-mono font-semibold">{item.hsn_code || '—'}</span>
+                                 </div>
+                                 <div className="flex justify-between py-1 border-b border-border/50">
+                                   <span className="text-muted-foreground font-medium">Ink Series</span>
+                                   <span className="font-semibold">{item.series || '—'}</span>
+                                 </div>
+                                 {item.tags && item.tags.length > 0 && (
+                                   <div className="pt-1">
+                                     <span className="text-muted-foreground font-medium text-xs block mb-1.5">Product Tags</span>
+                                     <div className="flex flex-wrap gap-1.5">
+                                       {item.tags.map((tag, i) => (
+                                         <span key={i} className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-100">
+                                           {tag}
+                                         </span>
+                                       ))}
+                                     </div>
+                                   </div>
+                                 )}
+                               </div>
+                             </div>
                             <div>
                               <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
                                 Pack Distribution

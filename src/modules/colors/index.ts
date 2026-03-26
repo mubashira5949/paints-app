@@ -14,7 +14,11 @@ export default async function (fastifyRaw: FastifyInstance) {
     const CreateColorSchema = Type.Object({
         name: Type.String(),
         color_code: Type.Optional(Type.String()),
-        description: Type.Optional(Type.String())
+        description: Type.Optional(Type.String()),
+        hsn_code: Type.Optional(Type.String()),
+        business_code: Type.Optional(Type.String()),
+        series: Type.Optional(Type.String()),
+        tags: Type.Optional(Type.Array(Type.String()))
     })
 
     const UpdateColorSchema = Type.Object({
@@ -36,7 +40,8 @@ export default async function (fastifyRaw: FastifyInstance) {
         handler: async (request, reply) => {
             try {
                 const result = await fastify.db.query(
-                    'SELECT id, name, color_code, description, created_at, updated_at FROM colors ORDER BY created_at DESC'
+                    `SELECT id, name, color_code, business_code, series, hsn_code, tags, description, created_at, updated_at
+                     FROM colors ORDER BY name ASC`
                 )
 
                 return reply.send(result.rows)
@@ -60,7 +65,7 @@ export default async function (fastifyRaw: FastifyInstance) {
             body: CreateColorSchema
         },
         handler: async (request, reply) => {
-            const { name, color_code, description } = request.body
+            const { name, color_code, description, hsn_code, business_code, series, tags } = request.body
             const client = await fastify.db.connect() // Get a client from the pool
 
             try {
@@ -68,8 +73,9 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 // Create the color entry
                 const insertResult = await client.query(
-                    'INSERT INTO colors (name, color_code, description) VALUES ($1, $2, $3) RETURNING *',
-                    [name, color_code, description]
+                    `INSERT INTO colors (name, color_code, description, hsn_code, business_code, series, tags)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+                    [name, color_code, description, hsn_code ?? null, business_code ?? null, series ?? null, JSON.stringify(tags ?? [])]
                 )
                 const newColor = insertResult.rows[0]
 

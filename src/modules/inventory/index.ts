@@ -36,6 +36,8 @@ export default async function (fastifyRaw: FastifyInstance) {
                             c.color_code,
                             c.business_code,
                             c.series,
+                            c.hsn_code,
+                            c.tags,
                             c.min_threshold_liters,
                             COALESCE(SUM(fs.quantity_units), 0)::integer AS total_quantity_units,
                             COALESCE(SUM(fs.quantity_units * fs.pack_size_liters), 0)::numeric AS total_volume_liters,
@@ -47,7 +49,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                             ) FILTER (WHERE fs.quantity_units > 0) AS packs
                         FROM colors c
                         LEFT JOIN finished_stock fs ON c.id = fs.color_id
-                        GROUP BY c.id, c.name, c.color_code, c.business_code, c.series, c.min_threshold_liters
+                        GROUP BY c.id, c.name, c.color_code, c.business_code, c.series, c.hsn_code, c.tags, c.min_threshold_liters
                     ),
                     last_production AS (
                         SELECT DISTINCT ON (color_id)
