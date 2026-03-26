@@ -7,6 +7,10 @@ interface Color {
   name: string;
   color_code: string;
   description: string;
+  business_code: string;
+  hsn_code: string;
+  series: string;
+  tags: string[];
 }
 
 interface Resource {
@@ -27,7 +31,7 @@ interface Recipe {
   color_id: number;
   name: string;
   version: string;
-  batch_size_liters: number;
+  batch_size_kg: number;
   resources: RecipeResource[];
   is_active: boolean;
 }
@@ -48,11 +52,11 @@ export default function Recipes() {
   const [error, setError] = useState<string | null>(null);
 
   // Forms
-  const [colorForm, setColorForm] = useState({ name: "", color_code: "#000000", description: "" });
+  const [colorForm, setColorForm] = useState({ name: "", color_code: "#000000", description: "", business_code: "", hsn_code: "", series: "", tags: "" });
   const [recipeForm, setRecipeForm] = useState({
     name: "",
     version: "1.0.0",
-    batch_size_liters: 100,
+    batch_size_kg: 100,
     resources: [{ resource_id: 0, quantity_required: 0 }]
   });
 
@@ -101,21 +105,27 @@ export default function Recipes() {
       if (editingColor) {
         const updated = await apiRequest<{ message: string; color: Color }>(`/colors/${editingColor.id}`, {
           method: "PUT",
-          body: colorForm
+          body: {
+            ...colorForm,
+            tags: colorForm.tags.split(",").map(t => t.trim()).filter(t => t !== "")
+          }
         });
         setColors(prev => prev.map(c => c.id === updated.color.id ? updated.color : c));
         if (selectedColor?.id === updated.color.id) setSelectedColor(updated.color);
       } else {
         const newColor = await apiRequest<{ message: string; color: Color }>("/colors", {
           method: "POST",
-          body: colorForm
+          body: {
+            ...colorForm,
+            tags: colorForm.tags.split(",").map(t => t.trim()).filter(t => t !== "")
+          }
         });
         setColors(prev => [newColor.color, ...prev]);
         setSelectedColor(newColor.color);
       }
       setIsColorModalOpen(false);
       setEditingColor(null);
-      setColorForm({ name: "", color_code: "#000000", description: "" });
+      setColorForm({ name: "", color_code: "#000000", description: "", business_code: "", hsn_code: "", series: "", tags: "" });
     } catch (err: any) {
       alert(err.message || "Failed to save color");
     }
@@ -154,7 +164,7 @@ export default function Recipes() {
           body: {
             name: recipeForm.name,
             version: recipeForm.version,
-            batch_size_liters: Number(recipeForm.batch_size_liters),
+            batch_size_kg: Number(recipeForm.batch_size_kg),
             resources: validResources
           }
         });
@@ -165,7 +175,7 @@ export default function Recipes() {
             color_id: selectedColor.id,
             name: recipeForm.name,
             version: recipeForm.version,
-            batch_size_liters: Number(recipeForm.batch_size_liters),
+            batch_size_kg: Number(recipeForm.batch_size_kg),
             resources: validResources
           }
         });
@@ -176,7 +186,7 @@ export default function Recipes() {
       setRecipeForm({
         name: "",
         version: "1.0.0",
-        batch_size_liters: 100,
+        batch_size_kg: 100,
         resources: [{ resource_id: 0, quantity_required: 0 }]
       });
     } catch (err: any) {
@@ -201,7 +211,15 @@ export default function Recipes() {
   const openEditColor = (e: React.MouseEvent, color: Color) => {
     e.stopPropagation();
     setEditingColor(color);
-    setColorForm({ name: color.name, color_code: color.color_code || "#000000", description: color.description || "" });
+    setColorForm({ 
+      name: color.name, 
+      color_code: color.color_code || "#000000", 
+      description: color.description || "",
+      business_code: color.business_code || "",
+      hsn_code: color.hsn_code || "",
+      series: color.series || "",
+      tags: color.tags ? color.tags.join(", ") : ""
+    });
     setIsColorModalOpen(true);
   };
 
@@ -210,7 +228,7 @@ export default function Recipes() {
     setRecipeForm({
       name: recipe.name,
       version: recipe.version,
-      batch_size_liters: recipe.batch_size_liters,
+      batch_size_kg: recipe.batch_size_kg,
       resources: recipe.resources.length > 0 ? recipe.resources.map(r => ({ resource_id: r.resource_id, quantity_required: r.quantity_required })) : [{ resource_id: 0, quantity_required: 0 }]
     });
     setIsRecipeModalOpen(true);
@@ -277,7 +295,7 @@ export default function Recipes() {
             <button
               onClick={() => {
                 setEditingColor(null);
-                setColorForm({ name: "", color_code: "#000000", description: "" });
+                setColorForm({ name: "", color_code: "#000000", description: "", business_code: "", hsn_code: "", series: "", tags: "" });
                 setIsColorModalOpen(true);
               }}
               className="p-1.5 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors"
@@ -306,15 +324,18 @@ export default function Recipes() {
                     className="h-6 w-6 rounded-full border shadow-sm shrink-0"
                     style={{ backgroundColor: color.color_code || "#cbd5e1" }}
                   />
-                  <div className="flex-1 min-w-0 flex justify-between items-center group">
+                  <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5 group">
                     <p className="text-sm font-bold text-slate-900 truncate pr-2">{color.name}</p>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={(e) => openEditColor(e, color)} className="p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-blue-600 transition-colors">
-                        <Edit className="h-3.5 w-3.5" />
-                      </button>
-                      <button onClick={(e) => handleDeleteColor(e, color.id)} className="p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-red-600 transition-colors">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] text-slate-500 font-mono uppercase truncate">{color.business_code || 'No Code'}</p>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={(e) => openEditColor(e, color)} className="p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-blue-600 transition-colors">
+                          <Edit className="h-3.5 w-3.5" />
+                        </button>
+                        <button onClick={(e) => handleDeleteColor(e, color.id)} className="p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-red-600 transition-colors">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </button>
@@ -346,7 +367,7 @@ export default function Recipes() {
                 <button
                   onClick={() => {
                     setEditingRecipe(null);
-                    setRecipeForm({ name: "", version: "1.0.0", batch_size_liters: 100, resources: [{ resource_id: 0, quantity_required: 0 }] });
+                    setRecipeForm({ name: "", version: "1.0.0", batch_size_kg: 100, resources: [{ resource_id: 0, quantity_required: 0 }] });
                     setIsRecipeModalOpen(true);
                   }}
                   className="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-2"
@@ -371,7 +392,7 @@ export default function Recipes() {
                             <h3 className="text-base font-bold text-slate-900">{recipe.name}</h3>
                             <div className="flex items-center gap-3 text-xs text-slate-500 font-medium mt-1">
                               <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">v{recipe.version}</span>
-                              <span>Batch Size: {recipe.batch_size_liters}L</span>
+                              <span>Batch Size: {recipe.batch_size_kg} KG</span>
                             </div>
                           </div>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -442,6 +463,24 @@ export default function Recipes() {
                 <label className="text-sm font-bold text-slate-700">Description (Optional)</label>
                 <textarea className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none" rows={3} placeholder="Additional details..." value={colorForm.description} onChange={(e) => setColorForm({ ...colorForm, description: e.target.value })} />
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-bold text-slate-700">Product Code</label>
+                  <input type="text" className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. TC-01" value={colorForm.business_code} onChange={(e) => setColorForm({ ...colorForm, business_code: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-bold text-slate-700">HSN Code</label>
+                  <input type="text" className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. 3208" value={colorForm.hsn_code} onChange={(e) => setColorForm({ ...colorForm, hsn_code: e.target.value })} />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-bold text-slate-700">Ink Series</label>
+                <input type="text" className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. Oil-based" value={colorForm.series} onChange={(e) => setColorForm({ ...colorForm, series: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-bold text-slate-700">Product Tags (comma separated)</label>
+                <input type="text" className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. oil based, series LCS" value={colorForm.tags} onChange={(e) => setColorForm({ ...colorForm, tags: e.target.value })} />
+              </div>
               <div className="flex gap-3 pt-4 border-t border-slate-100">
                 <button type="button" onClick={() => setIsColorModalOpen(false)} className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors">Cancel</button>
                 <button type="submit" className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 transition-colors shadow-sm">{editingColor ? "Save Changes" : "Save Color"}</button>
@@ -476,8 +515,8 @@ export default function Recipes() {
                   <input required type="text" className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="1.0.0" value={recipeForm.version} onChange={(e) => setRecipeForm({ ...recipeForm, version: e.target.value })} />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <label className="text-sm font-bold text-slate-700">Base Batch Size (Liters)</label>
-                  <input required type="number" min={1} className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. 100" value={recipeForm.batch_size_liters} onChange={(e) => setRecipeForm({ ...recipeForm, batch_size_liters: Number(e.target.value) })} />
+                  <label className="text-sm font-bold text-slate-700">Base Batch Size (KG)</label>
+                  <input required type="number" min={1} className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. 100" value={recipeForm.batch_size_kg} onChange={(e) => setRecipeForm({ ...recipeForm, batch_size_kg: Number(e.target.value) })} />
                 </div>
               </div>
 

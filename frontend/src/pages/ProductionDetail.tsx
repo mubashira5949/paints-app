@@ -33,17 +33,17 @@ interface ResourceExpected {
 }
 
 interface PackagingEntry {
-  pack_size_liters: number;
+  pack_size_kg: number;
   quantity_units: number;
-  volume_liters: number;
+  volume_kg: number;
 }
 
 interface RunDetail {
   id: number;
   batchId: string;
   status: string;
-  planned_quantity_liters: number;
-  actual_quantity_liters: number | null;
+  planned_quantity_kg: number;
+  actual_quantity_kg: number | null;
   variance: number;
   started_at: string | null;
   completed_at: string | null;
@@ -51,7 +51,7 @@ interface RunDetail {
   recipe_id: number;
   recipe_name: string;
   recipe_version: string;
-  batch_size_liters: number;
+  batch_size_kg: number;
   color_name: string;
   color_code: string;
   operator: string | null;
@@ -110,7 +110,7 @@ export default function ProductionDetail() {
   }
 
   const sc = statusConfig[run.status] ?? statusConfig.planned;
-  const packaged = run.packaging.reduce((s, p) => s + Number(p.volume_liters), 0);
+  const packaged = run.packaging.reduce((s, p) => s + Number(p.volume_kg), 0);
   const hasActuals = run.actual_resources.length > 0;
 
   return (
@@ -160,7 +160,7 @@ export default function ProductionDetail() {
             <span className="text-xs text-muted-foreground font-medium">Target</span>
             <Droplets className="w-3.5 h-3.5 text-blue-500" />
           </div>
-          <p className="text-2xl font-bold">{Number(run.planned_quantity_liters).toLocaleString()}<span className="text-sm font-normal text-muted-foreground ml-1">L</span></p>
+          <p className="text-2xl font-bold">{Number(run.planned_quantity_kg).toLocaleString()}<span className="text-sm font-normal text-muted-foreground ml-1">KG</span></p>
         </div>
         <div className="rounded-xl border bg-card p-4 shadow-sm">
           <div className="flex items-center justify-between pb-1">
@@ -168,10 +168,10 @@ export default function ProductionDetail() {
             <Activity className="w-3.5 h-3.5 text-green-500" />
           </div>
           <p className="text-2xl font-bold">
-            {run.actual_quantity_liters != null
-              ? Number(run.actual_quantity_liters).toLocaleString()
+            {run.actual_quantity_kg != null
+              ? Number(run.actual_quantity_kg).toLocaleString()
               : "—"}
-            <span className="text-sm font-normal text-muted-foreground ml-1">L</span>
+            <span className="text-sm font-normal text-muted-foreground ml-1">KG</span>
           </p>
         </div>
         <div className="rounded-xl border bg-card p-4 shadow-sm">
@@ -181,7 +181,7 @@ export default function ProductionDetail() {
           </div>
           <p className={`text-2xl font-bold ${run.variance > 0 ? "text-green-600" : run.variance < 0 ? "text-orange-500" : "text-muted-foreground"}`}>
             {run.variance > 0 ? "+" : ""}{Number(run.variance).toFixed(1)}
-            <span className="text-sm font-normal text-muted-foreground ml-1">L</span>
+            <span className="text-sm font-normal text-muted-foreground ml-1">KG</span>
           </p>
         </div>
         <div className="rounded-xl border bg-card p-4 shadow-sm">
@@ -189,7 +189,7 @@ export default function ProductionDetail() {
             <span className="text-xs text-muted-foreground font-medium">Packaged</span>
             <Box className="w-3.5 h-3.5 text-amber-500" />
           </div>
-          <p className="text-2xl font-bold">{packaged > 0 ? packaged.toLocaleString() : "—"}<span className="text-sm font-normal text-muted-foreground ml-1">L</span></p>
+          <p className="text-2xl font-bold">{packaged > 0 ? packaged.toLocaleString() : "—"}<span className="text-sm font-normal text-muted-foreground ml-1">KG</span></p>
         </div>
       </div>
 
@@ -211,7 +211,7 @@ export default function ProductionDetail() {
         </div>
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Batch Size</p>
-          <p className="font-medium">{Number(run.batch_size_liters).toLocaleString()} L</p>
+          <p className="font-medium">{Number(run.batch_size_kg).toLocaleString()} KG</p>
         </div>
         {run.started_at && (
           <div>
@@ -341,16 +341,16 @@ export default function ProductionDetail() {
                   <div className="p-1.5 bg-purple-50 rounded-md">
                     <Box className="w-4 h-4 text-purple-600" />
                   </div>
-                  <span className="font-semibold">{p.pack_size_liters} L</span>
+                  <span className="font-semibold">{p.pack_size_kg} KG</span>
                   <span className="text-muted-foreground">× {p.quantity_units} units</span>
                 </div>
-                <span className="font-mono text-muted-foreground text-xs">{Number(p.volume_liters).toLocaleString()} L total</span>
+                <span className="font-mono text-muted-foreground text-xs">{Number(p.volume_kg).toLocaleString()} KG total</span>
               </div>
             ))}
             <div className="flex items-center justify-between px-5 py-3 bg-slate-50 text-sm border-t">
               <span className="font-bold text-slate-700">Total Packaged</span>
-              <span className="font-bold font-mono">{packaged.toLocaleString()} L
-                <span className="text-muted-foreground font-normal ml-1.5">/ {Number(run.actual_quantity_liters ?? run.planned_quantity_liters).toLocaleString()} L</span>
+              <span className="font-bold font-mono">{packaged.toLocaleString()} KG
+                <span className="text-muted-foreground font-normal ml-1.5">/ {Number(run.actual_quantity_kg ?? run.planned_quantity_kg).toLocaleString()} KG</span>
               </span>
             </div>
           </div>

@@ -30,7 +30,7 @@ interface Recipe {
   id: number;
   name: string;
   version: string;
-  batch_size_liters: number;
+  batch_size_kg: number;
   resources: Resource[];
 }
 
@@ -51,15 +51,15 @@ interface HistoryRun {
   id: number;
   batchId: string;
   status: string;
-  planned_quantity_liters: number;
-  actual_quantity_liters: number;
+  planned_quantity_kg_kg: number;
+  actual_quantity_kg: number;
   variance: number;
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
   recipe_name: string;
   color_name: string;
-  packaging?: { pack_size_liters: number; quantity_units: number }[];
+  packaging?: { pack_size_kg: number; quantity_units: number }[];
 }
 
 interface ActiveRun {
@@ -99,7 +99,7 @@ export default function Production() {
   // New Run Form State
   const [selectedColor, setSelectedColor] = useState<number | "">("");
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
-  const [plannedQuantity, setPlannedQuantity] = useState<number>(0);
+  const [planned_quantity_kg, setPlannedQuantityKg] = useState<number>(0);
   const [actualResources, setActualResources] = useState<
     { resource_id: number; actual_quantity_used: number }[]
   >([]);
@@ -205,7 +205,7 @@ export default function Production() {
     const recipe = recipes.find((r) => r.id === Number(recipeId)) || null;
     setSelectedRecipe(recipe);
     if (recipe) {
-      setPlannedQuantity(Number(recipe.batch_size_liters));
+      setPlannedQuantityKg(Number(recipe.batch_size_kg));
       setActualResources(
         recipe.resources.map((res) => ({
           resource_id: res.resource_id,
@@ -216,9 +216,9 @@ export default function Production() {
   };
 
   const handleQuantityChange = (qty: number) => {
-    setPlannedQuantity(qty);
+    setPlannedQuantityKg(qty);
     if (selectedRecipe) {
-      const scaleFactor = qty / Number(selectedRecipe.batch_size_liters);
+      const scaleFactor = qty / Number(selectedRecipe.batch_size_kg);
       setActualResources(
         selectedRecipe.resources.map((res) => ({
           resource_id: res.resource_id,
@@ -240,7 +240,7 @@ export default function Production() {
         body: {
           recipeId: selectedRecipe.id,
           colorId: Number(selectedColor),
-          targetQty: plannedQuantity,
+          targetQty: planned_quantity_kg,
           operatorId: user?.id ?? 1,
         },
       });
@@ -298,7 +298,7 @@ export default function Production() {
           <div>
             <div className="text-3xl font-bold">
               {(metrics?.todayProduction ?? 0).toLocaleString()}{" "}
-              <span className="text-base text-muted-foreground font-normal">L</span>
+              <span className="text-base text-muted-foreground font-normal">KG</span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Paint produced today
@@ -340,7 +340,7 @@ export default function Production() {
               }`}
             >
               {(metrics?.variance ?? 0) > 0 ? "+" : ""}
-              {(metrics?.variance ?? 0).toFixed(1)}L
+              {(metrics?.variance ?? 0).toFixed(1)}KG
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Actual vs Planned (Today)
@@ -445,7 +445,7 @@ export default function Production() {
                           <td className="px-4 py-3 font-semibold text-slate-900">{run.color}</td>
                           <td className="px-4 py-3 text-slate-500 text-xs">{run.recipe}</td>
                           <td className="px-4 py-3 text-center font-bold text-slate-700">
-                            {Number(run.targetQty).toLocaleString()}L
+                            {Number(run.targetQty).toLocaleString()}KG
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${sc.className}`}>
@@ -647,8 +647,8 @@ export default function Production() {
                     </tr>
                   ) : (
                     (showAllHistory ? historyRuns : historyRuns.slice(0, 2)).map((run) => {
-                      const expected = run.planned_quantity_liters;
-                      const actual = run.actual_quantity_liters ?? expected;
+                      const expected = run.planned_quantity_kg_kg;
+                      const actual = run.actual_quantity_kg ?? expected;
                       // variance comes pre-computed from the server
                       const variance = typeof run.variance === "number" ? run.variance : (actual - expected);
                       const variancePct = expected > 0 ? (variance / expected) * 100 : 0;
@@ -715,17 +715,17 @@ export default function Production() {
                             {run.recipe_name}
                           </td>
                           <td className="p-4 text-center font-mono text-muted-foreground border-r">
-                            {Number(expected).toLocaleString()}L
+                            {Number(expected).toLocaleString()}KG
                           </td>
                           <td className="p-4 text-center font-mono text-foreground font-semibold border-r">
-                            {actual != null ? Number(actual).toLocaleString() + "L" : "—"}
+                            {actual != null ? Number(actual).toLocaleString() + "KG" : "—"}
                           </td>
                           <td className="p-4 text-center border-r">
                             <span
                               className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-bold ${varianceColorClass}`}
                             >
                               {variance > 0 ? "+" : ""}
-                              {Number(variance).toFixed(1)}L
+                              {Number(variance).toFixed(1)}KG
                             </span>
                           </td>
                           <td className="p-4 text-center border-r">
@@ -847,13 +847,13 @@ export default function Production() {
                   <div className="rounded-lg border bg-muted/30 p-4">
                     <div className="flex items-center justify-between mb-4">
                       <label className="text-sm font-medium">
-                        Planned Quantity (Liters)
+                        Planned Quantity (KG)
                       </label>
                       <input
                         type="number"
                         step="0.1"
                         className="w-24 rounded-md border bg-background px-3 py-1 text-sm text-right font-mono"
-                        value={plannedQuantity}
+                        value={planned_quantity_kg}
                         onChange={(e) =>
                           handleQuantityChange(Number(e.target.value))
                         }
@@ -875,8 +875,8 @@ export default function Production() {
                         </div>
                         {selectedRecipe.resources.map((res, idx) => {
                           const scaleFactor =
-                            plannedQuantity /
-                            Number(selectedRecipe.batch_size_liters);
+                            planned_quantity_kg /
+                            Number(selectedRecipe.batch_size_kg);
                           const expectedQty = Number(
                             (res.quantity_required * scaleFactor).toFixed(4),
                           );

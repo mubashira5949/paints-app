@@ -19,7 +19,7 @@ interface InventoryItem {
   series: string;
   hsn_code: string | null;
   tags: string[] | null;
-  min_threshold_liters: number;
+  min_threshold_kg: number;
   packDistribution: { size: string, units: number }[];
   units: number;
   volume: number;
@@ -292,7 +292,7 @@ export default function Inventory() {
                       </td>
                       <td className="p-6 text-right">
                         <div className="flex flex-col items-end">
-                          <span className="text-lg font-black text-slate-900 tracking-tight">{Number(item.volume).toFixed(1)}L</span>
+                          <span className="text-lg font-black text-slate-900 tracking-tight">{Number(item.volume).toFixed(1)}KG</span>
                           <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter mt-0.5">
                             Total Stock
                           </span>

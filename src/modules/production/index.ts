@@ -47,7 +47,7 @@ export default async function (fastifyRaw: FastifyInstance) {
     const PackagingDetailsSchema = Type.Object({
         packaging_details: Type.Array(
             Type.Object({
-                pack_size_liters: Type.Number({ exclusiveMinimum: 0 }),
+                pack_size_kg: Type.Number({ exclusiveMinimum: 0 }),
                 quantity_units: Type.Integer({ exclusiveMinimum: 0 })
             }),
             { minItems: 1 }
@@ -86,9 +86,9 @@ export default async function (fastifyRaw: FastifyInstance) {
                 )
                 const activeRuns = parseInt(activeRunsRes.rows[0].count, 10)
 
-                // 2. Today's Production — sum of actual_quantity_liters for completed runs today
+                // 2. Today's Production — sum of actual_quantity_kg for completed runs today
                 const todayProductionRes = await fastify.db.query(
-                    `SELECT COALESCE(SUM(actual_quantity_liters), 0) AS total
+                    `SELECT COALESCE(SUM(actual_quantity_kg), 0) AS total
                      FROM production_runs
                      WHERE DATE(created_at) = CURRENT_DATE AND status = 'completed'`
                 )
@@ -105,7 +105,7 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 // 4. Variance — (actual - planned) summed for today's completed runs
                 const varianceRes = await fastify.db.query(
-                    `SELECT COALESCE(SUM(actual_quantity_liters - planned_quantity_liters), 0) AS variance
+                    `SELECT COALESCE(SUM(actual_quantity_kg - planned_quantity_kg), 0) AS variance
                      FROM production_runs
                      WHERE DATE(created_at) = CURRENT_DATE AND status = 'completed'`
                 )
@@ -145,10 +145,10 @@ export default async function (fastifyRaw: FastifyInstance) {
                         pr.id,
                         'PR-' || pr.id AS "batchId",
                         pr.status,
-                        pr.planned_quantity_liters,
-                        pr.actual_quantity_liters,
-                        (COALESCE(pr.actual_quantity_liters, pr.planned_quantity_liters)
-                         - pr.planned_quantity_liters) AS variance,
+                        pr.planned_quantity_kg,
+                        pr.actual_quantity_kg,
+                        (COALESCE(pr.actual_quantity_kg, pr.planned_quantity_kg)
+                         - pr.planned_quantity_kg) AS variance,
                         pr.started_at,
                         pr.completed_at,
                         pr.created_at,
@@ -157,7 +157,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                         (
                             SELECT json_agg(
                                 json_build_object(
-                                    'pack_size_liters', fst.pack_size_liters,
+                                    'pack_size_kg', fst.pack_size_kg,
                                     'quantity_units', fst.quantity_units
                                 )
                             )
@@ -230,10 +230,10 @@ export default async function (fastifyRaw: FastifyInstance) {
                         pr.id,
                         'PR-' || pr.id AS "batchId",
                         pr.status,
-                        pr.planned_quantity_liters,
-                        pr.actual_quantity_liters,
-                        (COALESCE(pr.actual_quantity_liters, pr.planned_quantity_liters)
-                         - pr.planned_quantity_liters) AS variance,
+                        pr.planned_quantity_kg,
+                        pr.actual_quantity_kg,
+                        (COALESCE(pr.actual_quantity_kg, pr.planned_quantity_kg)
+                         - pr.planned_quantity_kg) AS variance,
                         pr.started_at,
                         pr.completed_at,
                         pr.created_at,
@@ -241,7 +241,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                         r.id AS recipe_id,
                         r.name AS recipe_name,
                         r.version AS recipe_version,
-                        r.batch_size_liters,
+                        r.batch_size_kg,
                         c.name AS color_name,
                         c.color_code,
                         u.username AS operator
@@ -267,12 +267,12 @@ export default async function (fastifyRaw: FastifyInstance) {
                         rr.resource_id,
                         res.name,
                         res.unit,
-                        ROUND((rr.quantity_required * $2 / r.batch_size_liters)::numeric, 4) AS expected_qty
+                        ROUND((rr.quantity_required * $2 / r.batch_size_kg)::numeric, 4) AS expected_qty
                     FROM recipe_resources rr
                     JOIN resources res ON rr.resource_id = res.id
                     JOIN recipes r ON rr.recipe_id = r.id
                     WHERE rr.recipe_id = $1
-                `, [run.recipe_id, run.planned_quantity_liters])
+                `, [run.recipe_id, run.planned_quantity_kg])
 
                 // 3. Actual resource consumption with variance
                 const actualResult = await fastify.db.query(`
@@ -292,11 +292,11 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 // 4. Packaging breakdown
                 const packagingResult = await fastify.db.query(`
-                    SELECT pack_size_liters, quantity_units,
-                           (pack_size_liters * quantity_units) AS volume_liters
+                    SELECT pack_size_kg, quantity_units,
+                           (pack_size_kg * quantity_units) AS volume_kg
                     FROM finished_stock_transactions
                     WHERE reference_id = $1 AND transaction_type = 'production_entry'
-                    ORDER BY pack_size_liters
+                    ORDER BY pack_size_kg
                 `, [id])
 
                 return reply.send({
@@ -329,9 +329,9 @@ export default async function (fastifyRaw: FastifyInstance) {
             const { search, color_id, status, from_date, to_date } = request.query
             try {
                 let query = `
-                    SELECT pr.id, pr.status, pr.planned_quantity_liters, pr.actual_quantity_liters, 
+                    SELECT pr.id, pr.status, pr.planned_quantity_kg, pr.actual_quantity_kg, 
                            pr.started_at, pr.completed_at, pr.created_at, r.name as recipe_name, c.name as color_name,
-                           (SELECT json_agg(json_build_object('pack_size_liters', fst.pack_size_liters, 'quantity_units', fst.quantity_units))
+                           (SELECT json_agg(json_build_object('pack_size_kg', fst.pack_size_kg, 'quantity_units', fst.quantity_units))
                             FROM finished_stock_transactions fst
                             WHERE fst.reference_id = pr.id AND fst.transaction_type = 'production_entry'
                            ) as packaging
@@ -395,7 +395,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                         'PR-' || pr.id AS "batchId",
                         c.name AS color,
                         r.name AS recipe,
-                        pr.planned_quantity_liters AS "targetQty",
+                        pr.planned_quantity_kg AS "targetQty",
                         pr.status,
                         pr.started_at,
                         pr.created_at,
@@ -506,7 +506,7 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 // 2. Today's Production (Yield)
                 const todaysProductionRes = await fastify.db.query(
-                    `SELECT SUM(actual_quantity_liters) as total 
+                    `SELECT SUM(actual_quantity_kg) as total 
                      FROM production_runs 
                      WHERE DATE(created_at) = CURRENT_DATE AND status = 'completed'`
                 )
@@ -538,8 +538,8 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 return reply.send({
                     active_runs: activeRuns,
-                    todays_production_liters: todaysProduction,
-                    resource_consumption_kg: resourceConsumption, // Assuming standard metric mix is kg/liters
+                    todays_production_kg: todaysProduction,
+                    resource_consumption_kg: resourceConsumption, // Assuming standard metric mix is kg/kg
                     production_variance_percent: variancePercentage
                 })
             } catch (err) {
@@ -574,7 +574,7 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 // 1. Fetch the recipe to validate it exists and get its batch specifications
                 const recipeResult = await client.query(
-                    'SELECT id, color_id, batch_size_liters FROM recipes WHERE id = $1',
+                    'SELECT id, color_id, batch_size_kg FROM recipes WHERE id = $1',
                     [recipeId]
                 )
 
@@ -611,7 +611,7 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 // 3. Create the overarching production run record
                 const productionRunResult = await client.query(
-                    `INSERT INTO production_runs (recipe_id, status, planned_quantity_liters, actual_quantity_liters, started_at, completed_at, created_by) 
+                    `INSERT INTO production_runs (recipe_id, status, planned_quantity_kg, actual_quantity_kg, started_at, completed_at, created_by) 
                       VALUES ($1, 'completed', $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $4)
                       RETURNING id, created_at`,
                     [recipeId, expectedOutput, expectedOutput, user_id] // assume perfectly yielded run
@@ -619,7 +619,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                 const runId = productionRunResult.rows[0].id
 
                 // 4. Iterate over actual resources: track actuals, write stock audit, deduct stock
-                const scaleFactor = expectedOutput / recipe.batch_size_liters
+                const scaleFactor = expectedOutput / recipe.batch_size_kg
 
                 for (const actual of actualResources) {
                     // Find expected mapping requirements
@@ -703,7 +703,7 @@ export default async function (fastifyRaw: FastifyInstance) {
             try {
                 // 1. Validate the recipe exists and belongs to the specified color
                 const recipeResult = await fastify.db.query(
-                    'SELECT id, color_id, batch_size_liters FROM recipes WHERE id = $1 AND color_id = $2',
+                    'SELECT id, color_id, batch_size_kg FROM recipes WHERE id = $1 AND color_id = $2',
                     [recipeId, colorId]
                 )
 
@@ -732,7 +732,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                 // 3. Create the production run with status = 'planned'
                 const runResult = await fastify.db.query(
                     `INSERT INTO production_runs
-                       (recipe_id, status, planned_quantity_liters, created_by)
+                       (recipe_id, status, planned_quantity_kg, created_by)
                      VALUES ($1, 'planned', $2, $3)
                      RETURNING id, status, created_at`,
                     [recipeId, targetQty, operatorId]
@@ -747,7 +747,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                      FROM recipe_resources rr
                      JOIN resources r ON rr.resource_id = r.id
                      WHERE rr.recipe_id = $1`,
-                    [recipeId, targetQty, recipe.batch_size_liters]
+                    [recipeId, targetQty, recipe.batch_size_kg]
                 )
 
                 return reply.status(201).send({
@@ -788,7 +788,7 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 // 1. Fetch current run and validate volume integrity
                 const runResult = await client.query(
-                    `SELECT pr.actual_quantity_liters, pr.planned_quantity_liters, pr.status, r.color_id 
+                    `SELECT pr.actual_quantity_kg, pr.planned_quantity_kg, pr.status, r.color_id 
                       FROM production_runs pr
                       JOIN recipes r ON pr.recipe_id = r.id
                       WHERE pr.id = $1`,
@@ -800,22 +800,22 @@ export default async function (fastifyRaw: FastifyInstance) {
                     return reply.status(404).send({ error: 'Not Found', message: 'Production run not found' })
                 }
 
-                const { actual_quantity_liters, planned_quantity_liters, status, color_id } = runResult.rows[0]
+                const { actual_quantity_kg, planned_quantity_kg, status, color_id } = runResult.rows[0]
 
                 // Ensure we don't package volumes we didn't theoretically produce
-                let requestedVolumeLiters = 0
+                let requestedVolumeKG = 0
                 for (const pack of packaging_details) {
-                    requestedVolumeLiters += (pack.pack_size_liters * pack.quantity_units)
+                    requestedVolumeKG += (pack.pack_size_kg * pack.quantity_units)
                 }
 
                 // Check against actual_quantity. In a real application, you might also query previous packages
                 // allocated to this run ID if packaging happens in stages rather than one bulk mapping
-                const limitVolume = actual_quantity_liters ?? planned_quantity_liters;
-                if (requestedVolumeLiters > limitVolume) {
+                const limitVolume = actual_quantity_kg ?? planned_quantity_kg;
+                if (requestedVolumeKG > limitVolume) {
                     await client.query('ROLLBACK')
                     return reply.status(400).send({
                         error: 'Bad Request',
-                        message: `Requested packaged volume (${requestedVolumeLiters}L) exceeds production batch limits (${limitVolume}L).`
+                        message: `Requested packaged volume (${requestedVolumeKG}KG) exceeds production batch limits (${limitVolume}KG).`
                     })
                 }
 
@@ -824,20 +824,20 @@ export default async function (fastifyRaw: FastifyInstance) {
                     // a. Audit tracking explicitly by bucket scale
                     await client.query(
                         `INSERT INTO finished_stock_transactions
-                        (color_id, pack_size_liters, transaction_type, quantity_units, quantity_liters, reference_id, notes)
+                        (color_id, pack_size_kg, transaction_type, quantity_units, quantity_kg, reference_id, notes)
                           VALUES($1, $2, 'production_entry', $3, $4, $5, 'Packaged from Production Run')`,
-                        [color_id, pack.pack_size_liters, pack.quantity_units, pack.pack_size_liters * pack.quantity_units, id]
+                        [color_id, pack.pack_size_kg, pack.quantity_units, pack.pack_size_kg * pack.quantity_units, id]
                     )
 
                     // b. Increment total finished stock count combining composite sizes natively
                     await client.query(
-                        `INSERT INTO finished_stock(color_id, pack_size_liters, quantity_units)
+                        `INSERT INTO finished_stock(color_id, pack_size_kg, quantity_units)
                           VALUES($1, $2, $3)
-                          ON CONFLICT(color_id, pack_size_liters) 
+                          ON CONFLICT(color_id, pack_size_kg) 
                           DO UPDATE SET 
                             quantity_units = finished_stock.quantity_units + EXCLUDED.quantity_units,
                         updated_at = CURRENT_TIMESTAMP`,
-                        [color_id, pack.pack_size_liters, pack.quantity_units]
+                        [color_id, pack.pack_size_kg, pack.quantity_units]
                     )
                 }
 

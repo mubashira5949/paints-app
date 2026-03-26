@@ -4,11 +4,11 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: process.env.DATABASE_URKG,
     ssl: { rejectUnauthorized: false }
 });
 
-const API_URL = `http://localhost:${process.env.PORT || 3000}`;
+const API_URKG = `http://localhost:${process.env.PORT || 3000}`;
 
 async function runTest() {
     console.log('🚀 Starting Sprint 1 Workflow Test...');
@@ -16,7 +16,7 @@ async function runTest() {
     try {
         // 1. Login as manager
         console.log('🔑 Logging in as manager...');
-        const loginResponse = await fetch(`${API_URL}/auth/login`, {
+        const loginResponse = await fetch(`${API_URKG}/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -33,7 +33,7 @@ async function runTest() {
         const authHeader = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
         console.log('✅ Login successful!');
 
-        // 2. Prepare Test Data via SQL
+        // 2. Prepare Test Data via SQKG
         console.log('📊 Preparing test data...');
 
         // Clean up previous test data
@@ -62,12 +62,12 @@ async function runTest() {
 
         // Create Recipe
         const recipeResult = await pool.query(
-            "INSERT INTO recipes (color_id, name, batch_size_liters) VALUES ($1, 'Test Recipe', 100) RETURNING id",
+            "INSERT INTO recipes (color_id, name, batch_size_kg) VALUES ($1, 'Test Recipe', 100) RETURNING id",
             [colorId]
         );
         const recipeId = recipeResult.rows[0].id;
 
-        // Map Resource to Recipe (10kg for 100L)
+        // Map Resource to Recipe (10kg for 100KG)
         await pool.query(
             "INSERT INTO recipe_resources (recipe_id, resource_id, quantity_required) VALUES ($1, $2, 10)",
             [recipeId, resourceId]
@@ -77,12 +77,12 @@ async function runTest() {
 
         // 3. Execute Production Run via API
         console.log('🏗️ Executing Production Run...');
-        const productionResponse = await fetch(`${API_URL}/production-runs`, {
+        const productionResponse = await fetch(`${API_URKG}/production-runs`, {
             method: 'POST',
             headers: authHeader,
             body: JSON.stringify({
                 recipe_id: recipeId,
-                planned_quantity_liters: 50, // Should use 5kg of pigment (50/100 * 10)
+                planned_quantity_kg: 50, // Should use 5kg of pigment (50/100 * 10)
                 actual_resources: [
                     { resource_id: resourceId, actual_quantity_used: 5 }
                 ]
@@ -110,12 +110,12 @@ async function runTest() {
 
         // 5. Execute Packaging via API
         console.log('📦 Executing Packaging...');
-        const packagingResponse = await fetch(`${API_URL}/production-runs/${production_run_id}/packaging`, {
+        const packagingResponse = await fetch(`${API_URKG}/production-runs/${production_run_id}/packaging`, {
             method: 'POST',
             headers: authHeader,
             body: JSON.stringify({
                 packaging_details: [
-                    { pack_size_liters: 5, quantity_units: 10 } // 50L total
+                    { pack_size_kg: 5, quantity_units: 10 } // 50KG total
                 ]
             })
         });
@@ -128,7 +128,7 @@ async function runTest() {
 
         // 6. Verify Finished Stock
         console.log('🔍 Verifying finished stock...');
-        const inventoryResponse = await fetch(`${API_URL}/inventory/finished-stock`, {
+        const inventoryResponse = await fetch(`${API_URKG}/inventory/finished-stock`, {
             headers: authHeader
         });
 
@@ -139,10 +139,10 @@ async function runTest() {
             throw new Error('Color not found in inventory!');
         }
 
-        console.log(`Finished stock: ${colorStock.total_quantity_units} units, ${colorStock.total_volume_liters}L`);
+        console.log(`Finished stock: ${colorStock.total_quantity_units} units, ${colorStock.total_weight_kg}KG`);
 
-        if (colorStock.total_quantity_units !== 10 || parseFloat(colorStock.total_volume_liters) !== 50) {
-            throw new Error(`Finished stock mismatch! Expected 10 units/50L, got ${colorStock.total_quantity_units} units/${colorStock.total_volume_liters}L`);
+        if (colorStock.total_quantity_units !== 10 || parseFloat(colorStock.total_weight_kg) !== 50) {
+            throw new Error(`Finished stock mismatch! Expected 10 units/50KG, got ${colorStock.total_quantity_units} units/${colorStock.total_weight_kg}KG`);
         }
         console.log('✅ Finished stock verified!');
 

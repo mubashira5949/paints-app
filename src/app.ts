@@ -179,6 +179,9 @@ fastify.get('/health', async (request, reply) => {
     }
 })
 
+
+
+
 /**
  * Function to start the Fastify server.
  */
