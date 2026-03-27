@@ -190,11 +190,9 @@ export default function ProductionPackaging() {
             style={{ width: `${Math.min((allocated / displayBatchVolume) * 100, 100)}%` }}
           />
         </div>
-        <p className={`text-xs ${isOverAllocated ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
           {isOverAllocated
             ? `⚠ Over-allocated by ${(allocated - displayBatchVolume).toFixed(1)}${unitPref}`
             : `${remaining.toFixed(1)}${unitPref} remaining`}
-        </p>
       </div>
 
       {/* Success state */}
