@@ -44,6 +44,12 @@ export default async function (fastifyRaw: FastifyInstance) {
         id: Type.Integer()
     })
 
+    const EditRunSchema = Type.Object({
+        recipeId: Type.Optional(Type.Integer()),
+        targetQty: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+        operatorId: Type.Optional(Type.Integer())
+    })
+
     const PackagingDetailsSchema = Type.Object({
         packaging_details: Type.Array(
             Type.Object({
@@ -485,6 +491,97 @@ export default async function (fastifyRaw: FastifyInstance) {
                 return reply.status(500).send({
                     error: 'Internal Server Error',
                     message: 'Failed to update production run status'
+                })
+            }
+        }
+    })
+
+    /**
+     * PATCH /production-runs/:id - Edit an active run's details.
+     * Accessible by 'admin', 'manager', or 'operator' roles.
+     * Can only edit if status is 'planned' or 'running'.
+     */
+    fastify.patch('/:id', {
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'operator'])],
+        schema: {
+            params: RunIdParamSchema,
+            body: EditRunSchema
+        },
+        handler: async (request, reply) => {
+            const { id } = request.params
+            const { recipeId, targetQty, operatorId } = request.body
+
+            try {
+                // Fetch current status
+                const current = await fastify.db.query(
+                    'SELECT status FROM production_runs WHERE id = $1',
+                    [id]
+                )
+
+                if (current.rows.length === 0) {
+                    return reply.status(404).send({ error: 'Not Found', message: 'Production run not found' })
+                }
+
+                const currentStatus = current.rows[0].status
+
+                if (currentStatus !== 'planned' && currentStatus !== 'running') {
+                    return reply.status(400).send({
+                        error: 'Bad Request',
+                        message: `Cannot edit a production run that is '${currentStatus}'`
+                    })
+                }
+
+                // If recipeId is provided, validate it
+                if (recipeId) {
+                    const recipeCheck = await fastify.db.query('SELECT id FROM recipes WHERE id = $1', [recipeId])
+                    if (recipeCheck.rows.length === 0) {
+                        return reply.status(400).send({ error: 'Bad Request', message: 'Invalid recipe ID' })
+                    }
+                }
+
+                // If operatorId is provided, validate it
+                if (operatorId) {
+                    const opCheck = await fastify.db.query('SELECT id FROM users WHERE id = $1', [operatorId])
+                    if (opCheck.rows.length === 0) {
+                        return reply.status(400).send({ error: 'Bad Request', message: 'Invalid operator ID' })
+                    }
+                }
+
+                // Build update query
+                const updates: string[] = []
+                const params: any[] = []
+                let paramIdx = 1
+
+                if (recipeId !== undefined) {
+                    updates.push(`recipe_id = $${paramIdx++}`)
+                    params.push(recipeId)
+                }
+                if (targetQty !== undefined) {
+                    updates.push(`planned_quantity_kg = $${paramIdx++}`)
+                    params.push(targetQty)
+                }
+                if (operatorId !== undefined) {
+                    updates.push(`created_by = $${paramIdx++}`)
+                    params.push(operatorId)
+                }
+
+                if (updates.length > 0) {
+                    params.push(id)
+                    await fastify.db.query(
+                        `UPDATE production_runs SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramIdx}`,
+                        params
+                    )
+                }
+
+                return reply.send({
+                    message: 'Production run updated successfully',
+                    production_run_id: id
+                })
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({
+                    error: 'Internal Server Error',
+                    message: 'Failed to update production run'
                 })
             }
         }

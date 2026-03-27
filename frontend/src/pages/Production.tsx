@@ -17,6 +17,7 @@ import {
   Eye,
   CheckCircle2,
   Loader2,
+  Pencil,
 } from "lucide-react";
 
 interface Resource {
@@ -103,6 +104,12 @@ export default function Production() {
   const [actualResources, setActualResources] = useState<
     { resource_id: number; actual_quantity_used: number }[]
   >([]);
+
+  // Edit Run State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingRun, setEditingRun] = useState<ActiveRun | null>(null);
+  const [editTargetQty, setEditTargetQty] = useState<number>(0);
+  const [isEditing, setIsEditing] = useState(false);
 
 
   const fetchMetrics = async () => {
@@ -251,6 +258,28 @@ export default function Production() {
       setSelectedRecipe(null);
     } catch (err: any) {
       alert(err.message);
+    }
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRun) return;
+
+    setIsEditing(true);
+    try {
+      await apiRequest(`/production-runs/${editingRun.id}`, {
+        method: "PATCH",
+        body: {
+          targetQty: editTargetQty,
+        },
+      });
+      setIsEditModalOpen(false);
+      setEditingRun(null);
+      await Promise.all([fetchActiveRuns(), fetchMetrics(), fetchHistory()]);
+    } catch (err: any) {
+      alert(err.message || "Failed to update target quantity");
+    } finally {
+      setIsEditing(false);
     }
   };
 
@@ -458,6 +487,20 @@ export default function Production() {
                                 <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
                               ) : (
                                 <>
+                                  {/* Edit: when planned or running */}
+                                  {(run.status === "planned" || run.status === "running") && (
+                                    <button
+                                      onClick={() => {
+                                        setEditingRun(run);
+                                        setEditTargetQty(run.targetQty);
+                                        setIsEditModalOpen(true);
+                                      }}
+                                      title="Edit"
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors shadow-sm"
+                                    >
+                                      <Pencil className="w-3 h-3" /> Edit
+                                    </button>
+                                  )}
                                   {/* Start: only when planned or paused */}
                                   {(run.status === "planned" || run.status === "paused") && (
                                     <button
@@ -940,6 +983,55 @@ export default function Production() {
                 >
                   <Play className="mr-2 h-4 w-4" />
                   Start Production
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Production Run Modal */}
+      {isEditModalOpen && editingRun && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-card w-full max-w-md rounded-xl shadow-2xl border overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-xl font-bold">Edit Run: {editingRun.batchId}</h3>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            <form onSubmit={handleEditSubmit} className="p-6 space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">Target Quantity (kg)</label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  required
+                  value={editTargetQty}
+                  onChange={(e) => setEditTargetQty(Number(e.target.value))}
+                  className="w-full rounded-md border text-sm p-2 outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div className="pt-4 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-4 py-2 text-sm font-semibold border rounded-lg hover:bg-slate-50 text-slate-700 transition-colors"
+                  disabled={isEditing}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isEditing || editTargetQty <= 0}
+                  className="px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
+                >
+                  {isEditing ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Save Changes
                 </button>
               </div>
             </form>
