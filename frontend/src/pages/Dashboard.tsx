@@ -46,6 +46,7 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
   // Toggle states for tables
   const [showAllRuns, setShowAllRuns] = useState(false);
@@ -64,6 +65,7 @@ export default function Dashboard() {
     try {
       const dashboardData = await apiRequest<DashboardData>("/api/dashboard", { signal });
       setData(dashboardData);
+      setLastUpdated(new Date().toLocaleTimeString());
       setError(null); // Clear errors on success
     } catch (err: any) {
       if (err.name === 'AbortError') {
@@ -150,6 +152,12 @@ export default function Dashboard() {
           <h1 className="text-3xl font-bold tracking-tight">
             Paint Production Management System
           </h1>
+          {lastUpdated && (
+            <div className="ml-auto flex items-center gap-2 text-xs font-medium text-muted-foreground bg-slate-100 px-2 py-1 rounded-full shadow-sm">
+              <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+              Last sync: {lastUpdated}
+            </div>
+          )}
         </div>
         <p className="mt-2 text-muted-foreground">
           System health, factory operations, and production metrics at a glance.

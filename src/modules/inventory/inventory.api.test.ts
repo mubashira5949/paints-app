@@ -55,9 +55,9 @@ describe('Inventory API Module', () => {
 
             // Mock DB responses
             mockFastify.db.query.mockImplementation((queryText: string) => {
-                if (queryText.includes('COALESCE(SUM(quantity_units * pack_size_liters), 0)')) {
+                if (queryText.includes('COALESCE(SUM(quantity_units * pack_size_kg), 0)')) {
                     return Promise.resolve({
-                        rows: [{ totalVolume: 146, packagedUnits: 22 }]
+                        rows: [{ totalMass: 146, packagedUnits: 22 }]
                     })
                 }
                 if (queryText.includes('SELECT COUNT(*) as "lowStockColors"')) {
@@ -72,7 +72,7 @@ describe('Inventory API Module', () => {
             const result = (rep as any).getBody()
 
             expect(result).toEqual({
-                totalVolume: 146,
+                totalMass: 146,
                 packagedUnits: 22,
                 lowStockColors: 2
             })
@@ -93,11 +93,11 @@ describe('Inventory API Module', () => {
                         color: 'Blue 401',
                         series: 'Water Based',
                         packDistribution: [
-                            { size: '5L', units: 10 },
-                            { size: '8L', units: 12 }
+                            { size: '5kg', units: 10 },
+                            { size: '8kg', units: 12 }
                         ],
                         units: 22,
-                        volume: 146,
+                        mass: 146,
                         status: 'low'
                     }
                 ]

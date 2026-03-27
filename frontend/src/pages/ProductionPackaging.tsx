@@ -16,14 +16,14 @@ interface RunMeta {
   id: number;
   batchId: string;
   status: string;
-  planned_quantity_liters: number;
-  actual_quantity_liters: number | null;
+  planned_quantity_kg: number;
+  actual_quantity_kg: number | null;
   color_name: string;
   recipe_name: string;
 }
 
 interface PackRow {
-  pack_size_liters: string;
+  pack_size_kg: string;
   quantity_units: string;
 }
 
@@ -42,8 +42,8 @@ export default function ProductionPackaging() {
 
   // Pack rows — start with two common sizes
   const [rows, setRows] = useState<PackRow[]>([
-    { pack_size_liters: "5", quantity_units: "" },
-    { pack_size_liters: "10", quantity_units: "" },
+    { pack_size_kg: "5", quantity_units: "" },
+    { pack_size_kg: "10", quantity_units: "" },
   ]);
 
   const fetchRun = useCallback(async () => {
@@ -62,11 +62,11 @@ export default function ProductionPackaging() {
     fetchRun();
   }, [fetchRun]);
 
-  const batchVolume = run?.actual_quantity_liters ?? run?.planned_quantity_liters ?? 0;
+  const batchVolume = run?.actual_quantity_kg ?? run?.planned_quantity_kg ?? 0;
 
   // Compute allocated volume from valid rows
   const allocated = rows.reduce((sum, r) => {
-    const size = parseFloat(r.pack_size_liters);
+    const size = parseFloat(r.pack_size_kg);
     const qty = parseInt(r.quantity_units);
     if (!isNaN(size) && !isNaN(qty) && size > 0 && qty > 0) {
       return sum + size * qty;
@@ -78,7 +78,7 @@ export default function ProductionPackaging() {
   const isOverAllocated = allocated > batchVolume;
 
   const addRow = () => {
-    setRows((prev) => [...prev, { pack_size_liters: "", quantity_units: "" }]);
+    setRows((prev) => [...prev, { pack_size_kg: "", quantity_units: "" }]);
   };
 
   const removeRow = (idx: number) => {
@@ -99,7 +99,7 @@ export default function ProductionPackaging() {
     setSubmitErr(null);
 
     const validRows = rows.filter((r) => {
-      const size = parseFloat(r.pack_size_liters);
+      const size = parseFloat(r.pack_size_kg);
       const qty = parseInt(r.quantity_units);
       return !isNaN(size) && !isNaN(qty) && size > 0 && qty > 0;
     });
@@ -120,7 +120,7 @@ export default function ProductionPackaging() {
         method: "POST",
         body: {
           packaging_details: validRows.map((r) => ({
-            pack_size_liters: parseFloat(r.pack_size_liters),
+            pack_size_kg: parseFloat(r.pack_size_kg),
             quantity_units: parseInt(r.quantity_units),
           })),
         },
@@ -221,7 +221,7 @@ export default function ProductionPackaging() {
 
             <div className="divide-y">
               {rows.map((row, idx) => {
-                const size = parseFloat(row.pack_size_liters);
+                const size = parseFloat(row.pack_size_kg);
                 const qty = parseInt(row.quantity_units);
                 const rowVolume = !isNaN(size) && !isNaN(qty) && size > 0 && qty > 0 ? size * qty : null;
 
@@ -229,15 +229,15 @@ export default function ProductionPackaging() {
                   <div key={idx} className="flex items-center gap-3 px-4 py-3">
                     <div className="flex-1">
                       <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
-                        Pack Size (L)
+                        Pack Size (kg)
                       </label>
                       <input
                         type="number"
                         min="0.1"
                         step="0.1"
                         placeholder="e.g. 5"
-                        value={row.pack_size_liters}
-                        onChange={(e) => updateRow(idx, "pack_size_liters", e.target.value)}
+                        value={row.pack_size_kg}
+                        onChange={(e) => updateRow(idx, "pack_size_kg", e.target.value)}
                         className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 outline-none"
                       />
                     </div>

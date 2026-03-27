@@ -41,7 +41,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                     `SELECT u.id, u.username, u.email, u.password_hash, r.name AS role
                      FROM users u
                      JOIN roles r ON u.role_id = r.id
-                     WHERE (u.email = $1 OR u.username = $1)
+                     WHERE (LOWER(u.email) = LOWER($1) OR LOWER(u.username) = LOWER($1))
                        AND u.is_active = TRUE
                      LIMIT 1`,
                     [identifier]
