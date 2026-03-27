@@ -78,7 +78,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                         SELECT 
                             'B-' || pr.id as "batchId", 
                             c.name as color, 
-                            pr.actual_quantity_liters::float as output, 
+                            pr.actual_quantity_kg::float as output, 
                             u.username as operator
                         FROM production_runs pr
                         JOIN recipes r ON pr.recipe_id = r.id

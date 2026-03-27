@@ -55,7 +55,7 @@ describe('Inventory API Module', () => {
 
             // Mock DB responses
             mockFastify.db.query.mockImplementation((queryText: string) => {
-                if (queryText.includes('COALESCE(SUM(quantity_units * pack_size_liters), 0)')) {
+                if (queryText.includes('COALESCE(SUM(quantity_units * pack_size_kg), 0)')) {
                     return Promise.resolve({
                         rows: [{ totalVolume: 146, packagedUnits: 22 }]
                     })

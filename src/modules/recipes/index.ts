@@ -19,7 +19,7 @@ export default async function (fastifyRaw: FastifyInstance) {
         color_id: Type.Integer(),
         name: Type.String(),
         version: Type.Optional(Type.String({ default: '1.0.0' })),
-        batch_size_liters: Type.Number(),
+        batch_size_kg: Type.Number(),
         resources: Type.Array(
             Type.Object({
                 resource_id: Type.Integer(),
@@ -32,7 +32,7 @@ export default async function (fastifyRaw: FastifyInstance) {
     const UpdateRecipeSchema = Type.Object({
         name: Type.Optional(Type.String()),
         version: Type.Optional(Type.String()),
-        batch_size_liters: Type.Optional(Type.Number()),
+        batch_size_kg: Type.Optional(Type.Number()),
         resources: Type.Optional(
             Type.Array(
                 Type.Object({
@@ -68,7 +68,7 @@ export default async function (fastifyRaw: FastifyInstance) {
             try {
                 // Fetch the recipes
                 const recipesResult = await fastify.db.query(
-                    `SELECT id, name, version, batch_size_liters, created_at, updated_at 
+                    `SELECT id, name, version, batch_size_kg, created_at, updated_at 
                      FROM recipes 
                      WHERE color_id = $1 AND is_active = TRUE 
                      ORDER BY created_at DESC`,
@@ -133,7 +133,7 @@ export default async function (fastifyRaw: FastifyInstance) {
             body: CreateRecipeSchema
         },
         handler: async (request, reply) => {
-            const { color_id, name, version, batch_size_liters, resources } = request.body
+            const { color_id, name, version, batch_size_kg, resources } = request.body
 
             // We need a transaction block to ensure both the recipe and its resources are safely committed.
             let client
@@ -144,10 +144,10 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 // 1. Insert the new recipe
                 const recipeResult = await client.query(
-                    `INSERT INTO recipes (color_id, name, version, batch_size_liters) 
+                    `INSERT INTO recipes (color_id, name, version, batch_size_kg) 
                      VALUES ($1, $2, $3, $4) 
-                     RETURNING id, color_id, name, version, batch_size_liters, is_active, created_at`,
-                    [color_id, name, version || '1.0.0', batch_size_liters]
+                     RETURNING id, color_id, name, version, batch_size_kg, is_active, created_at`,
+                    [color_id, name, version || '1.0.0', batch_size_kg]
                 )
 
                 const newRecipe = recipeResult.rows[0]
@@ -297,7 +297,7 @@ export default async function (fastifyRaw: FastifyInstance) {
         },
         handler: async (request, reply) => {
             const { id } = request.params
-            const { name, version, batch_size_liters, resources } = request.body
+            const { name, version, batch_size_kg, resources } = request.body
 
             let client
             try {
@@ -317,9 +317,9 @@ export default async function (fastifyRaw: FastifyInstance) {
                     updates.push(`version = $${paramIdx++}`)
                     values.push(version)
                 }
-                if (batch_size_liters !== undefined) {
-                    updates.push(`batch_size_liters = $${paramIdx++}`)
-                    values.push(batch_size_liters)
+                if (batch_size_kg !== undefined) {
+                    updates.push(`batch_size_kg = $${paramIdx++}`)
+                    values.push(batch_size_kg)
                 }
 
                 if (updates.length > 0) {

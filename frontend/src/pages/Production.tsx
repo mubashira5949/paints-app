@@ -30,7 +30,7 @@ interface Recipe {
   id: number;
   name: string;
   version: string;
-  batch_size_liters: number;
+  batch_size_kg: number;
   resources: Resource[];
 }
 
@@ -51,15 +51,15 @@ interface HistoryRun {
   id: number;
   batchId: string;
   status: string;
-  planned_quantity_liters: number;
-  actual_quantity_liters: number;
+  planned_quantity_kg: number;
+  actual_quantity_kg: number;
   variance: number;
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
   recipe_name: string;
   color_name: string;
-  packaging?: { pack_size_liters: number; quantity_units: number }[];
+  packaging?: { pack_size_kg: number; quantity_units: number }[];
 }
 
 interface ActiveRun {
@@ -205,7 +205,7 @@ export default function Production() {
     const recipe = recipes.find((r) => r.id === Number(recipeId)) || null;
     setSelectedRecipe(recipe);
     if (recipe) {
-      setPlannedQuantity(Number(recipe.batch_size_liters));
+      setPlannedQuantity(Number(recipe.batch_size_kg));
       setActualResources(
         recipe.resources.map((res) => ({
           resource_id: res.resource_id,
@@ -218,7 +218,7 @@ export default function Production() {
   const handleQuantityChange = (qty: number) => {
     setPlannedQuantity(qty);
     if (selectedRecipe) {
-      const scaleFactor = qty / Number(selectedRecipe.batch_size_liters);
+      const scaleFactor = qty / Number(selectedRecipe.batch_size_kg);
       setActualResources(
         selectedRecipe.resources.map((res) => ({
           resource_id: res.resource_id,
@@ -647,8 +647,8 @@ export default function Production() {
                     </tr>
                   ) : (
                     (showAllHistory ? historyRuns : historyRuns.slice(0, 2)).map((run) => {
-                      const expected = run.planned_quantity_liters;
-                      const actual = run.actual_quantity_liters ?? expected;
+                      const expected = run.planned_quantity_kg;
+                      const actual = run.actual_quantity_kg ?? expected;
                       // variance comes pre-computed from the server
                       const variance = typeof run.variance === "number" ? run.variance : (actual - expected);
                       const variancePct = expected > 0 ? (variance / expected) * 100 : 0;
@@ -847,7 +847,7 @@ export default function Production() {
                   <div className="rounded-lg border bg-muted/30 p-4">
                     <div className="flex items-center justify-between mb-4">
                       <label className="text-sm font-medium">
-                        Planned Quantity (Liters)
+                        Planned Quantity (kg)
                       </label>
                       <input
                         type="number"
@@ -876,7 +876,7 @@ export default function Production() {
                         {selectedRecipe.resources.map((res, idx) => {
                           const scaleFactor =
                             plannedQuantity /
-                            Number(selectedRecipe.batch_size_liters);
+                            Number(selectedRecipe.batch_size_kg);
                           const expectedQty = Number(
                             (res.quantity_required * scaleFactor).toFixed(4),
                           );

@@ -70,7 +70,7 @@ async function seed() {
         const cloudWhiteId = (await pool.query("SELECT id FROM colors WHERE name = 'Cloud White'")).rows[0].id;
 
         await pool.query(`
-            INSERT INTO recipes (color_id, name, batch_size_liters)
+            INSERT INTO recipes (color_id, name, batch_size_kg)
             VALUES 
                 ($1, 'Ocean Blue Standard', 100),
                 ($2, 'Sunset Red Exterior', 150),
@@ -81,7 +81,7 @@ async function seed() {
         // 5. Finished Stock
         console.log('Inserting finished stock...');
         await pool.query(`
-            INSERT INTO finished_stock (color_id, pack_size_liters, quantity_units)
+            INSERT INTO finished_stock (color_id, pack_size_kg, quantity_units)
             VALUES 
                 ($1, 5, 120),
                 ($1, 20, 45),
@@ -89,7 +89,7 @@ async function seed() {
                 ($2, 20, 25),
                 ($3, 10, 200),
                 ($3, 20, 150)
-            ON CONFLICT (color_id, pack_size_liters) DO UPDATE
+            ON CONFLICT (color_id, pack_size_kg) DO UPDATE
             SET quantity_units = EXCLUDED.quantity_units;
         `, [oceanBlueId, sunsetRedId, cloudWhiteId]);
 
@@ -101,7 +101,7 @@ async function seed() {
 
         if (oceanRecipeId && sunsetRecipeId && whiteRecipeId) {
              await pool.query(`
-                INSERT INTO production_runs (recipe_id, status, planned_quantity_liters, actual_quantity_liters, created_by, created_at)
+                INSERT INTO production_runs (recipe_id, status, planned_quantity_kg, actual_quantity_kg, created_by, created_at)
                 VALUES 
                     ($1, 'completed', 100, 102, $4, NOW() - INTERVAL '1 hour'),
                     ($2, 'completed', 150, 148, $4, NOW() - INTERVAL '3 hours'),
@@ -115,7 +115,7 @@ async function seed() {
         console.log('Inserting historical production runs for charts...');
         if (oceanRecipeId) {
             await pool.query(`
-                INSERT INTO production_runs (recipe_id, status, planned_quantity_liters, actual_quantity_liters, created_by, created_at)
+                INSERT INTO production_runs (recipe_id, status, planned_quantity_kg, actual_quantity_kg, created_by, created_at)
                 SELECT 
                     $1, 'completed', 100, 100, $2, 
                     NOW() - (random() * interval '150 days')
