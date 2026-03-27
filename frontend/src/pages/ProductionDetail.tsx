@@ -80,14 +80,51 @@ export default function ProductionDetail() {
   // Parse numeric id from "PR-5" → 5
   const numericId = batchId?.replace(/^PR-/i, "");
 
+  const [isPacking, setIsPacking] = useState(false);
+
   useEffect(() => {
     if (!numericId) return;
-    setIsLoading(true);
-    apiRequest<RunDetail>(`/production-runs/${numericId}`)
-      .then(setRun)
-      .catch((err) => setError(err.message ?? "Failed to load run details"))
-      .finally(() => setIsLoading(false));
+    fetchRun();
   }, [numericId]);
+
+  const fetchRun = async () => {
+    setIsLoading(true);
+    try {
+      const data = await apiRequest<RunDetail>(`/production-runs/${numericId}`);
+      setRun(data);
+    } catch (err: any) {
+      setError(err.message ?? "Failed to load run details");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleQuickPackRemaining = async () => {
+    if (!run || !numericId) return;
+    const batchVol = run.actual_quantity_kg ?? run.planned_quantity_kg;
+    const currentPackaged = run.packaging.reduce((s, p) => s + Number(p.volume_kg), 0);
+    const left = batchVol - currentPackaged;
+
+    if (left <= 0.01) return; // Ignore tiny remainders
+
+    setIsPacking(true);
+    try {
+      await apiRequest(`/production-runs/${numericId}/packaging`, {
+        method: "POST",
+        body: {
+          packaging_details: [{
+            pack_size_kg: left,
+            quantity_units: 1
+          }]
+        }
+      });
+      await fetchRun();
+    } catch (err: any) {
+      alert(err.message || "Failed to pack remaining volume");
+    } finally {
+      setIsPacking(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -361,9 +398,20 @@ export default function ProductionDetail() {
                     style={{ width: `${Math.min((packaged / (run.actual_quantity_kg ?? run.planned_quantity_kg)) * 100, 100)}%` }}
                   />
                 </div>
-                <p className="text-[10px] text-muted-foreground mt-1.5 flex justify-between">
+                <p className="text-[10px] text-muted-foreground mt-1.5 flex justify-between items-center">
                   <span>{formatUnit(packaged, unitPref)} done</span>
-                  <span>{formatUnit(Math.max(0, (run.actual_quantity_kg ?? run.planned_quantity_kg) - packaged), unitPref)} left to pack</span>
+                  <span className="flex items-center gap-2">
+                    {run.status === "completed" && (run.actual_quantity_kg ?? run.planned_quantity_kg) - packaged > 0.01 && (
+                      <button
+                        onClick={handleQuickPackRemaining}
+                        disabled={isPacking}
+                        className="text-[9px] font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-1.5 py-0.5 rounded border border-purple-200 transition-colors disabled:opacity-50"
+                      >
+                        {isPacking ? "Packing..." : "Pack Remaining"}
+                      </button>
+                    )}
+                    <span>{formatUnit(Math.max(0, (run.actual_quantity_kg ?? run.planned_quantity_kg) - packaged), unitPref)} left to pack</span>
+                  </span>
                 </p>
               </div>
               <div className="text-right shrink-0">

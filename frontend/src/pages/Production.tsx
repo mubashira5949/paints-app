@@ -285,6 +285,32 @@ export default function Production() {
     }
   };
 
+  const handleQuickPackRemaining = async (id: number, planned: number, actual: number | null, packaging: any[] | undefined) => {
+    const batchVol = actual ?? planned;
+    const currentPackaged = packaging?.reduce((s, p) => s + Number(p.pack_size_kg * p.quantity_units), 0) ?? 0;
+    const left = batchVol - currentPackaged;
+
+    if (left <= 0.01) return;
+
+    setUpdatingId(id);
+    try {
+      await apiRequest(`/production-runs/${id}/packaging`, {
+        method: "POST",
+        body: {
+          packaging_details: [{
+            pack_size_kg: left,
+            quantity_units: 1
+          }]
+        }
+      });
+      await Promise.all([fetchActiveRuns(), fetchMetrics(), fetchHistory()]);
+    } catch (err: any) {
+      alert(err.message || "Failed to pack remaining volume");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
 
 
   return (
@@ -790,12 +816,32 @@ export default function Production() {
                           </td>
                           <td className="p-4 text-right">
                             <button
-                              onClick={() => navigate(`/production/${run.batchId}`)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/production/${run.batchId}`);
+                              }}
                               className="inline-flex items-center text-xs font-semibold text-slate-500 hover:text-blue-700 hover:underline"
                             >
                               <Eye className="mr-1 h-3.5 w-3.5" />
                               Details
                             </button>
+                            {run.status === "completed" && (() => {
+                              const batchVol = run.actual_quantity_kg ?? run.planned_quantity_kg;
+                              const currentPackaged = run.packaging?.reduce((s, p) => s + Number(p.pack_size_kg * p.quantity_units), 0) ?? 0;
+                              return batchVol - currentPackaged > 0.01;
+                            })() && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleQuickPackRemaining(run.id, run.planned_quantity_kg, run.actual_quantity_kg, run.packaging);
+                                }}
+                                disabled={updatingId === run.id}
+                                className="ml-3 inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 transition-colors shadow-sm disabled:opacity-50"
+                              >
+                                {updatingId === run.id ? <Loader2 className="w-3 h-3 animate-spin"/> : <PackageCheck className="w-3 h-3" />}
+                                Pack Left
+                              </button>
+                            )}
                             {run.status === "completed" && (
                               <button
                                 onClick={() => navigate(`/production/${run.batchId}/packaging`)}
