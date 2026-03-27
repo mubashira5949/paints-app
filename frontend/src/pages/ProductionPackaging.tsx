@@ -110,6 +110,13 @@ export default function ProductionPackaging() {
     });
   };
 
+  const handlePackRemaining = () => {
+    if (remaining <= 0) return;
+    const newIdx = rows.length;
+    setCustomRows(prev => ({ ...prev, [newIdx]: true }));
+    setRows(prev => [...prev, { pack_size_kg: remaining.toFixed(2), quantity_units: "1" }]);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!numericId) return;
@@ -260,13 +267,24 @@ export default function ProductionPackaging() {
                 <Box className="w-4 h-4 text-purple-500" />
                 <h2 className="font-semibold text-sm">Pack Sizes</h2>
               </div>
-              <button
-                type="button"
-                onClick={addRow}
-                className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add size
-              </button>
+              <div className="flex items-center gap-4">
+                {remaining > 0 && (
+                  <button
+                    type="button"
+                    onClick={handlePackRemaining}
+                    className="flex items-center gap-1 text-xs font-bold text-purple-600 hover:text-purple-700 transition-colors bg-purple-50 px-2 py-1 rounded"
+                  >
+                    Pack Remaining ({remaining.toFixed(1)}{unitPref})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={addRow}
+                  className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add size
+                </button>
+              </div>
             </div>
 
             <div className="divide-y">
