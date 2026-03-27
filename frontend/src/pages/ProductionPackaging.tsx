@@ -11,6 +11,7 @@ import {
   Box,
   CheckCircle2,
 } from "lucide-react";
+import { useUnitPreference, toDisplayValue, fromDisplayValue } from "../utils/units";
 
 interface RunMeta {
   id: number;
@@ -30,6 +31,7 @@ interface PackRow {
 export default function ProductionPackaging() {
   const { batchId } = useParams<{ batchId: string }>();
   const navigate = useNavigate();
+  const unitPref = useUnitPreference();
 
   const numericId = batchId?.replace(/^PR-/i, "");
 
@@ -63,6 +65,7 @@ export default function ProductionPackaging() {
   }, [fetchRun]);
 
   const batchVolume = run?.actual_quantity_kg ?? run?.planned_quantity_kg ?? 0;
+  const displayBatchVolume = toDisplayValue(batchVolume, unitPref);
 
   // Compute allocated volume from valid rows
   const allocated = rows.reduce((sum, r) => {
@@ -74,8 +77,8 @@ export default function ProductionPackaging() {
     return sum;
   }, 0);
 
-  const remaining = batchVolume - allocated;
-  const isOverAllocated = allocated > batchVolume;
+  const remaining = displayBatchVolume - allocated;
+  const isOverAllocated = allocated > displayBatchVolume;
 
   const addRow = () => {
     setRows((prev) => [...prev, { pack_size_kg: "", quantity_units: "" }]);
@@ -110,7 +113,7 @@ export default function ProductionPackaging() {
     }
 
     if (isOverAllocated) {
-      setSubmitErr(`Allocated volume (${allocated.toFixed(1)} KG) exceeds batch size (${batchVolume} KG).`);
+      setSubmitErr(`Allocated volume (${allocated.toFixed(1)}${unitPref}) exceeds batch size (${displayBatchVolume}${unitPref}).`);
       return;
     }
 
@@ -120,7 +123,7 @@ export default function ProductionPackaging() {
         method: "POST",
         body: {
           packaging_details: validRows.map((r) => ({
-            pack_size_kg: parseFloat(r.pack_size_kg),
+            pack_size_kg: fromDisplayValue(parseFloat(r.pack_size_kg), unitPref),
             quantity_units: parseInt(r.quantity_units),
           })),
         },
@@ -169,7 +172,7 @@ export default function ProductionPackaging() {
           Package Batch
         </h1>
         <p className="text-muted-foreground text-sm mt-1">
-          {run.color_name} · {run.recipe_name} · {Number(batchVolume).toLocaleString()} KG available
+          {run.color_name} · {run.recipe_name} · {displayBatchVolume.toLocaleString()}{unitPref} available
         </p>
       </div>
 
@@ -178,19 +181,19 @@ export default function ProductionPackaging() {
         <div className="flex items-center justify-between text-sm">
           <span className="font-medium text-slate-700">Volume Allocated</span>
           <span className={`font-bold font-mono ${isOverAllocated ? "text-red-600" : "text-slate-700"}`}>
-            {allocated.toFixed(1)} / {Number(batchVolume).toLocaleString()} KG
+            {allocated.toFixed(1)} / {displayBatchVolume.toLocaleString()}{unitPref}
           </span>
         </div>
         <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
           <div
             className={`h-3 rounded-full transition-all duration-300 ${isOverAllocated ? "bg-red-500" : "bg-blue-500"}`}
-            style={{ width: `${Math.min((allocated / batchVolume) * 100, 100)}%` }}
+            style={{ width: `${Math.min((allocated / displayBatchVolume) * 100, 100)}%` }}
           />
         </div>
         <p className={`text-xs ${isOverAllocated ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
           {isOverAllocated
-            ? `⚠ Over-allocated by ${(allocated - batchVolume).toFixed(1)} KG`
-            : `${remaining.toFixed(1)} KG remaining`}
+            ? `⚠ Over-allocated by ${(allocated - displayBatchVolume).toFixed(1)}${unitPref}`
+            : `${remaining.toFixed(1)}${unitPref} remaining`}
         </p>
       </div>
 
@@ -229,7 +232,7 @@ export default function ProductionPackaging() {
                   <div key={idx} className="flex items-center gap-3 px-4 py-3">
                     <div className="flex-1">
                       <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
-                        Pack Size (kg)
+                        Pack Size ({unitPref})
                       </label>
                       <input
                         type="number"
@@ -257,7 +260,7 @@ export default function ProductionPackaging() {
                     </div>
                     <div className="w-20 text-right pt-5">
                       {rowVolume != null ? (
-                        <span className="text-xs font-mono text-slate-500">{rowVolume.toFixed(1)} KG</span>
+                        <span className="text-xs font-mono text-slate-500">{rowVolume.toFixed(1)}{unitPref}</span>
                       ) : null}
                     </div>
                     <button
@@ -277,7 +280,7 @@ export default function ProductionPackaging() {
             {allocated > 0 && (
               <div className="border-t px-4 py-3 bg-slate-50 flex justify-between text-sm">
                 <span className="font-semibold text-slate-700">Total</span>
-                <span className="font-bold font-mono">{allocated.toFixed(1)} KG</span>
+                <span className="font-bold font-mono">{allocated.toFixed(1)}{unitPref}</span>
               </div>
             )}
           </div>

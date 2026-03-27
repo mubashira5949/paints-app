@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { apiRequest } from "../services/api";
 import { BarChart3, Package, Droplets, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, AlertCircle, Search } from "lucide-react";
+import { useUnitPreference, formatUnit, unitLabel } from "../utils/units";
 
 
 interface ResourceAlert {
@@ -33,6 +34,7 @@ interface InventorySummary {
 }
 
 export default function Inventory() {
+  const unitPref = useUnitPreference();
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [summary, setSummary] = useState<InventorySummary | null>(null);
   const [alerts, setAlerts] = useState<ResourceAlert[]>([]);
@@ -137,7 +139,7 @@ export default function Inventory() {
           </div>
           <div>
             <div className="text-2xl font-bold">
-              {summary ? summary.totalMass.toFixed(0) : "0"}kg
+              {summary ? formatUnit(summary.totalMass, unitPref) : "0" + unitPref}
             </div>
             <p className="text-xs text-muted-foreground">Finished paint ready for sale</p>
           </div>
@@ -276,7 +278,7 @@ export default function Inventory() {
                               key={idx}
                               className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 shadow-sm"
                             >
-                              {pack.size} ×{pack.units}
+                              {parseFloat(pack.size)}{unitLabel(unitPref)} ×{pack.units}
                             </span>
                           ))}
                           {item.packDistribution?.length > 2 && (
@@ -292,7 +294,7 @@ export default function Inventory() {
                       </td>
                       <td className="p-6 text-right">
                         <div className="flex flex-col items-end">
-                          <span className="text-lg font-black text-slate-900 tracking-tight">{Number(item.mass).toFixed(1)}kg</span>
+                          <span className="text-lg font-black text-slate-900 tracking-tight">{formatUnit(item.mass, unitPref)}</span>
                           <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter mt-0.5">
                             Total Stock
                           </span>
@@ -368,7 +370,7 @@ export default function Inventory() {
                               <div className="space-y-2">
                                 {item.packDistribution?.map((pack, idx) => (
                                   <div key={idx} className="flex items-center justify-between text-sm py-1 border-b border-border/50 last:border-0">
-                                    <span className="font-medium">{pack.size} Size</span>
+                                    <span className="font-medium">{parseFloat(pack.size)}{unitLabel(unitPref)} Size</span>
                                     <span className="font-mono text-blue-600 bg-blue-50 px-2 rounded">{pack.units} units</span>
                                   </div>
                                 ))}
@@ -439,7 +441,7 @@ export default function Inventory() {
             >
               <option value="all">All Sizes</option>
               {allPackSizes.map(size => (
-                <option key={size} value={size.toString()}>{size}kg</option>
+                <option key={size} value={size.toString()}>{size}{unitLabel(unitPref)}</option>
               ))}
             </select>
             <ChevronDown className="absolute right-4 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
@@ -500,8 +502,8 @@ export default function Inventory() {
                         Low
                       </span>
                     </td>
-                    <td className="p-4 px-6 font-black text-slate-700">{Number(alert.current_stock).toFixed(0)} {alert.unit}</td>
-                    <td className="p-4 px-6 text-right text-slate-500 font-bold text-xs">{alert.reorder_level} {alert.unit}</td>
+                    <td className="p-4 px-6 font-black text-slate-700">{formatUnit(alert.current_stock, unitPref)}</td>
+                    <td className="p-4 px-6 text-right text-slate-500 font-bold text-xs">{formatUnit(alert.reorder_level, unitPref)}</td>
                   </tr>
                 ))}
               </tbody>

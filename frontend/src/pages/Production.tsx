@@ -19,6 +19,7 @@ import {
   Loader2,
   Pencil,
 } from "lucide-react";
+import { useUnitPreference, formatUnit, toDisplayValue, fromDisplayValue } from "../utils/units";
 
 interface Resource {
   resource_id: number;
@@ -77,6 +78,7 @@ interface ActiveRun {
 
 export default function Production() {
   const { user } = useAuth();
+  const unitPref = useUnitPreference();
   const navigate = useNavigate();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [historyRuns, setHistoryRuns] = useState<HistoryRun[]>([]);
@@ -212,7 +214,7 @@ export default function Production() {
     const recipe = recipes.find((r) => r.id === Number(recipeId)) || null;
     setSelectedRecipe(recipe);
     if (recipe) {
-      setPlannedQuantityKg(Number(recipe.batch_size_kg));
+      setPlannedQuantityKg(toDisplayValue(Number(recipe.batch_size_kg), unitPref));
       setActualResources(
         recipe.resources.map((res) => ({
           resource_id: res.resource_id,
@@ -225,7 +227,7 @@ export default function Production() {
   const handleQuantityChange = (qty: number) => {
     setPlannedQuantityKg(qty);
     if (selectedRecipe) {
-      const scaleFactor = qty / Number(selectedRecipe.batch_size_kg);
+      const scaleFactor = fromDisplayValue(qty, unitPref) / Number(selectedRecipe.batch_size_kg);
       setActualResources(
         selectedRecipe.resources.map((res) => ({
           resource_id: res.resource_id,
@@ -247,7 +249,7 @@ export default function Production() {
         body: {
           recipeId: selectedRecipe.id,
           colorId: Number(selectedColor),
-          targetQty: planned_quantity_kg,
+          targetQty: fromDisplayValue(planned_quantity_kg, unitPref),
           operatorId: user?.id ?? 1,
         },
       });
@@ -270,7 +272,7 @@ export default function Production() {
       await apiRequest(`/production-runs/${editingRun.id}`, {
         method: "PATCH",
         body: {
-          targetQty: editTargetQty,
+          targetQty: fromDisplayValue(editTargetQty, unitPref),
         },
       });
       setIsEditModalOpen(false);
@@ -326,8 +328,7 @@ export default function Production() {
           </div>
           <div>
             <div className="text-3xl font-bold">
-              {(metrics?.todayProduction ?? 0).toLocaleString()}{" "}
-              <span className="text-base text-muted-foreground font-normal">KG</span>
+              {formatUnit(metrics?.todayProduction ?? 0, unitPref)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Paint produced today
@@ -343,8 +344,7 @@ export default function Production() {
           </div>
           <div>
             <div className="text-3xl font-bold">
-              {(metrics?.resourceConsumption ?? 0).toLocaleString()}{" "}
-              <span className="text-base text-muted-foreground font-normal">KG</span>
+              {formatUnit(metrics?.resourceConsumption ?? 0, unitPref)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Raw material used today
@@ -368,8 +368,8 @@ export default function Production() {
                   : "text-muted-foreground"
               }`}
             >
-              {(metrics?.variance ?? 0) > 0 ? "+" : ""}
-              {(metrics?.variance ?? 0).toFixed(1)}KG
+              {metrics?.variance && metrics.variance > 0 ? "+" : ""}
+              {formatUnit(metrics?.variance ?? 0, unitPref)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Actual vs Planned (Today)
@@ -474,7 +474,7 @@ export default function Production() {
                           <td className="px-4 py-3 font-semibold text-slate-900">{run.color}</td>
                           <td className="px-4 py-3 text-slate-500 text-xs">{run.recipe}</td>
                           <td className="px-4 py-3 text-center font-bold text-slate-700">
-                            {Number(run.targetQty).toLocaleString()}KG
+                            {formatUnit(run.targetQty, unitPref)}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${sc.className}`}>
@@ -492,7 +492,7 @@ export default function Production() {
                                     <button
                                       onClick={() => {
                                         setEditingRun(run);
-                                        setEditTargetQty(run.targetQty);
+                                        setEditTargetQty(toDisplayValue(run.targetQty, unitPref));
                                         setIsEditModalOpen(true);
                                       }}
                                       title="Edit"
@@ -758,17 +758,17 @@ export default function Production() {
                             {run.recipe_name}
                           </td>
                           <td className="p-4 text-center font-mono text-muted-foreground border-r">
-                            {Number(expected).toLocaleString()}KG
+                            {formatUnit(expected, unitPref)}
                           </td>
                           <td className="p-4 text-center font-mono text-foreground font-semibold border-r">
-                            {actual != null ? Number(actual).toLocaleString() + "KG" : "—"}
+                            {actual != null ? formatUnit(actual, unitPref) : "—"}
                           </td>
                           <td className="p-4 text-center border-r">
                             <span
                               className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-bold ${varianceColorClass}`}
                             >
                               {variance > 0 ? "+" : ""}
-                              {Number(variance).toFixed(1)}KG
+                              {formatUnit(variance, unitPref)}
                             </span>
                           </td>
                           <td className="p-4 text-center border-r">
@@ -890,7 +890,7 @@ export default function Production() {
                   <div className="rounded-lg border bg-muted/30 p-4">
                     <div className="flex items-center justify-between mb-4">
                       <label className="text-sm font-medium">
-                        Planned Quantity (kg)
+                        Planned Quantity ({unitPref})
                       </label>
                       <input
                         type="number"
@@ -918,7 +918,7 @@ export default function Production() {
                         </div>
                         {selectedRecipe.resources.map((res, idx) => {
                           const scaleFactor =
-                            planned_quantity_kg /
+                            fromDisplayValue(planned_quantity_kg, unitPref) /
                             Number(selectedRecipe.batch_size_kg);
                           const expectedQty = Number(
                             (res.quantity_required * scaleFactor).toFixed(4),
@@ -1005,7 +1005,7 @@ export default function Production() {
             </div>
             <form onSubmit={handleEditSubmit} className="p-6 space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">Target Quantity (kg)</label>
+                <label className="text-sm font-semibold text-slate-700">Target Quantity ({unitPref})</label>
                 <input
                   type="number"
                   min="0.01"
