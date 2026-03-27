@@ -45,4 +45,32 @@ AWS or GCP
 
 Private PostgreSQL instance
 
-Public-facing backend server
+## 🚀 Getting Started
+
+### Prerequisites
+- Node.js (>= 20)
+- PostgreSQL
+
+### Installation
+1. Clone the repository
+2. Install dependencies:
+   ```bash
+   npm install
+   cd frontend && npm install
+   ```
+
+### Development
+Run the backend and frontend in development mode:
+```bash
+# Root directory (Backend)
+npm run dev
+
+# Frontend directory
+cd frontend && npm run dev
+```
+
+### Testing
+Run the test suite:
+```bash
+npm test
+```
