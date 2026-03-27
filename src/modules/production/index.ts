@@ -476,10 +476,70 @@ export default async function (fastifyRaw: FastifyInstance) {
                 if (status === 'running') extraFields = `, started_at = CURRENT_TIMESTAMP`
                 if (status === 'completed') extraFields = `, completed_at = CURRENT_TIMESTAMP`
 
-                await fastify.db.query(
-                    `UPDATE production_runs SET status = $1${extraFields}, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
-                    [status, id]
-                )
+                let client
+                try {
+                    client = await fastify.db.connect()
+                    await client.query('BEGIN')
+
+                    await client.query(
+                        `UPDATE production_runs SET status = $1${extraFields}, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+                        [status, id]
+                    )
+
+                    // If transitioning to completed, populate actuals if they don't exist
+                    if (status === 'completed') {
+                        const actualsCheck = await client.query(
+                            'SELECT id FROM production_resource_actuals WHERE production_run_id = $1',
+                            [id]
+                        )
+
+                        if (actualsCheck.rows.length === 0) {
+                            // Fetch run details to get recipe and quantity
+                            const runDetails = await client.query(
+                                `SELECT pr.recipe_id, pr.planned_quantity_kg, r.batch_size_kg 
+                                 FROM production_runs pr 
+                                 JOIN recipes r ON pr.recipe_id = r.id 
+                                 WHERE pr.id = $1`,
+                                [id]
+                            )
+                            
+                            if (runDetails.rows.length > 0) {
+                                const { recipe_id, planned_quantity_kg, batch_size_kg } = runDetails.rows[0]
+                                const scaleFactor = planned_quantity_kg / batch_size_kg
+
+                                const recipeResources = await client.query(
+                                    'SELECT resource_id, quantity_required FROM recipe_resources WHERE recipe_id = $1',
+                                    [recipe_id]
+                                )
+
+                                for (const res of recipeResources.rows) {
+                                    const expectedQty = res.quantity_required * scaleFactor
+                                    // Assume actual = expected for default transition
+                                    await client.query(
+                                        `INSERT INTO production_resource_actuals 
+                                         (production_run_id, resource_id, actual_quantity_used, expected_quantity, variance, variance_flag)
+                                         VALUES ($1, $2, $3, $4, 0, false)`,
+                                        [id, res.resource_id, expectedQty, expectedQty]
+                                    )
+                                    
+                                    // Also deduct stock (standard behavior when production is completed)
+                                    await client.query(
+                                        `INSERT INTO resource_stock_transactions (resource_id, transaction_type, quantity, reference_id, notes)
+                                         VALUES ($1, 'production_usage', $2, $3, 'Consumed in Production Run (Auto-populated)')`,
+                                        [res.resource_id, -expectedQty, id]
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    await client.query('COMMIT')
+                } catch (err) {
+                    if (client) await client.query('ROLLBACK')
+                    throw err
+                } finally {
+                    if (client) client.release()
+                }
 
                 return reply.send({
                     message: `Status updated to '${status}'`,
