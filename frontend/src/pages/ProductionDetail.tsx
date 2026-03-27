@@ -348,10 +348,30 @@ export default function ProductionDetail() {
               </div>
             ))}
             <div className="flex items-center justify-between px-5 py-3 bg-slate-50 text-sm border-t">
-              <span className="font-bold text-slate-700">Total Packaged</span>
-              <span className="font-bold font-mono">{formatUnit(packaged, unitPref)}
-                <span className="text-muted-foreground font-normal ml-1.5">/ {formatUnit(run.actual_quantity_kg ?? run.planned_quantity_kg, unitPref)}</span>
-              </span>
+              <div className="flex-1 mr-8">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="font-bold text-slate-700">Packaging Progress</span>
+                  <span className="font-mono text-xs font-bold text-slate-500">
+                    {((packaged / (run.actual_quantity_kg ?? run.planned_quantity_kg)) * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                  <div 
+                    className="h-full bg-purple-500 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min((packaged / (run.actual_quantity_kg ?? run.planned_quantity_kg)) * 100, 100)}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1.5 flex justify-between">
+                  <span>{formatUnit(packaged, unitPref)} done</span>
+                  <span>{formatUnit(Math.max(0, (run.actual_quantity_kg ?? run.planned_quantity_kg) - packaged), unitPref)} left to pack</span>
+                </p>
+              </div>
+              <div className="text-right shrink-0">
+                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Total Packaged</span>
+                <span className="font-bold font-mono text-base">{formatUnit(packaged, unitPref)}
+                  <span className="text-muted-foreground font-normal text-xs ml-1.5">/ {formatUnit(run.actual_quantity_kg ?? run.planned_quantity_kg, unitPref)}</span>
+                </span>
+              </div>
             </div>
           </div>
         )}
