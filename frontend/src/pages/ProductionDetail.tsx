@@ -165,7 +165,10 @@ export default function ProductionDetail() {
           <ArrowLeft className="w-4 h-4" /> Back to Production
         </button>
         <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${sc.className}`}>
-          <sc.icon className="w-3.5 h-3.5" />
+          {(() => {
+            const StatusIcon = sc.icon;
+            return <StatusIcon className="w-3.5 h-3.5" />;
+          })()}
           {sc.label}
         </span>
       </div>

@@ -20,6 +20,7 @@ import {
   Pencil,
   Cog,
   Timer,
+  Box,
 } from "lucide-react";
 import { useUnitPreference, formatUnit, toDisplayValue, fromDisplayValue } from "../utils/units";
 
@@ -506,7 +507,10 @@ export default function Production() {
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${sc.className}`}>
-                              <sc.icon className="w-3 h-3" />
+                              {(() => {
+                                const StatusIcon = sc.icon;
+                                return <StatusIcon className="w-3 h-3" />;
+                              })()}
                               {sc.label}
                             </span>
                           </td>
@@ -813,7 +817,10 @@ export default function Production() {
                               
                               return (
                                 <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${cfg.className}`}>
-                                  <cfg.icon className="w-3 h-3" />
+                                  {(() => {
+                                    const StatusIcon = cfg.icon;
+                                    return <StatusIcon className="w-3 h-3" />;
+                                  })()}
                                   {cfg.label}
                                 </span>
                               );
