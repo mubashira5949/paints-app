@@ -1,6 +1,20 @@
 import React, { useEffect, useState } from "react";
 import { apiRequest } from "../services/api";
-import { Plus, Beaker, Palette, X, AlertCircle, Edit, Trash2 } from "lucide-react";
+import { Plus, Beaker, Palette, X, AlertCircle, Edit, Trash2, Search, ChevronDown } from "lucide-react";
+
+const DEFAULT_INK_SERIES = ["Water Based Ink", "Oil Based Ink"];
+const INK_SERIES_STORAGE_KEY = "ink_series_options";
+
+function getInkSeriesOptions(): string[] {
+  try {
+    const stored = localStorage.getItem(INK_SERIES_STORAGE_KEY);
+    const custom: string[] = stored ? JSON.parse(stored) : [];
+    const all = [...DEFAULT_INK_SERIES, ...custom];
+    return Array.from(new Set(all));
+  } catch {
+    return DEFAULT_INK_SERIES;
+  }
+}
 
 interface Color {
   id: number;
@@ -41,15 +55,18 @@ export default function Recipes() {
   const [resources, setResources] = useState<Resource[]>([]);
   const [selectedColor, setSelectedColor] = useState<Color | null>(null);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
-  
+  const [colorSearch, setColorSearch] = useState("");
+
   const [isColorModalOpen, setIsColorModalOpen] = useState(false);
   const [isRecipeModalOpen, setIsRecipeModalOpen] = useState(false);
-  
+
   const [editingColor, setEditingColor] = useState<Color | null>(null);
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
-  
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [inkSeriesOptions, setInkSeriesOptions] = useState<string[]>(getInkSeriesOptions());
 
   // Forms
   const [colorForm, setColorForm] = useState({ name: "", color_code: "#000000", description: "", business_code: "", hsn_code: "", series: "", tags: "" });
@@ -98,6 +115,22 @@ export default function Recipes() {
       fetchRecipes(selectedColor.id);
     }
   }, [selectedColor]);
+
+  // Reload ink series options whenever modal opens
+  useEffect(() => {
+    if (isColorModalOpen) {
+      setInkSeriesOptions(getInkSeriesOptions());
+    }
+  }, [isColorModalOpen]);
+
+  const filteredColors = colors.filter(c => {
+    const q = colorSearch.toLowerCase();
+    if (!q) return true;
+    const nameMatch = c.name.toLowerCase().includes(q);
+    const tagMatch = (c.tags || []).some(t => t.toLowerCase().includes(q));
+    const seriesMatch = (c.series || "").toLowerCase().includes(q);
+    return nameMatch || tagMatch || seriesMatch;
+  });
 
   const handleSaveColor = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -149,8 +182,7 @@ export default function Recipes() {
   const handleSaveRecipe = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedColor) return;
-    
-    // Filter out invalid resources
+
     const validResources = recipeForm.resources.filter(r => r.resource_id > 0 && r.quantity_required > 0);
     if (validResources.length === 0) {
       alert("Please add at least one valid resource");
@@ -211,9 +243,9 @@ export default function Recipes() {
   const openEditColor = (e: React.MouseEvent, color: Color) => {
     e.stopPropagation();
     setEditingColor(color);
-    setColorForm({ 
-      name: color.name, 
-      color_code: color.color_code || "#000000", 
+    setColorForm({
+      name: color.name,
+      color_code: color.color_code || "#000000",
       description: color.description || "",
       business_code: color.business_code || "",
       hsn_code: color.hsn_code || "",
@@ -262,7 +294,7 @@ export default function Recipes() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">
             <Beaker className="h-8 w-8 text-blue-600" />
-            Colors & Recipes
+            Colors &amp; Recipes
           </h1>
           <p className="text-muted-foreground mt-1">
             Manage product colors and their bill of materials.
@@ -287,8 +319,8 @@ export default function Recipes() {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Colors Sidebar */}
         <div className="lg:col-span-1 rounded-xl border bg-white shadow-sm flex flex-col overflow-hidden h-[calc(100vh-220px)]">
-          <div className="p-4 border-b bg-slate-50 flex items-center justify-between shrink-0">
-            <h2 className="font-bold text-slate-800 flex items-center gap-2">
+          <div className="p-3 border-b bg-slate-50 flex items-center justify-between shrink-0">
+            <h2 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
               <Palette className="h-4 w-4 text-blue-500" />
               Colors
             </h2>
@@ -304,39 +336,64 @@ export default function Recipes() {
               <Plus className="h-4 w-4" />
             </button>
           </div>
+
+          {/* Search bar */}
+          <div className="px-2 py-2 border-b bg-white shrink-0">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by name or tag..."
+                value={colorSearch}
+                onChange={e => setColorSearch(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50"
+              />
+            </div>
+          </div>
+
           <div className="overflow-y-auto flex-1 p-2 space-y-1">
             {isLoading ? (
               <div className="p-4 text-center text-sm text-slate-500 animate-pulse">Loading colors...</div>
-            ) : colors.length === 0 ? (
-              <div className="p-4 text-center text-sm text-slate-500">No colors found.</div>
+            ) : filteredColors.length === 0 ? (
+              <div className="p-4 text-center text-sm text-slate-500">
+                {colorSearch ? "No results found." : "No colors found."}
+              </div>
             ) : (
-              colors.map(color => (
+              filteredColors.map(color => (
                 <button
                   key={color.id}
                   onClick={() => setSelectedColor(color)}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors border ${
+                  className={`w-full flex items-center gap-2 p-2.5 rounded-lg text-left transition-colors border ${
                     selectedColor?.id === color.id
                       ? "bg-blue-50 border-blue-200"
                       : "bg-white border-transparent hover:bg-slate-50"
                   }`}
                 >
                   <div
-                    className="h-6 w-6 rounded-full border shadow-sm shrink-0"
+                    className="h-5 w-5 rounded-full border shadow-sm shrink-0"
                     style={{ backgroundColor: color.color_code || "#cbd5e1" }}
                   />
                   <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5 group">
-                    <p className="text-sm font-bold text-slate-900 truncate pr-2">{color.name}</p>
+                    <p className="text-xs font-bold text-slate-900 truncate pr-1">{color.name}</p>
                     <div className="flex items-center justify-between">
-                      <p className="text-[10px] text-slate-500 font-mono uppercase truncate">{color.business_code || 'No Code'}</p>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={(e) => openEditColor(e, color)} className="p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-blue-600 transition-colors">
-                          <Edit className="h-3.5 w-3.5" />
+                      <p className="text-[9px] text-slate-500 font-mono uppercase truncate">{color.business_code || 'No Code'}</p>
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={(e) => openEditColor(e, color)} className="p-0.5 hover:bg-slate-200 rounded text-slate-500 hover:text-blue-600 transition-colors">
+                          <Edit className="h-3 w-3" />
                         </button>
-                        <button onClick={(e) => handleDeleteColor(e, color.id)} className="p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-red-600 transition-colors">
-                          <Trash2 className="h-3.5 w-3.5" />
+                        <button onClick={(e) => handleDeleteColor(e, color.id)} className="p-0.5 hover:bg-slate-200 rounded text-slate-500 hover:text-red-600 transition-colors">
+                          <Trash2 className="h-3 w-3" />
                         </button>
                       </div>
                     </div>
+                    {color.tags && color.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-0.5 mt-0.5">
+                        {color.tags.slice(0, 2).map((tag, i) => (
+                          <span key={i} className="text-[8px] bg-slate-100 text-slate-500 px-1 rounded">{tag}</span>
+                        ))}
+                        {color.tags.length > 2 && <span className="text-[8px] text-slate-400">+{color.tags.length - 2}</span>}
+                      </div>
+                    )}
                   </div>
                 </button>
               ))
@@ -434,56 +491,75 @@ export default function Recipes() {
         </div>
       </div>
 
-      {/* Add Color Modal */}
+      {/* Add / Edit Color Modal — compact layout */}
       {isColorModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-md rounded-xl shadow-2xl border overflow-hidden">
-            <div className="flex items-center justify-between p-5 border-b bg-slate-50">
-              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Palette className="h-5 w-5 text-blue-600" />
+          <div className="bg-white w-full max-w-md rounded-xl shadow-2xl border overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b bg-slate-50 shrink-0">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Palette className="h-4 w-4 text-blue-600" />
                 {editingColor ? "Edit Color" : "Add New Color"}
               </h3>
-              <button onClick={() => setIsColorModalOpen(false)} className="text-slate-400 hover:bg-slate-200 p-1.5 rounded-full transition-colors">
-                <X className="h-5 w-5" />
+              <button onClick={() => setIsColorModalOpen(false)} className="text-slate-400 hover:bg-slate-200 p-1 rounded-full transition-colors">
+                <X className="h-4 w-4" />
               </button>
             </div>
-            <form onSubmit={handleSaveColor} className="p-6 space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-bold text-slate-700">Color Name</label>
-                <input required type="text" className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. Royal Blue" value={colorForm.name} onChange={(e) => setColorForm({ ...colorForm, name: e.target.value })} />
+            <form onSubmit={handleSaveColor} className="p-4 space-y-3 overflow-y-auto flex-1">
+              {/* Color Name */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">Color Name</label>
+                <input required type="text" className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. Royal Blue" value={colorForm.name} onChange={(e) => setColorForm({ ...colorForm, name: e.target.value })} />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-bold text-slate-700">Color Code (Hex)</label>
-                <div className="flex items-center gap-3">
-                  <input type="color" className="h-10 w-12 cursor-pointer bg-white border border-slate-300 rounded" value={colorForm.color_code} onChange={(e) => setColorForm({ ...colorForm, color_code: e.target.value })} />
-                  <input required type="text" className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none uppercase font-mono" value={colorForm.color_code} onChange={(e) => setColorForm({ ...colorForm, color_code: e.target.value })} />
+              {/* Color Code */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">Color Code (Hex)</label>
+                <div className="flex items-center gap-2">
+                  <input type="color" className="h-8 w-10 cursor-pointer bg-white border border-slate-300 rounded" value={colorForm.color_code} onChange={(e) => setColorForm({ ...colorForm, color_code: e.target.value })} />
+                  <input required type="text" className="flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none uppercase font-mono" value={colorForm.color_code} onChange={(e) => setColorForm({ ...colorForm, color_code: e.target.value })} />
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-bold text-slate-700">Description (Optional)</label>
-                <textarea className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none" rows={3} placeholder="Additional details..." value={colorForm.description} onChange={(e) => setColorForm({ ...colorForm, description: e.target.value })} />
+              {/* Description */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">Description <span className="font-normal text-slate-400">(Optional)</span></label>
+                <textarea className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none resize-none" rows={2} placeholder="Additional details..." value={colorForm.description} onChange={(e) => setColorForm({ ...colorForm, description: e.target.value })} />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-bold text-slate-700">Product Code</label>
-                  <input type="text" className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. TC-01" value={colorForm.business_code} onChange={(e) => setColorForm({ ...colorForm, business_code: e.target.value })} />
+              {/* Product Code + HSN Code */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Product Code</label>
+                  <input type="text" className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. TC-01" value={colorForm.business_code} onChange={(e) => setColorForm({ ...colorForm, business_code: e.target.value })} />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-bold text-slate-700">HSN Code</label>
-                  <input type="text" className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. 3208" value={colorForm.hsn_code} onChange={(e) => setColorForm({ ...colorForm, hsn_code: e.target.value })} />
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">HSN Code</label>
+                  <input type="text" className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. 3208" value={colorForm.hsn_code} onChange={(e) => setColorForm({ ...colorForm, hsn_code: e.target.value })} />
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-bold text-slate-700">Ink Series</label>
-                <input type="text" className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. Oil-based" value={colorForm.series} onChange={(e) => setColorForm({ ...colorForm, series: e.target.value })} />
+              {/* Ink Series — Dropdown */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">Ink Series</label>
+                <div className="relative">
+                  <select
+                    className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none appearance-none bg-white pr-8"
+                    value={colorForm.series}
+                    onChange={(e) => setColorForm({ ...colorForm, series: e.target.value })}
+                  >
+                    <option value="">— Select series —</option>
+                    {inkSeriesOptions.map(opt => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                </div>
+                <p className="text-[10px] text-slate-400">Custom series can be added in Settings → Production.</p>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-bold text-slate-700">Product Tags (comma separated)</label>
-                <input type="text" className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. oil based, series LCS" value={colorForm.tags} onChange={(e) => setColorForm({ ...colorForm, tags: e.target.value })} />
+              {/* Product Tags */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">Product Tags <span className="font-normal text-slate-400">(comma separated)</span></label>
+                <input type="text" className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. oil based, series LCS" value={colorForm.tags} onChange={(e) => setColorForm({ ...colorForm, tags: e.target.value })} />
               </div>
-              <div className="flex gap-3 pt-4 border-t border-slate-100">
-                <button type="button" onClick={() => setIsColorModalOpen(false)} className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors">Cancel</button>
-                <button type="submit" className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 transition-colors shadow-sm">{editingColor ? "Save Changes" : "Save Color"}</button>
+              <div className="flex gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onClick={() => setIsColorModalOpen(false)} className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">Cancel</button>
+                <button type="submit" className="flex-1 rounded-md bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-sm">{editingColor ? "Save Changes" : "Save Color"}</button>
               </div>
             </form>
           </div>
@@ -503,7 +579,7 @@ export default function Recipes() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            
+
             <form onSubmit={handleSaveRecipe} className="flex-1 overflow-y-auto p-6 space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div className="space-y-1.5">
@@ -552,7 +628,7 @@ export default function Recipes() {
                 </div>
               </div>
             </form>
-            
+
             <div className="flex gap-3 p-5 border-t bg-slate-50 shrink-0">
               <button type="button" onClick={() => setIsRecipeModalOpen(false)} className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors">Cancel</button>
               <button type="submit" onClick={handleSaveRecipe} className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 transition-colors shadow-sm">{editingRecipe ? "Save Changes" : "Save Recipe"}</button>

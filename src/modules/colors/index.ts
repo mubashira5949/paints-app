@@ -47,7 +47,7 @@ export default async function (fastifyRaw: FastifyInstance) {
             try {
                 const result = await fastify.db.query(
                     `SELECT id, name, color_code, business_code, series, hsn_code, tags, description, min_threshold_kg, created_at, updated_at
-                     FROM colors ORDER BY name ASC`
+                     FROM colors ORDER BY id DESC`
                 )
 
                 return reply.send(result.rows)
