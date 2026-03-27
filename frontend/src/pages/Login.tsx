@@ -17,7 +17,7 @@ export default function Login() {
   const { login } = useAuth();
 
   // State variables for form inputs
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
@@ -42,7 +42,7 @@ export default function Login() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ identifier: email, password }),
+        body: JSON.stringify({ identifier, password }),
       });
 
       const data = await response.json();
@@ -150,8 +150,8 @@ export default function Login() {
                 disabled={isLoading} // Disable editing when submitting
                 placeholder="you@example.com or username"
                 className="w-full rounded-xl border border-slate-200 dark:border-input bg-white dark:bg-background/50 py-2.5 pl-10 pr-4 text-slate-900 dark:text-foreground placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20 transition-all disabled:opacity-50"
-                value={email} // Controlled component data binding
-                onChange={(e) => setEmail(e.target.value)}
+                value={identifier} // Controlled component data binding
+                onChange={(e) => setIdentifier(e.target.value)}
               />
             </div>
           </div>
