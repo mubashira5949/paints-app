@@ -42,6 +42,15 @@ export default function ProductionPackaging() {
   const [submitErr, setSubmitErr] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  // Load default sizes from settings
+  const defaultSizes = (localStorage.getItem("default_packaging_sizes") || "0.5, 1, 5, 10, 20")
+    .split(",")
+    .map(s => s.replace(/[^\d.]/g, "").trim())
+    .filter(s => s !== "");
+
+  // Tracks which rows are in "Custom" mode
+  const [customRows, setCustomRows] = useState<Record<number, boolean>>({});
+
   // Pack rows — start with two common sizes
   const [rows, setRows] = useState<PackRow[]>([
     { pack_size_kg: "5", quantity_units: "" },
@@ -227,20 +236,45 @@ export default function ProductionPackaging() {
                 const rowVolume = !isNaN(size) && !isNaN(qty) && size > 0 && qty > 0 ? size * qty : null;
 
                 return (
-                  <div key={idx} className="flex items-center gap-3 px-4 py-3">
-                    <div className="flex-1">
+                  <div key={idx} className="flex items-start gap-3 px-4 py-3">
+                    <div className="flex-1 space-y-2">
                       <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
                         Pack Size ({unitPref})
                       </label>
-                      <input
-                        type="number"
-                        min="0.1"
-                        step="0.1"
-                        placeholder="e.g. 5"
-                        value={row.pack_size_kg}
-                        onChange={(e) => updateRow(idx, "pack_size_kg", e.target.value)}
-                        className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 outline-none"
-                      />
+                      <select
+                        value={customRows[idx] ? "custom" : row.pack_size_kg}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "custom") {
+                            setCustomRows(prev => ({ ...prev, [idx]: true }));
+                          } else {
+                            setCustomRows(prev => ({ ...prev, [idx]: false }));
+                            updateRow(idx, "pack_size_kg", val);
+                          }
+                        }}
+                        className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 outline-none appearance-none"
+                      >
+                        <option value="" disabled>Select Size</option>
+                        {defaultSizes.map(size => (
+                          <option key={size} value={size}>{size} {unitPref}</option>
+                        ))}
+                        <option value="custom">Other (Custom Size)...</option>
+                      </select>
+
+                      {customRows[idx] && (
+                        <div className="mt-2 animate-in fade-in slide-in-from-top-1">
+                          <input
+                            type="number"
+                            min="0.1"
+                            step="0.1"
+                            placeholder={`Enter size in ${unitPref}`}
+                            value={row.pack_size_kg}
+                            onChange={(e) => updateRow(idx, "pack_size_kg", e.target.value)}
+                            autoFocus
+                            className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 outline-none"
+                          />
+                        </div>
+                      )}
                     </div>
                     <div className="flex-1">
                       <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">

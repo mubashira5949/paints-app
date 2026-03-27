@@ -41,6 +41,12 @@ export default function Settings() {
   const [customInkSeries, setCustomInkSeries] = useState<string[]>(loadInkSeries);
   const [newSeriesInput, setNewSeriesInput] = useState("");
 
+  // Packaging sizes management
+  const PACKAGING_SIZES_KEY = "default_packaging_sizes";
+  const [packagingSizes, setPackagingSizes] = useState<string>(
+    localStorage.getItem(PACKAGING_SIZES_KEY) || "0.5kg, 1kg, 5kg, 10kg, 20kg"
+  );
+
   const addInkSeries = () => {
     const val = newSeriesInput.trim();
     if (!val) return;
@@ -64,6 +70,7 @@ export default function Settings() {
   };
 
   const handleSave = (requiresRestart = false) => {
+    localStorage.setItem(PACKAGING_SIZES_KEY, packagingSizes);
     setSaveStatus(requiresRestart ? "restart" : "success");
     setHasUnsavedChanges(false);
 
@@ -270,7 +277,16 @@ export default function Settings() {
                     </div>
                   </div>
                   <div>
-                    <input onChange={handleChange} type="text" className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm" defaultValue="0.5kg, 1kg, 5kg, 10kg, 20kg" />
+                    <input
+                      value={packagingSizes}
+                      onChange={(e) => {
+                        setPackagingSizes(e.target.value);
+                        handleChange();
+                      }}
+                      type="text"
+                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm"
+                      placeholder="0.5kg, 1kg, 5kg, 10kg, 20kg"
+                    />
                     <p className="text-xs text-gray-500 mt-1.5 hidden md:block">Separate values with commas</p>
                   </div>
                 </div>
