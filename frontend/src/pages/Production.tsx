@@ -18,6 +18,8 @@ import {
   CheckCircle2,
   Loader2,
   Pencil,
+  Cog,
+  Timer,
 } from "lucide-react";
 import { useUnitPreference, formatUnit, toDisplayValue, fromDisplayValue } from "../utils/units";
 
@@ -483,12 +485,12 @@ export default function Production() {
                   ) : (
                     activeRuns.slice(0, showAllActive ? undefined : 2).map((run) => {
                       const isUpdating = updatingId === run.id;
-                      const statusConfig: Record<string, { label: string; className: string }> = {
-                        planned:   { label: "Planned",   className: "bg-slate-100 text-slate-700" },
-                        running:   { label: "Running",   className: "bg-blue-100 text-blue-800" },
-                        paused:    { label: "Paused",    className: "bg-amber-100 text-amber-800" },
-                        packaging: { label: "Packaging", className: "bg-purple-100 text-purple-800" },
-                        completed: { label: "Completed", className: "bg-emerald-100 text-emerald-800" },
+                      const statusConfig: Record<string, { label: string; className: string; icon: any }> = {
+                        planned:   { label: "Planned",   className: "bg-slate-100 text-slate-700", icon: Activity },
+                        running:   { label: "Running",   className: "bg-blue-100 text-blue-800", icon: Cog },
+                        paused:    { label: "In Progress", className: "bg-amber-100 text-amber-800", icon: Timer },
+                        packaging: { label: "Packaging", className: "bg-purple-100 text-purple-800", icon: Box },
+                        completed: { label: "Completed", className: "bg-emerald-100 text-emerald-800", icon: CheckCircle2 },
                       };
                       const sc = statusConfig[run.status] ?? statusConfig.planned;
 
@@ -503,7 +505,8 @@ export default function Production() {
                             {formatUnit(run.targetQty, unitPref)}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${sc.className}`}>
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${sc.className}`}>
+                              <sc.icon className="w-3 h-3" />
                               {sc.label}
                             </span>
                           </td>
@@ -798,21 +801,23 @@ export default function Production() {
                             </span>
                           </td>
                           <td className="p-4 text-center border-r">
-                            <span
-                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                                run.status === "completed"
-                                  ? "bg-emerald-100 text-emerald-800"
-                                  : run.status === "planned"
-                                  ? "bg-slate-100 text-slate-700"
-                                  : run.status === "paused"
-                                  ? "bg-amber-100 text-amber-800"
-                                  : run.status === "packaging"
-                                  ? "bg-purple-100 text-purple-800"
-                                  : "bg-blue-100 text-blue-800"
-                              }`}
-                            >
-                              {run.status}
-                            </span>
+                            {(() => {
+                              const s = run.status;
+                              const cfg = {
+                                completed: { label: "Completed", icon: CheckCircle2, className: "bg-emerald-100 text-emerald-800" },
+                                planned:   { label: "Planned",   icon: Activity,     className: "bg-slate-100 text-slate-700" },
+                                paused:    { label: "In Progress", icon: Timer,        className: "bg-amber-100 text-amber-800" },
+                                packaging: { label: "Packaging", icon: Box,          className: "bg-purple-100 text-purple-800" },
+                                running:   { label: "Running",   icon: Cog,          className: "bg-blue-100 text-blue-800" },
+                              }[s] || { label: s, icon: Activity, className: "bg-slate-100 text-slate-700" };
+                              
+                              return (
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${cfg.className}`}>
+                                  <cfg.icon className="w-3 h-3" />
+                                  {cfg.label}
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="p-4 text-right">
                             <button

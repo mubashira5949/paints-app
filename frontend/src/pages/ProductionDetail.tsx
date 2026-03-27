@@ -13,6 +13,8 @@ import {
   CheckCircle2,
   Loader2,
   Box,
+  Cog,
+  Timer,
 } from "lucide-react";
 import { useUnitPreference, formatUnit } from "../utils/units";
 
@@ -61,12 +63,12 @@ interface RunDetail {
   packaging: PackagingEntry[];
 }
 
-const statusConfig: Record<string, { label: string; className: string }> = {
-  planned:   { label: "Planned",   className: "bg-slate-100 text-slate-700" },
-  running:   { label: "Running",   className: "bg-blue-100 text-blue-800" },
-  paused:    { label: "Paused",    className: "bg-amber-100 text-amber-800" },
-  completed: { label: "Completed", className: "bg-emerald-100 text-emerald-800" },
-  packaging: { label: "Packaging", className: "bg-purple-100 text-purple-800" },
+const statusConfig: Record<string, { label: string; className: string; icon: any }> = {
+  planned:   { label: "Planned",   className: "bg-slate-100 text-slate-700", icon: Activity },
+  running:   { label: "Running",   className: "bg-blue-100 text-blue-800", icon: Cog },
+  paused:    { label: "In Progress", className: "bg-amber-100 text-amber-800", icon: Timer },
+  completed: { label: "Completed", className: "bg-emerald-100 text-emerald-800", icon: CheckCircle2 },
+  packaging: { label: "Packaging", className: "bg-purple-100 text-purple-800", icon: Box },
 };
 
 export default function ProductionDetail() {
@@ -162,7 +164,8 @@ export default function ProductionDetail() {
         >
           <ArrowLeft className="w-4 h-4" /> Back to Production
         </button>
-        <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${sc.className}`}>
+        <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${sc.className}`}>
+          <sc.icon className="w-3.5 h-3.5" />
           {sc.label}
         </span>
       </div>
