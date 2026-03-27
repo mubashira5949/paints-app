@@ -12,7 +12,7 @@ describe('Recipes Module API', () => {
     let mockRecipeResources: any[] = []
     let routes: { [method: string]: any } = {}
 
-    // Mock PostgreSQL Client mapping for transactions
+    // Mock PostgreSQKG Client mapping for transactions
     const mockClient = {
         query: vi.fn(),
         release: vi.fn()
@@ -155,7 +155,7 @@ describe('Recipes Module API', () => {
             expect(mockClient.release).toHaveBeenCalledTimes(1)
         })
 
-        it('should block unauthorized execution and rollback transaction on SQL error', async () => {
+        it('should block unauthorized execution and rollback transaction on SQKG error', async () => {
             const postRoute = routes['POST /']
 
             // Setup a mock error occurring during insertion

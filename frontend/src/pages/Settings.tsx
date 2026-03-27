@@ -31,6 +31,31 @@ export default function Settings() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "restart">("idle");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
+  // Ink series management
+  const INK_SERIES_KEY = "ink_series_options";
+  const loadInkSeries = (): string[] => {
+    try { return JSON.parse(localStorage.getItem(INK_SERIES_KEY) || "[]"); } catch { return []; }
+  };
+  const [customInkSeries, setCustomInkSeries] = useState<string[]>(loadInkSeries);
+  const [newSeriesInput, setNewSeriesInput] = useState("");
+
+  const addInkSeries = () => {
+    const val = newSeriesInput.trim();
+    if (!val) return;
+    const updated = Array.from(new Set([...customInkSeries, val]));
+    setCustomInkSeries(updated);
+    localStorage.setItem(INK_SERIES_KEY, JSON.stringify(updated));
+    setNewSeriesInput("");
+    setHasUnsavedChanges(true);
+  };
+
+  const removeInkSeries = (series: string) => {
+    const updated = customInkSeries.filter(s => s !== series);
+    setCustomInkSeries(updated);
+    localStorage.setItem(INK_SERIES_KEY, JSON.stringify(updated));
+    setHasUnsavedChanges(true);
+  };
+
   // Mark changes as unsaved when any input changes
   const handleChange = () => {
     setHasUnsavedChanges(true);
@@ -223,7 +248,7 @@ export default function Settings() {
                   </div>
                   <div className="flex items-center gap-2 w-full">
                     <input onChange={handleChange} type="number" className="border border-gray-300 rounded-lg px-3 py-2 text-sm flex-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm" defaultValue="10" />
-                    <span className="text-sm text-gray-500 font-medium">L</span>
+                    <span className="text-sm text-gray-500 font-medium">kg</span>
                   </div>
                 </div>
 
@@ -236,8 +261,48 @@ export default function Settings() {
                     </div>
                   </div>
                   <div>
-                    <input onChange={handleChange} type="text" className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm" defaultValue="0.5L, 1L, 5L, 10L, 20L" />
+                    <input onChange={handleChange} type="text" className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm" defaultValue="0.5kg, 1kg, 5kg, 10kg, 20kg" />
                     <p className="text-xs text-gray-500 mt-1.5 hidden md:block">Separate values with commas</p>
+                  </div>
+                </div>
+
+                {/* Ink Series Management */}
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_1.5fr] gap-4 items-start py-5 border-b border-gray-100 last:border-0">
+                  <div className="flex items-center gap-2 text-gray-700">
+                    <Layers className="h-4 w-4 text-gray-400" />
+                    <div>
+                      <p className="font-medium text-sm">Ink Series Options</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Appear in the Color form dropdown</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {/* Built-in (read-only) */}
+                    <div className="flex flex-wrap gap-1.5 mb-1">
+                      {["Water Based Ink", "Oil Based Ink"].map(s => (
+                        <span key={s} className="flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium">{s} <span className="text-blue-300 text-[10px]">default</span></span>
+                      ))}
+                      {customInkSeries.map(s => (
+                        <span key={s} className="flex items-center gap-1 text-xs bg-gray-100 text-gray-700 border border-gray-200 px-2 py-0.5 rounded-full font-medium">
+                          {s}
+                          <button onClick={() => removeInkSeries(s)} className="ml-0.5 text-red-400 hover:text-red-600 transition-colors" title="Remove">&times;</button>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newSeriesInput}
+                        onChange={e => setNewSeriesInput(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addInkSeries())}
+                        placeholder="e.g. UV Cured Ink"
+                        className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={addInkSeries}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors shadow-sm"
+                      >Add</button>
+                    </div>
                   </div>
                 </div>
               </div>

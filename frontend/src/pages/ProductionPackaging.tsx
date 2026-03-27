@@ -110,7 +110,7 @@ export default function ProductionPackaging() {
     }
 
     if (isOverAllocated) {
-      setSubmitErr(`Allocated volume (${allocated.toFixed(1)} L) exceeds batch size (${batchVolume} L).`);
+      setSubmitErr(`Allocated volume (${allocated.toFixed(1)} KG) exceeds batch size (${batchVolume} KG).`);
       return;
     }
 
@@ -169,7 +169,7 @@ export default function ProductionPackaging() {
           Package Batch
         </h1>
         <p className="text-muted-foreground text-sm mt-1">
-          {run.color_name} · {run.recipe_name} · {Number(batchVolume).toLocaleString()} L available
+          {run.color_name} · {run.recipe_name} · {Number(batchVolume).toLocaleString()} KG available
         </p>
       </div>
 
@@ -178,7 +178,7 @@ export default function ProductionPackaging() {
         <div className="flex items-center justify-between text-sm">
           <span className="font-medium text-slate-700">Volume Allocated</span>
           <span className={`font-bold font-mono ${isOverAllocated ? "text-red-600" : "text-slate-700"}`}>
-            {allocated.toFixed(1)} / {Number(batchVolume).toLocaleString()} L
+            {allocated.toFixed(1)} / {Number(batchVolume).toLocaleString()} KG
           </span>
         </div>
         <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
@@ -189,8 +189,8 @@ export default function ProductionPackaging() {
         </div>
         <p className={`text-xs ${isOverAllocated ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
           {isOverAllocated
-            ? `⚠ Over-allocated by ${(allocated - batchVolume).toFixed(1)} L`
-            : `${remaining.toFixed(1)} L remaining`}
+            ? `⚠ Over-allocated by ${(allocated - batchVolume).toFixed(1)} KG`
+            : `${remaining.toFixed(1)} KG remaining`}
         </p>
       </div>
 
@@ -257,7 +257,7 @@ export default function ProductionPackaging() {
                     </div>
                     <div className="w-20 text-right pt-5">
                       {rowVolume != null ? (
-                        <span className="text-xs font-mono text-slate-500">{rowVolume.toFixed(1)} L</span>
+                        <span className="text-xs font-mono text-slate-500">{rowVolume.toFixed(1)} KG</span>
                       ) : null}
                     </div>
                     <button
@@ -277,7 +277,7 @@ export default function ProductionPackaging() {
             {allocated > 0 && (
               <div className="border-t px-4 py-3 bg-slate-50 flex justify-between text-sm">
                 <span className="font-semibold text-slate-700">Total</span>
-                <span className="font-bold font-mono">{allocated.toFixed(1)} L</span>
+                <span className="font-bold font-mono">{allocated.toFixed(1)} KG</span>
               </div>
             )}
           </div>

@@ -20,31 +20,40 @@ async function runTest() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                email: 'manager@paintsapp.com',
+                identifier: 'manager@paintsapp.com',
                 password: 'managerpassword'
             })
         });
 
         if (!loginResponse.ok) {
-            throw new Error(`Login failed: ${loginResponse.statusText}`);
+            const errBody = await loginResponse.json() as any;
+            throw new Error(`Login failed: ${loginResponse.statusText} - ${JSON.stringify(errBody)}`);
         }
 
         const { token } = await loginResponse.json() as any;
-        const authHeader = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+        const authHeader = { 
+            'Authorization': `Bearer ${token}`, 
+            'Content-Type': 'application/json' 
+        };
         console.log('✅ Login successful!');
 
         // 2. Prepare Test Data via SQL
         console.log('📊 Preparing test data...');
 
         // Clean up previous test data
+        await pool.query("DELETE FROM production_resource_actuals WHERE production_run_id IN (SELECT id FROM production_runs WHERE recipe_id IN (SELECT id FROM recipes WHERE name = 'Test Recipe'))");
+        await pool.query("DELETE FROM finished_stock_transactions WHERE color_id IN (SELECT id FROM colors WHERE name = 'Test Color')");
+        await pool.query("DELETE FROM finished_stock WHERE color_id IN (SELECT id FROM colors WHERE name = 'Test Color')");
+        await pool.query("DELETE FROM production_runs WHERE recipe_id IN (SELECT id FROM recipes WHERE name = 'Test Recipe')");
         await pool.query("DELETE FROM recipe_resources WHERE recipe_id IN (SELECT id FROM recipes WHERE name = 'Test Recipe')");
         await pool.query("DELETE FROM recipes WHERE name = 'Test Recipe'");
         await pool.query("DELETE FROM colors WHERE name = 'Test Color'");
+        await pool.query("DELETE FROM resource_stock_transactions WHERE resource_id IN (SELECT id FROM resources WHERE name = 'Test Pigment')");
         await pool.query("DELETE FROM resources WHERE name = 'Test Pigment'");
 
         // Create Resource
         const resResult = await pool.query(
-            "INSERT INTO resources (name, unit, current_stock) VALUES ('Test Pigment', 'kg', 0) RETURNING id"
+            "INSERT INTO resources (name, unit, current_stock, reorder_level) VALUES ('Test Pigment', 'kg', 0, 10) RETURNING id"
         );
         const resourceId = resResult.rows[0].id;
 
@@ -67,7 +76,7 @@ async function runTest() {
         );
         const recipeId = recipeResult.rows[0].id;
 
-        // Map Resource to Recipe (10kg for 100L)
+        // Map Resource to Recipe (10kg for 100kg batch)
         await pool.query(
             "INSERT INTO recipe_resources (recipe_id, resource_id, quantity_required) VALUES ($1, $2, 10)",
             [recipeId, resourceId]
@@ -75,16 +84,16 @@ async function runTest() {
 
         console.log(`✅ Test data prepared: Resource=${resourceId}, Color=${colorId}, Recipe=${recipeId}`);
 
-        // 3. Execute Production Run via API
+        // 3. Execute Production Run
         console.log('🏗️ Executing Production Run...');
         const productionResponse = await fetch(`${API_URL}/production-runs`, {
             method: 'POST',
             headers: authHeader,
             body: JSON.stringify({
-                recipe_id: recipeId,
-                planned_quantity_kg: 50, // Should use 5kg of pigment (50/100 * 10)
-                actual_resources: [
-                    { resource_id: resourceId, actual_quantity_used: 5 }
+                recipeId: recipeId,
+                expectedOutput: 50, // 50kg batch
+                actualResources: [
+                    { resourceId: resourceId, quantity: 5 } // Using 5kg (exact match for 50/100 scale)
                 ]
             })
         });
@@ -94,8 +103,9 @@ async function runTest() {
             throw new Error(`Production run failed: ${JSON.stringify(error)}`);
         }
 
-        const { production_run_id } = await productionResponse.json() as any;
-        console.log(`✅ Production run created: ID=${production_run_id}`);
+        const prodResult = await productionResponse.json() as any;
+        const productionRunId = prodResult.id || prodResult.production_run_id;
+        console.log(`✅ Production run created: ID=${productionRunId}`);
 
         // 4. Verify Raw Stock Deduction
         console.log('🔍 Verifying raw stock deduction...');
@@ -108,14 +118,14 @@ async function runTest() {
         }
         console.log('✅ Stock deduction verified!');
 
-        // 5. Execute Packaging via API
+        // 5. Execute Packaging
         console.log('📦 Executing Packaging...');
-        const packagingResponse = await fetch(`${API_URL}/production-runs/${production_run_id}/packaging`, {
+        const packagingResponse = await fetch(`${API_URL}/production-runs/${productionRunId}/packaging`, {
             method: 'POST',
             headers: authHeader,
             body: JSON.stringify({
                 packaging_details: [
-                    { pack_size_kg: 5, quantity_units: 10 } // 50L total
+                    { pack_size_kg: 5, quantity_units: 10 } // 50kg total
                 ]
             })
         });
@@ -128,21 +138,22 @@ async function runTest() {
 
         // 6. Verify Finished Stock
         console.log('🔍 Verifying finished stock...');
-        const inventoryResponse = await fetch(`${API_URL}/inventory/finished-stock`, {
+        const inventoryResponse = await fetch(`${API_URL}/api/inventory`, {
             headers: authHeader
         });
 
         const inventory = await inventoryResponse.json() as any;
-        const colorStock = inventory.data.find((c: any) => c.color_id === colorId);
+        // The inventory likely returns an array now, based on my previous edits
+        const colorStock = Array.isArray(inventory) ? inventory.find((c: any) => c.id === colorId) : inventory.data?.find((c: any) => c.id === colorId);
 
         if (!colorStock) {
             throw new Error('Color not found in inventory!');
         }
 
-        console.log(`Finished stock: ${colorStock.total_quantity_units} units, ${colorStock.total_volume_kg}L`);
+        console.log(`Finished stock: ${colorStock.units} units, ${colorStock.mass}kg`);
 
-        if (colorStock.total_quantity_units !== 10 || parseFloat(colorStock.total_volume_kg) !== 50) {
-            throw new Error(`Finished stock mismatch! Expected 10 units/50L, got ${colorStock.total_quantity_units} units/${colorStock.total_volume_kg}L`);
+        if (Number(colorStock.units) !== 10 || Number(colorStock.mass) !== 50) {
+            throw new Error(`Finished stock mismatch! Expected 10 units/50kg, got ${colorStock.units} units/${colorStock.mass}kg`);
         }
         console.log('✅ Finished stock verified!');
 

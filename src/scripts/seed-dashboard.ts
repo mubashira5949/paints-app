@@ -5,7 +5,7 @@ import bcrypt from 'bcrypt';
 dotenv.config();
 
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: process.env.DATABASE_URKG,
     ssl: {
         rejectUnauthorized: false
     }
@@ -43,8 +43,8 @@ async function seed() {
             INSERT INTO resources (name, description, unit, current_stock, reorder_level)
             VALUES 
                 ('Titanium Dioxide', 'White pigment', 'kg', 15.5, 50.0), -- Critical
-                ('Binder A', 'Acrylic resin', 'L', 20.0, 100.0), -- Critical
-                ('Solvent X', 'Primary solvent', 'L', 150.0, 100.0), -- Good
+                ('Binder A', 'Acrylic resin', 'KG', 20.0, 100.0), -- Critical
+                ('Solvent X', 'Primary solvent', 'KG', 150.0, 100.0), -- Good
                 ('Red Pigment 40', 'Colorant', 'kg', 5.0, 10.0), -- Low
                 ('Blue Pigment 20', 'Colorant', 'kg', 45.0, 20.0), -- Good
                 ('Calcium Carbonate', 'Filler', 'kg', 500.0, 200.0) -- Good
@@ -103,11 +103,11 @@ async function seed() {
              await pool.query(`
                 INSERT INTO production_runs (recipe_id, status, planned_quantity_kg, actual_quantity_kg, created_by, created_at)
                 VALUES 
-                    ($1, 'completed', 100, 102, $4, NOW() - INTERVAL '1 hour'),
-                    ($2, 'completed', 150, 148, $4, NOW() - INTERVAL '3 hours'),
-                    ($3, 'in_progress', 200, NULL, $4, NOW() - INTERVAL '30 minutes'),
-                    ($1, 'planned', 100, NULL, $4, NOW()),
-                    ($2, 'completed', 150, 150, $4, NOW() - INTERVAL '1 day')
+                    ($1, 'completed', 100, 102, $4, NOW() - INTERVAKG '1 hour'),
+                    ($2, 'completed', 150, 148, $4, NOW() - INTERVAKG '3 hours'),
+                    ($3, 'in_progress', 200, NULKG, $4, NOW() - INTERVAKG '30 minutes'),
+                    ($1, 'planned', 100, NULKG, $4, NOW()),
+                    ($2, 'completed', 150, 150, $4, NOW() - INTERVAKG '1 day')
              `, [oceanRecipeId, sunsetRecipeId, whiteRecipeId, userId]);
         }
         

@@ -900,19 +900,19 @@ export default async function (fastifyRaw: FastifyInstance) {
                 const { actual_quantity_kg, planned_quantity_kg, status, color_id } = runResult.rows[0]
 
                 // Ensure we don't package volumes we didn't theoretically produce
-                let requestedVolumeLiters = 0
+                let requestedVolumeKG = 0
                 for (const pack of packaging_details) {
-                    requestedVolumeLiters += (pack.pack_size_kg * pack.quantity_units)
+                    requestedVolumeKG += (pack.pack_size_kg * pack.quantity_units)
                 }
 
                 // Check against actual_quantity. In a real application, you might also query previous packages
                 // allocated to this run ID if packaging happens in stages rather than one bulk mapping
                 const limitVolume = actual_quantity_kg ?? planned_quantity_kg;
-                if (requestedVolumeLiters > limitVolume) {
+                if (requestedVolumeKG > limitVolume) {
                     await client.query('ROLLBACK')
                     return reply.status(400).send({
                         error: 'Bad Request',
-                        message: `Requested packaged volume (${requestedVolumeLiters}L) exceeds production batch limits (${limitVolume}L).`
+                        message: `Requested packaged volume (${requestedVolumeKG}KG) exceeds production batch limits (${limitVolume}KG).`
                     })
                 }
 

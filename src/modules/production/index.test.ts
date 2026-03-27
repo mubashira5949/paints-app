@@ -69,7 +69,7 @@ describe('Production Runs Module API', () => {
             if (query.includes('FROM recipe_resources')) {
                 // Mock dependencies for recipe_id 1 (batch_size = 100)
                 // expects exactly matching scale:
-                // For 200L planned: expected_qty = 20 & 30 respectively
+                // For 200KG planned: expected_qty = 20 & 30 respectively
                 if (params![0] === 1) return { rows: [{ resource_id: 101, quantity_required: 10 }, { resource_id: 102, quantity_required: 15 }] }
                 return { rows: [] }
             }
@@ -326,8 +326,8 @@ describe('Production Runs Module API', () => {
                 user: { id: 10, username: 'testuser', role: 'manager' },
                 body: {
                     packaging_details: [
-                        { pack_size_kg: 1.0, quantity_units: 50 }, // 50L
-                        { pack_size_kg: 5.0, quantity_units: 10 }  // 50L (100L total)
+                        { pack_size_kg: 1.0, quantity_units: 50 }, // 50kg
+                        { pack_size_kg: 5.0, quantity_units: 10 }  // 50kg (100kg total)
                     ]
                 }
             } as unknown as FastifyRequest
@@ -355,7 +355,7 @@ describe('Production Runs Module API', () => {
                 user: { id: 10, username: 'testuser', role: 'operator' },
                 body: {
                     packaging_details: [
-                        { pack_size_kg: 10.0, quantity_units: 50 } // 500L exceeds 100L capacity
+                        { pack_size_kg: 10.0, quantity_units: 50 } // 500kg exceeds 100kg capacity
                     ]
                 }
             } as unknown as FastifyRequest
@@ -365,7 +365,7 @@ describe('Production Runs Module API', () => {
             await postPackagingRoute.handler(req, rep)
 
             expect((rep as any).getStatusCode()).toBe(400)
-            expect((rep as any).getBody().message).toBe('Requested packaged volume (500L) exceeds production batch limits (100L).')
+            expect((rep as any).getBody().message).toBe('Requested packaged volume (500KG) exceeds production batch limits (100KG).')
             expect(mockClient.query).toHaveBeenCalledWith('ROLLBACK')
             expect(mockClient.release).toHaveBeenCalledTimes(1)
         })
@@ -387,7 +387,7 @@ describe('Production Runs Module API', () => {
                 headers: { authorization: 'Bearer manager:testuser' },
                 user: { id: 10, username: 'testuser', role: 'manager' },
                 body: {
-                    packaging_details: [{ pack_size_kg: 5.0, quantity_units: 10 }] // 50L
+                    packaging_details: [{ pack_size_kg: 5.0, quantity_units: 10 }] // 50kg
                 }
             } as unknown as FastifyRequest
             const rep = createMockReply()

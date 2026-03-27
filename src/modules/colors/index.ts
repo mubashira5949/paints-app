@@ -18,13 +18,19 @@ export default async function (fastifyRaw: FastifyInstance) {
         hsn_code: Type.Optional(Type.String()),
         business_code: Type.Optional(Type.String()),
         series: Type.Optional(Type.String()),
-        tags: Type.Optional(Type.Array(Type.String()))
+        tags: Type.Optional(Type.Array(Type.String())),
+        min_threshold_kg: Type.Optional(Type.Number({ default: 0 }))
     })
 
     const UpdateColorSchema = Type.Object({
         name: Type.Optional(Type.String()),
         color_code: Type.Optional(Type.String()),
-        description: Type.Optional(Type.String())
+        description: Type.Optional(Type.String()),
+        hsn_code: Type.Optional(Type.String()),
+        business_code: Type.Optional(Type.String()),
+        series: Type.Optional(Type.String()),
+        tags: Type.Optional(Type.Array(Type.String())),
+        min_threshold_kg: Type.Optional(Type.Number())
     })
 
     const ColorIdParamSchema = Type.Object({
@@ -40,8 +46,8 @@ export default async function (fastifyRaw: FastifyInstance) {
         handler: async (request, reply) => {
             try {
                 const result = await fastify.db.query(
-                    `SELECT id, name, color_code, business_code, series, hsn_code, tags, description, created_at, updated_at
-                     FROM colors ORDER BY name ASC`
+                    `SELECT id, name, color_code, business_code, series, hsn_code, tags, description, min_threshold_kg, created_at, updated_at
+                     FROM colors ORDER BY id DESC`
                 )
 
                 return reply.send(result.rows)
@@ -65,7 +71,7 @@ export default async function (fastifyRaw: FastifyInstance) {
             body: CreateColorSchema
         },
         handler: async (request, reply) => {
-            const { name, color_code, description, hsn_code, business_code, series, tags } = request.body
+            const { name, color_code, description, hsn_code, business_code, series, tags, min_threshold_kg } = request.body
             const client = await fastify.db.connect() // Get a client from the pool
 
             try {
@@ -73,9 +79,9 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 // Create the color entry
                 const insertResult = await client.query(
-                    `INSERT INTO colors (name, color_code, description, hsn_code, business_code, series, tags)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-                    [name, color_code, description, hsn_code ?? null, business_code ?? null, series ?? null, JSON.stringify(tags ?? [])]
+                    `INSERT INTO colors (name, color_code, description, hsn_code, business_code, series, tags, min_threshold_kg)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+                    [name, color_code, description, hsn_code ?? null, business_code ?? null, series ?? null, JSON.stringify(tags ?? []), min_threshold_kg ?? 0]
                 )
                 const newColor = insertResult.rows[0]
 
@@ -124,7 +130,7 @@ export default async function (fastifyRaw: FastifyInstance) {
         },
         handler: async (request, reply) => {
             const { id } = request.params
-            const { name, color_code, description } = request.body
+            const { name, color_code, description, hsn_code, business_code, series, tags, min_threshold_kg } = request.body
 
             try {
                 const updates: string[] = []
@@ -142,6 +148,26 @@ export default async function (fastifyRaw: FastifyInstance) {
                 if (description !== undefined) {
                     updates.push(`description = $${paramIdx++}`)
                     values.push(description)
+                }
+                if (hsn_code !== undefined) {
+                    updates.push(`hsn_code = $${paramIdx++}`)
+                    values.push(hsn_code)
+                }
+                if (business_code !== undefined) {
+                    updates.push(`business_code = $${paramIdx++}`)
+                    values.push(business_code)
+                }
+                if (series !== undefined) {
+                    updates.push(`series = $${paramIdx++}`)
+                    values.push(series)
+                }
+                if (tags !== undefined) {
+                    updates.push(`tags = $${paramIdx++}`)
+                    values.push(JSON.stringify(tags))
+                }
+                if (min_threshold_kg !== undefined) {
+                    updates.push(`min_threshold_kg = $${paramIdx++}`)
+                    values.push(min_threshold_kg)
                 }
 
                 if (updates.length === 0) {

@@ -20,7 +20,7 @@ const pool = new Pool({
 });
 
 /**
- * SQL Schema definition for the Paints App.
+ * SQKG Schema definition for the Paints App.
  * Includes tables for users, roles, resources, colors, recipes, production runs, and stock transactions.
  */
 const schema = `
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS resources (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) UNIQUE NOT NULL,
     description TEXT,
-    unit VARCHAR(20) NOT NULL, -- e.g., kg, L, units
+    unit VARCHAR(20) NOT NULL, -- e.g., kg, KG, units
     current_stock DECIMAL(12, 4) DEFAULT 0 CHECK (current_stock >= 0),
     reorder_level DECIMAL(12, 4) DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -153,11 +153,11 @@ CREATE TABLE IF NOT EXISTS finished_stock_transactions (
 
 -- 12. Audit Logs: General system audit for tracking creation of integral items
 CREATE TABLE IF NOT EXISTS audit_logs (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) NOT NULL,
-    action VARCHAR(255) NOT NULL, -- e.g. color_created, recipe_created, production_created
-    entity_type VARCHAR(50) NOT NULL, -- e.g. color, recipe, production_run
-    entity_id INTEGER NOT NULL,
+    id SERIAKG PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) NOT NULKG,
+    action VARCHAR(255) NOT NULKG, -- e.g. color_created, recipe_created, production_created
+    entity_type VARCHAR(50) NOT NULKG, -- e.g. color, recipe, production_run
+    entity_id INTEGER NOT NULKG,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -196,7 +196,7 @@ EXECUTE FUNCTION update_resource_stock_from_transaction();
 async function setup() {
     try {
         console.log('Starting database schema creation...');
-        // Run the combined SQL schema string.
+        // Run the combined SQKG schema string.
         await pool.query(schema);
         console.log('Database schema created successfully!');
         process.exit(0);
