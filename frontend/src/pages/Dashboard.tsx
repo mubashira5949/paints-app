@@ -15,6 +15,7 @@ import {
   Bell,
   Users,
 } from "lucide-react";
+import { useUnitPreference, formatUnit } from "../utils/units";
 
 interface DashboardData {
   metrics: {
@@ -42,6 +43,7 @@ interface DashboardData {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const unitPref = useUnitPreference();
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
@@ -341,7 +343,7 @@ export default function Dashboard() {
                         <td className="p-6 font-bold text-blue-600 tracking-tight">{run.batchId}</td>
                         <td className="p-6 font-extrabold text-slate-900">{run.color}</td>
                         <td className="p-6 font-black text-slate-700 tracking-tight">
-                          {run.output !== null ? `${run.output}L` : '—'}
+                          {formatUnit(run.output, unitPref)}
                         </td>
                         <td className="p-6 text-slate-500 font-medium text-xs uppercase tracking-wide">
                           {run.operator}

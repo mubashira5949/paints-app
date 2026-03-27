@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { getUnitPreference, setUnitPreference } from "../utils/units";
+import type { UnitPreference } from "../utils/units";
 import {
   Settings as SettingsIcon,
   PaintBucket,
@@ -176,9 +178,16 @@ export default function Settings() {
                     <Scale className="h-4 w-4 text-gray-400" />
                     <p className="font-medium text-sm">Default Unit</p>
                   </div>
-                  <select onChange={handleChange} className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white transition-all shadow-sm">
-                    <option selected>Kilograms</option>
-                    <option>Gallons / Pounds</option>
+                  <select
+                    value={getUnitPreference()}
+                    onChange={e => {
+                      setUnitPreference(e.target.value as UnitPreference);
+                      handleChange();
+                    }}
+                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white transition-all shadow-sm"
+                  >
+                    <option value="kg">Kilograms (kg)</option>
+                    <option value="L">Litres (L) — converts kg ÷ 1.2 density</option>
                   </select>
                 </div>
 
