@@ -174,7 +174,7 @@ export default function ProductionDetail() {
           <h1 className="text-3xl font-bold font-mono tracking-tight">{run.batchId}</h1>
           <p className="text-muted-foreground text-sm mt-1">{run.color_name} · {run.recipe_name} {run.recipe_version}</p>
         </div>
-        {run.status === "completed" && run.packaging.length === 0 && (
+        {(run.status === "completed" || run.status === "packaging") && run.packaging.length === 0 && (
           <Link
             to={`/production/${run.batchId}/packaging`}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-colors shadow-sm"
@@ -182,7 +182,7 @@ export default function ProductionDetail() {
             <PackageCheck className="w-4 h-4" /> Start Packaging
           </Link>
         )}
-        {run.status === "completed" && run.packaging.length > 0 && (
+        {(run.status === "completed" || run.status === "packaging") && run.packaging.length > 0 && (
           <Link
             to={`/production/${run.batchId}/packaging`}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-blue-300 hover:bg-blue-50 text-blue-700 font-semibold text-sm transition-colors"
@@ -345,7 +345,7 @@ export default function ProductionDetail() {
             <PackageCheck className="w-4 h-4 text-purple-500" />
             <h2 className="font-semibold text-sm">Packaging</h2>
           </div>
-          {run.status === "completed" && (
+          {(run.status === "completed" || run.status === "packaging") && (
             <Link
               to={`/production/${run.batchId}/packaging`}
               className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline"
@@ -401,7 +401,7 @@ export default function ProductionDetail() {
                 <p className="text-[10px] text-muted-foreground mt-1.5 flex justify-between items-center">
                   <span>{formatUnit(packaged, unitPref)} done</span>
                   <span className="flex items-center gap-2">
-                    {run.status === "completed" && (run.actual_quantity_kg ?? run.planned_quantity_kg) - packaged > 0.01 && (
+                    {(run.status === "completed" || run.status === "packaging") && (run.actual_quantity_kg ?? run.planned_quantity_kg) - packaged > 0.01 && (
                       <button
                         onClick={handleQuickPackRemaining}
                         disabled={isPacking}

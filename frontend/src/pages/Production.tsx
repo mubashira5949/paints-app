@@ -825,7 +825,7 @@ export default function Production() {
                               <Eye className="mr-1 h-3.5 w-3.5" />
                               Details
                             </button>
-                            {run.status === "completed" && (() => {
+                            {(run.status === "completed" || run.status === "packaging") && (() => {
                               const batchVol = run.actual_quantity_kg ?? run.planned_quantity_kg;
                               const currentPackaged = run.packaging?.reduce((s, p) => s + Number(p.pack_size_kg * p.quantity_units), 0) ?? 0;
                               return batchVol - currentPackaged > 0.01;
@@ -842,7 +842,7 @@ export default function Production() {
                                 Pack Left
                               </button>
                             )}
-                            {run.status === "completed" && (
+                            {(run.status === "completed" || run.status === "packaging") && (
                               <button
                                 onClick={() => navigate(`/production/${run.batchId}/packaging`)}
                                 className="ml-3 inline-flex items-center text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline"
