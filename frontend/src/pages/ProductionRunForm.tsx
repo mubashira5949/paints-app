@@ -300,7 +300,7 @@ export default function ProductionRunForm() {
                 </option>
                 {recipes.map((r) => (
                   <option key={r.id} value={r.id}>
-                    {r.name} (batch: {r.batch_size_kg}KG)
+                    {r.name} (batch: {r.batch_size_kg}kg)
                   </option>
                 ))}
               </select>
@@ -321,7 +321,7 @@ export default function ProductionRunForm() {
           {/* Target Quantity */}
           <div className="space-y-1.5">
             <label className="text-sm font-semibold text-slate-700">
-              Target Quantity (KG) <span className="text-red-500">*</span>
+              Target Quantity (kg) <span className="text-red-500">*</span>
             </label>
             <input
               type="number"
@@ -339,7 +339,7 @@ export default function ProductionRunForm() {
                 <strong>
                   {recipes.find((r) => r.id === Number(selectedRecipe))
                     ?.batch_size_kg ?? "—"}
-                  KG
+                  kg
                 </strong>
               </p>
             )}

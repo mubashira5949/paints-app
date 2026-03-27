@@ -392,7 +392,7 @@ export default function Recipes() {
                             <h3 className="text-base font-bold text-slate-900">{recipe.name}</h3>
                             <div className="flex items-center gap-3 text-xs text-slate-500 font-medium mt-1">
                               <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">v{recipe.version}</span>
-                              <span>Batch Size: {recipe.batch_size_kg} KG</span>
+                              <span>Batch Size: {recipe.batch_size_kg}kg</span>
                             </div>
                           </div>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -515,7 +515,7 @@ export default function Recipes() {
                   <input required type="text" className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="1.0.0" value={recipeForm.version} onChange={(e) => setRecipeForm({ ...recipeForm, version: e.target.value })} />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <label className="text-sm font-bold text-slate-700">Base Batch Size (KG)</label>
+                  <label className="text-sm font-bold text-slate-700">Base Batch Size (kg)</label>
                   <input required type="number" min={1} className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. 100" value={recipeForm.batch_size_kg} onChange={(e) => setRecipeForm({ ...recipeForm, batch_size_kg: Number(e.target.value) })} />
                 </div>
               </div>

@@ -65,9 +65,10 @@ export default async function (fastifyRaw: FastifyInstance) {
                 const saltRounds = 10
                 const passwordHash = await bcrypt.hash(password, saltRounds)
 
-                // 3. Insert the new user into the database.
+                // 3. Insert the new user into the database as INACTIVE by default.
+                // New users must be approved by a manager via device enrollment.
                 const userResult = await fastify.db.query(
-                    'INSERT INTO users (username, email, password_hash, role_id) VALUES ($1, $2, $3, $4) RETURNING id, username, email, role_id, created_at',
+                    'INSERT INTO users (username, email, password_hash, role_id, is_active) VALUES ($1, $2, $3, $4, FALSE) RETURNING id, username, email, role_id, is_active, created_at',
                     [username, email, passwordHash, roleId]
                 )
 
@@ -97,6 +98,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                         username: newUser.username,
                         email: newUser.email,
                         role: role,
+                        is_active: newUser.is_active,
                         created_at: newUser.created_at
                     }
                 })
@@ -129,7 +131,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                     SELECT u.id, u.username, u.email, u.is_active, u.last_login, u.created_at, r.name as role
                     FROM users u
                     JOIN roles r ON u.role_id = r.id
-                    ORDER BY u.id ASC
+                    ORDER BY u.id DESC
                 `)
                 return result.rows
             } catch (err) {
@@ -338,14 +340,23 @@ export default async function (fastifyRaw: FastifyInstance) {
         handler: async (request, reply) => {
             const { id } = request.params
             try {
+                // Approve the device request.
                 const result = await fastify.db.query(
-                    "UPDATE device_enrollment_requests SET status = 'approved' WHERE id = $1 RETURNING *",
+                    "UPDATE device_enrollment_requests SET status = 'approved' WHERE id = $1 RETURNING user_id",
                     [id]
                 )
                 if (result.rows.length === 0) {
                     return reply.status(404).send({ message: 'Request not found' })
                 }
-                return { message: 'Device request approved' }
+
+                // Activate the user associated with this device request.
+                const userId = result.rows[0].user_id
+                await fastify.db.query(
+                    'UPDATE users SET is_active = TRUE WHERE id = $1',
+                    [userId]
+                )
+
+                return { message: 'Device request approved and user activated' }
             } catch (err) {
                 fastify.log.error(err)
                 return reply.status(500).send({ message: 'Failed to approve request' })

@@ -9,7 +9,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URKG,
+    connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
 
@@ -34,7 +34,7 @@ async function seed() {
             await pool.query(`
                 INSERT INTO finished_stock_transactions 
                 (color_id, pack_size_kg, transaction_type, quantity_units, quantity_kg, reference_id, created_at)
-                VALUES ($1, 5.0, 'production_entry', 20, 100.0, 102, NOW() - INTERVAKG '1 day')
+                VALUES ($1, 5.0, 'production_entry', 20, 100.0, 102, NOW() - INTERVAL '1 day')
             `, [color.id]);
 
             // Seed a sale for some colors
@@ -42,7 +42,7 @@ async function seed() {
                 await pool.query(`
                     INSERT INTO finished_stock_transactions 
                     (color_id, pack_size_kg, transaction_type, quantity_units, quantity_kg, reference_id, created_at)
-                    VALUES ($1, 5.0, 'sale', 5, 25.0, 501, NOW() - INTERVAKG '2 hours')
+                    VALUES ($1, 5.0, 'sale', 5, 25.0, 501, NOW() - INTERVAL '2 hours')
                 `, [color.id]);
             }
         }

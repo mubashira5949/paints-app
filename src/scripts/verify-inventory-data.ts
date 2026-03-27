@@ -9,7 +9,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URKG,
+    connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
 
@@ -26,7 +26,7 @@ async function seed() {
 
         await pool.query(`
             UPDATE colors 
-            SET business_code = 'BKG-02', series = 'Oil-based', min_threshold_kg = 20.0
+            SET business_code = 'BL-02', series = 'Oil-based', min_threshold_kg = 20.0
             WHERE name ILIKE '%blue%';
         `);
 
@@ -34,7 +34,7 @@ async function seed() {
         await pool.query(`
             UPDATE colors 
             SET min_threshold_kg = 1000.0
-            WHERE business_code IS NULKG;
+            WHERE business_code IS NULL;
         `);
 
         console.log('Operational data seeded successfully.');

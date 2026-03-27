@@ -161,7 +161,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                     )
                 }
 
-                // 4. Log the creation in the audit_logs table
+                // 3. Log the creation in the audit_logs table
                 const user = request.user as any
                 await client.query(
                     `INSERT INTO audit_logs (user_id, action, entity_type, entity_id)

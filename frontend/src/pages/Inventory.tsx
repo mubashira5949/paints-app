@@ -22,12 +22,12 @@ interface InventoryItem {
   min_threshold_kg: number;
   packDistribution: { size: string, units: number }[];
   units: number;
-  volume: number;
+  mass: number;
   status: 'healthy' | 'low' | 'critical';
 }
 
 interface InventorySummary {
-  totalVolume: number;
+  totalMass: number;
   packagedUnits: number;
   lowStockColors: number;
 }
@@ -137,7 +137,7 @@ export default function Inventory() {
           </div>
           <div>
             <div className="text-2xl font-bold">
-              {summary ? summary.totalVolume.toFixed(0) : "0"}L
+              {summary ? summary.totalMass.toFixed(0) : "0"}kg
             </div>
             <p className="text-xs text-muted-foreground">Finished paint ready for sale</p>
           </div>
@@ -201,7 +201,7 @@ export default function Inventory() {
                   Units
                 </th>
                 <th className="h-14 px-6 text-right align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
-                  Volume
+                  Mass
                 </th>
                 <th className="h-14 px-6 text-center align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
                   Status
@@ -292,7 +292,7 @@ export default function Inventory() {
                       </td>
                       <td className="p-6 text-right">
                         <div className="flex flex-col items-end">
-                          <span className="text-lg font-black text-slate-900 tracking-tight">{Number(item.volume).toFixed(1)}KG</span>
+                          <span className="text-lg font-black text-slate-900 tracking-tight">{Number(item.mass).toFixed(1)}kg</span>
                           <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter mt-0.5">
                             Total Stock
                           </span>
@@ -439,7 +439,7 @@ export default function Inventory() {
             >
               <option value="all">All Sizes</option>
               {allPackSizes.map(size => (
-                <option key={size} value={size.toString()}>{size}L</option>
+                <option key={size} value={size.toString()}>{size}kg</option>
               ))}
             </select>
             <ChevronDown className="absolute right-4 top-3 h-4 w-4 text-slate-400 pointer-events-none" />

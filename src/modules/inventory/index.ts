@@ -26,7 +26,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                 // SQL Query to summarize finished stock:
                 // - Groups rows by color properties (id, name, block code)
                 // - Aggregates the total quantity of units across all pack sizes
-                // - Calculates the total weight in kg (quantity * pack_size)
+                // - Calculates the total mass in kg (quantity * pack_size)
                 // - Uses json_agg to nest the individual pack sizes into a 'packs' JSON array
                 const query = `
                     WITH inventory_summary AS (
@@ -40,7 +40,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                             c.tags,
                             c.min_threshold_kg,
                             COALESCE(SUM(fs.quantity_units), 0)::integer AS total_quantity_units,
-                            COALESCE(SUM(fs.quantity_units * fs.pack_size_kg), 0)::numeric AS total_weight_kg,
+                            COALESCE(SUM(fs.quantity_units * fs.pack_size_kg), 0)::numeric AS total_mass_kg,
                             json_agg(
                                 json_build_object(
                                     'pack_size_kg', fs.pack_size_kg,
@@ -76,9 +76,9 @@ export default async function (fastifyRaw: FastifyInstance) {
                         ls.last_sale_units,
                         ls.last_sale_at,
                         CASE 
-                            WHEN i.total_weight_kg = 0 AND i.min_threshold_kg > 0 THEN 'critical'
-                            WHEN i.total_weight_kg < (i.min_threshold_kg * 0.2) AND i.min_threshold_kg > 0 THEN 'critical'
-                            WHEN i.total_weight_kg < i.min_threshold_kg THEN 'low'
+                            WHEN i.total_mass_kg = 0 AND i.min_threshold_kg > 0 THEN 'critical'
+                            WHEN i.total_mass_kg < (i.min_threshold_kg * 0.2) AND i.min_threshold_kg > 0 THEN 'critical'
+                            WHEN i.total_mass_kg < i.min_threshold_kg THEN 'low'
                             ELSE 'healthy'
                         END AS stock_status
                     FROM inventory_summary i
@@ -146,9 +146,9 @@ export default async function (fastifyRaw: FastifyInstance) {
                     SELECT 
                         c.name AS "Color", 
                         c.business_code AS "Product Code",
-                        fs.pack_size_kg AS "Pack Size (KG)",
+                        fs.pack_size_kg AS "Pack Size (kg)",
                         fs.quantity_units AS "Units in Stock",
-                        (fs.pack_size_kg * fs.quantity_units) AS "Total Weight (KG)"
+                        (fs.pack_size_kg * fs.quantity_units) AS "Total Mass (kg)"
                     FROM finished_stock fs
                     JOIN colors c ON fs.color_id = c.id
                     ORDER BY c.name ASC, fs.pack_size_kg ASC;

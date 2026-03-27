@@ -5,7 +5,7 @@ import productionModule from './index'
 describe('Production Runs Module API', () => {
     let routes: { [method: string]: any } = {}
 
-    // Mock PostgreSQKG Client mapping for transactions
+    // Mock PostgreSQL Client mapping for transactions
     const mockClient = {
         query: vi.fn(),
         release: vi.fn()
@@ -159,7 +159,7 @@ describe('Production Runs Module API', () => {
             // Verify transactional logic checks
             expect(mockClient.query).toHaveBeenCalledWith('BEGIN')
             expect(mockClient.query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO production_runs'), expect.any(Array))
-            // Expect stock consumption tracking (relying on PostgreSQKG trigger exclusively to update actual stock parameters)
+            // Expect stock consumption tracking (relying on PostgreSQL trigger exclusively to update actual stock parameters)
             expect(mockClient.query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO production_resource_actuals'), expect.any(Array))
             // Finished stock logic is now deferred to packaging endpoint
             expect(mockClient.query).toHaveBeenCalledWith('COMMIT')
@@ -326,8 +326,8 @@ describe('Production Runs Module API', () => {
                 user: { id: 10, username: 'testuser', role: 'manager' },
                 body: {
                     packaging_details: [
-                        { pack_size_kg: 1.0, quantity_units: 50 }, // 50KG
-                        { pack_size_kg: 5.0, quantity_units: 10 }  // 50KG (100KG total)
+                        { pack_size_kg: 1.0, quantity_units: 50 }, // 50kg
+                        { pack_size_kg: 5.0, quantity_units: 10 }  // 50kg (100kg total)
                     ]
                 }
             } as unknown as FastifyRequest
@@ -355,7 +355,7 @@ describe('Production Runs Module API', () => {
                 user: { id: 10, username: 'testuser', role: 'operator' },
                 body: {
                     packaging_details: [
-                        { pack_size_kg: 10.0, quantity_units: 50 } // 500KG exceeds 100KG capacity
+                        { pack_size_kg: 10.0, quantity_units: 50 } // 500kg exceeds 100kg capacity
                     ]
                 }
             } as unknown as FastifyRequest
@@ -387,7 +387,7 @@ describe('Production Runs Module API', () => {
                 headers: { authorization: 'Bearer manager:testuser' },
                 user: { id: 10, username: 'testuser', role: 'manager' },
                 body: {
-                    packaging_details: [{ pack_size_kg: 5.0, quantity_units: 10 }] // 50KG
+                    packaging_details: [{ pack_size_kg: 5.0, quantity_units: 10 }] // 50kg
                 }
             } as unknown as FastifyRequest
             const rep = createMockReply()

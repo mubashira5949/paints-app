@@ -229,7 +229,7 @@ export default function ProductionPackaging() {
                   <div key={idx} className="flex items-center gap-3 px-4 py-3">
                     <div className="flex-1">
                       <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
-                        Pack Size (KG)
+                        Pack Size (kg)
                       </label>
                       <input
                         type="number"

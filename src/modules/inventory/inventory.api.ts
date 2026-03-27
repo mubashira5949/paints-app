@@ -18,7 +18,7 @@ export default async function (fastifyRaw: FastifyInstance) {
         schema: {
             response: {
                 200: Type.Object({
-                    totalVolume: Type.Number(),
+                    totalMass: Type.Number(),
                     packagedUnits: Type.Number(),
                     lowStockColors: Type.Number()
                 }),
@@ -35,7 +35,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                 // Total Volume and Packaged Units
                 const totalsQuery = `
                     SELECT 
-                        COALESCE(SUM(quantity_units * pack_size_kg), 0)::float as "totalVolume",
+                        COALESCE(SUM(quantity_units * pack_size_kg), 0)::float as "totalMass",
                         COALESCE(SUM(quantity_units), 0)::int as "packagedUnits"
                     FROM finished_stock
                 `;
@@ -43,7 +43,6 @@ export default async function (fastifyRaw: FastifyInstance) {
                 const totals = totalsResult.rows[0];
 
                 // Low Stock Colors Count
-                // A color is low stock if its total volume is less than its min_threshold_kg
                 const lowStockQuery = `
                     SELECT COUNT(*) as "lowStockColors"
                     FROM (
@@ -58,7 +57,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                 const lowStockColors = parseInt(lowStockResult.rows[0].lowStockColors);
 
                 return reply.status(200).send({
-                    totalVolume: Number(totals.totalVolume),
+                    totalMass: Number(totals.totalMass),
                     packagedUnits: Number(totals.packagedUnits),
                     lowStockColors: Number(lowStockColors)
                 });
@@ -92,13 +91,15 @@ export default async function (fastifyRaw: FastifyInstance) {
                     color_code: Type.Union([Type.String(), Type.Null()]),
                     business_code: Type.Union([Type.String(), Type.Null()]),
                     series: Type.Union([Type.String(), Type.Null()]),
+                    hsn_code: Type.Union([Type.String(), Type.Null()]),
+                    tags: Type.Union([Type.Array(Type.String()), Type.Null()]),
                     min_threshold_kg: Type.Number(),
                     packDistribution: Type.Array(Type.Object({
                         size: Type.String(),
                         units: Type.Number()
                     })),
                     units: Type.Number(),
-                    volume: Type.Number(),
+                    mass: Type.Number(),
                     status: Type.String()
                 })),
                 500: Type.Object({
@@ -109,10 +110,12 @@ export default async function (fastifyRaw: FastifyInstance) {
         },
         preHandler: [fastify.authenticate],
         handler: async (request, reply): Promise<any> => {
+            let query = '';
+            let params: any[] = [];
             try {
                 const { search, status, packSize, series } = request.query;
 
-                let query = `
+                query = `
                     WITH color_stock AS (
                         SELECT 
                             c.id,
@@ -121,17 +124,19 @@ export default async function (fastifyRaw: FastifyInstance) {
                             c.business_code,
                             c.series,
                             c.min_threshold_kg,
+                            c.hsn_code,
+                            c.tags,
                             json_agg(
                                 json_build_object(
-                                    'size', fs.pack_size_kg || 'KG',
+                                    'size', fs.pack_size_kg || 'kg',
                                     'units', fs.quantity_units
                                 ) ORDER BY fs.pack_size_kg ASC
-                            ) FILTER (WHERE fs.quantity_units IS NOT NULKG) as "packDistribution",
+                            ) FILTER (WHERE fs.quantity_units IS NOT NULL) as "packDistribution",
                             COALESCE(SUM(fs.quantity_units), 0)::int as units,
-                            COALESCE(SUM(fs.quantity_units * fs.pack_size_kg), 0)::float as volume
+                            COALESCE(SUM(fs.quantity_units * fs.pack_size_kg), 0)::numeric as mass
                         FROM colors c
                         LEFT JOIN finished_stock fs ON c.id = fs.color_id
-                        GROUP BY c.id, c.name, c.color_code, c.business_code, c.series, c.min_threshold_kg
+                        GROUP BY c.id, c.name, c.color_code, c.business_code, c.series, c.hsn_code, c.tags, c.min_threshold_kg
                     )
                     SELECT * FROM (
                         SELECT 
@@ -140,12 +145,14 @@ export default async function (fastifyRaw: FastifyInstance) {
                             color_code,
                             business_code,
                             series,
+                            hsn_code,
+                            tags,
                             min_threshold_kg,
                             COALESCE("packDistribution", '[]'::json) as "packDistribution",
                             units,
-                            volume,
+                            mass,
                             CASE 
-                                WHEN volume < min_threshold_kg THEN 'low'
+                                WHEN mass < min_threshold_kg THEN 'low'
                                 ELSE 'healthy'
                             END as status
                         FROM color_stock
@@ -153,7 +160,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                     WHERE 1=1
                 `;
 
-                const params: any[] = [];
+                params = [];
                 let paramIndex = 1;
 
                 if (search) {
@@ -171,15 +178,12 @@ export default async function (fastifyRaw: FastifyInstance) {
                     params.push(status);
                 }
 
-                // If packSize is provided, we need to filter colors that have at least one pack of that size
-                // Note: This filter is a bit tricky with the aggregated JSON. 
-                // We'll add a subquery or join for this if needed, but the simple way is to check the finished_stock table.
                 if (packSize) {
                     const sizeNum = parseFloat(packSize);
                     if (!isNaN(sizeNum)) {
                         query += ` AND EXISTS (
                             SELECT 1 FROM finished_stock fs2 
-                            WHERE fs2.color_id = (SELECT id FROM colors c2 WHERE c2.name = final_data.color LIMIT 1)
+                            WHERE fs2.color_id = final_data.id
                             AND fs2.pack_size_kg = $${paramIndex++}
                             AND fs2.quantity_units > 0
                         )`;
@@ -192,7 +196,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                 const result = await fastify.db.query(query, params);
                 return reply.status(200).send(result.rows);
 
-            } catch (err) {
+            } catch (err: any) {
                 fastify.log.error(err);
                 return reply.status(500).send({
                     error: 'Internal Server Error',

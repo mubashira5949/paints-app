@@ -160,7 +160,7 @@ export default function ProductionDetail() {
             <span className="text-xs text-muted-foreground font-medium">Target</span>
             <Droplets className="w-3.5 h-3.5 text-blue-500" />
           </div>
-          <p className="text-2xl font-bold">{Number(run.planned_quantity_kg).toLocaleString()}<span className="text-sm font-normal text-muted-foreground ml-1">KG</span></p>
+          <p className="text-2xl font-bold">{Number(run.planned_quantity_kg).toLocaleString()}<span className="text-sm font-normal text-muted-foreground ml-1">kg</span></p>
         </div>
         <div className="rounded-xl border bg-card p-4 shadow-sm">
           <div className="flex items-center justify-between pb-1">
@@ -211,7 +211,7 @@ export default function ProductionDetail() {
         </div>
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Batch Size</p>
-          <p className="font-medium">{Number(run.batch_size_kg).toLocaleString()} KG</p>
+          <p className="font-medium">{Number(run.batch_size_kg).toLocaleString()} kg</p>
         </div>
         {run.started_at && (
           <div>
@@ -341,16 +341,16 @@ export default function ProductionDetail() {
                   <div className="p-1.5 bg-purple-50 rounded-md">
                     <Box className="w-4 h-4 text-purple-600" />
                   </div>
-                  <span className="font-semibold">{p.pack_size_kg} KG</span>
+                  <span className="font-semibold">{p.pack_size_kg} kg</span>
                   <span className="text-muted-foreground">× {p.quantity_units} units</span>
                 </div>
-                <span className="font-mono text-muted-foreground text-xs">{Number(p.volume_kg).toLocaleString()} KG total</span>
+                <span className="font-mono text-muted-foreground text-xs">{Number(p.volume_kg).toLocaleString()} kg total</span>
               </div>
             ))}
             <div className="flex items-center justify-between px-5 py-3 bg-slate-50 text-sm border-t">
               <span className="font-bold text-slate-700">Total Packaged</span>
-              <span className="font-bold font-mono">{packaged.toLocaleString()} KG
-                <span className="text-muted-foreground font-normal ml-1.5">/ {Number(run.actual_quantity_kg ?? run.planned_quantity_kg).toLocaleString()} KG</span>
+              <span className="font-bold font-mono">{packaged.toLocaleString()} kg
+                <span className="text-muted-foreground font-normal ml-1.5">/ {Number(run.actual_quantity_kg ?? run.planned_quantity_kg).toLocaleString()} kg</span>
               </span>
             </div>
           </div>

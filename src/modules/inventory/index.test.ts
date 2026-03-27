@@ -59,8 +59,12 @@ describe('Inventory Module API', () => {
                     color_id: 1,
                     color_name: 'Ruby Red',
                     color_code: '#E0115F',
+                    business_code: 'RR-001',
+                    series: 'Elite',
+                    hsn_code: '3208',
+                    tags: ['premium', 'exterior'],
                     total_quantity_units: 60,
-                    total_weight_kg: '100.00',
+                    total_mass_kg: '100.00',
                     packs: [
                         { pack_size_kg: '1.00', quantity_units: 50 },
                         { pack_size_kg: '5.00', quantity_units: 10 }
@@ -92,7 +96,7 @@ describe('Inventory Module API', () => {
             expect(body.data).toHaveLength(1)
             expect(body.data[0].color_name).toBe('Ruby Red')
             expect(body.data[0].total_quantity_units).toBe(60)
-            expect(body.data[0].total_weight_kg).toBe('100.00')
+            expect(body.data[0].total_mass_kg).toBe('100.00')
             expect(body.data[0].packs).toHaveLength(2)
             expect(body.data[0].packs[0].pack_size_kg).toBe('1.00')
             expect(body.data[0].packs[0].quantity_units).toBe(50)

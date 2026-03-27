@@ -152,7 +152,7 @@ export default function Settings() {
                     <p className="font-medium text-sm">Default Unit</p>
                   </div>
                   <select onChange={handleChange} className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white transition-all shadow-sm">
-                    <option selected>Liters / Kilograms</option>
+                    <option selected>Kilograms</option>
                     <option>Gallons / Pounds</option>
                   </select>
                 </div>
