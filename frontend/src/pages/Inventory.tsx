@@ -17,15 +17,17 @@ interface InventoryItem {
   color_code: string;
   business_code: string;
   series: string;
+  hsn_code: string | null;
+  tags: string[] | null;
   min_threshold_kg: number;
   packDistribution: { size: string, units: number }[];
   units: number;
-  volume: number;
+  mass: number;
   status: 'healthy' | 'low' | 'critical';
 }
 
 interface InventorySummary {
-  totalVolume: number;
+  totalMass: number;
   packagedUnits: number;
   lowStockColors: number;
 }
@@ -135,7 +137,7 @@ export default function Inventory() {
           </div>
           <div>
             <div className="text-2xl font-bold">
-              {summary ? summary.totalVolume.toFixed(0) : "0"}L
+              {summary ? summary.totalMass.toFixed(0) : "0"}kg
             </div>
             <p className="text-xs text-muted-foreground">Finished paint ready for sale</p>
           </div>
@@ -199,7 +201,7 @@ export default function Inventory() {
                   Units
                 </th>
                 <th className="h-14 px-6 text-right align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
-                  Volume
+                  Mass
                 </th>
                 <th className="h-14 px-6 text-center align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
                   Status
@@ -246,14 +248,24 @@ export default function Inventory() {
                             {item.status === 'critical' && "!"}
                           </div>
                           <div className="flex flex-col">
-                            <span className="font-extrabold text-[15px] text-slate-900">
+                             <span className="font-extrabold text-[15px] text-slate-900">
                               {item.color}
                             </span>
-                            <div className="flex gap-1.5 text-[11px] text-slate-500 font-medium">
-                              <span>Code: {item.business_code || 'N/A'}</span>
-                              <span>•</span>
-                              <span>Series: {item.series || 'N/A'}</span>
+                            <div className="flex flex-wrap gap-1.5 text-[11px] text-slate-500 font-medium mt-0.5">
+                              {item.business_code && <span>Code: {item.business_code}</span>}
+                              {item.business_code && item.series && <span>•</span>}
+                              {item.series && <span>Series: {item.series}</span>}
+                              {item.hsn_code && <><span>•</span><span>HSN: {item.hsn_code}</span></>}
                             </div>
+                            {item.tags && item.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {item.tags.map((tag, i) => (
+                                  <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide bg-blue-50 text-blue-700 border border-blue-100">
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -280,7 +292,7 @@ export default function Inventory() {
                       </td>
                       <td className="p-6 text-right">
                         <div className="flex flex-col items-end">
-                          <span className="text-lg font-black text-slate-900 tracking-tight">{Number(item.volume).toFixed(1)}L</span>
+                          <span className="text-lg font-black text-slate-900 tracking-tight">{Number(item.mass).toFixed(1)}kg</span>
                           <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter mt-0.5">
                             Total Stock
                           </span>
@@ -318,6 +330,37 @@ export default function Inventory() {
                       <tr className="bg-muted/30">
                         <td colSpan={6} className="p-6 border-b">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                             <div>
+                               <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                                 Product Specifications
+                               </h4>
+                               <div className="space-y-2 text-sm">
+                                 <div className="flex justify-between py-1 border-b border-border/50">
+                                   <span className="text-muted-foreground font-medium">Product Code</span>
+                                   <span className="font-mono font-semibold">{item.business_code || '—'}</span>
+                                 </div>
+                                 <div className="flex justify-between py-1 border-b border-border/50">
+                                   <span className="text-muted-foreground font-medium">HSN Code</span>
+                                   <span className="font-mono font-semibold">{item.hsn_code || '—'}</span>
+                                 </div>
+                                 <div className="flex justify-between py-1 border-b border-border/50">
+                                   <span className="text-muted-foreground font-medium">Ink Series</span>
+                                   <span className="font-semibold">{item.series || '—'}</span>
+                                 </div>
+                                 {item.tags && item.tags.length > 0 && (
+                                   <div className="pt-1">
+                                     <span className="text-muted-foreground font-medium text-xs block mb-1.5">Product Tags</span>
+                                     <div className="flex flex-wrap gap-1.5">
+                                       {item.tags.map((tag, i) => (
+                                         <span key={i} className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-100">
+                                           {tag}
+                                         </span>
+                                       ))}
+                                     </div>
+                                   </div>
+                                 )}
+                               </div>
+                             </div>
                             <div>
                               <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
                                 Pack Distribution
@@ -396,7 +439,7 @@ export default function Inventory() {
             >
               <option value="all">All Sizes</option>
               {allPackSizes.map(size => (
-                <option key={size} value={size.toString()}>{size}L</option>
+                <option key={size} value={size.toString()}>{size}kg</option>
               ))}
             </select>
             <ChevronDown className="absolute right-4 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
