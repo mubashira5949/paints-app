@@ -13,6 +13,8 @@ import {
   CheckCircle2,
   Loader2,
   Box,
+  Cog,
+  Timer,
 } from "lucide-react";
 import { useUnitPreference, formatUnit } from "../utils/units";
 
@@ -61,12 +63,12 @@ interface RunDetail {
   packaging: PackagingEntry[];
 }
 
-const statusConfig: Record<string, { label: string; className: string }> = {
-  planned:   { label: "Planned",   className: "bg-slate-100 text-slate-700" },
-  running:   { label: "Running",   className: "bg-blue-100 text-blue-800" },
-  paused:    { label: "Paused",    className: "bg-amber-100 text-amber-800" },
-  completed: { label: "Completed", className: "bg-emerald-100 text-emerald-800" },
-  packaging: { label: "Packaging", className: "bg-purple-100 text-purple-800" },
+const statusConfig: Record<string, { label: string; className: string; icon: any }> = {
+  planned:   { label: "Planned",   className: "bg-slate-100 text-slate-700", icon: Activity },
+  running:   { label: "Running",   className: "bg-blue-100 text-blue-800", icon: Cog },
+  paused:    { label: "In Progress", className: "bg-amber-100 text-amber-800", icon: Timer },
+  completed: { label: "Completed", className: "bg-emerald-100 text-emerald-800", icon: CheckCircle2 },
+  packaging: { label: "Packaging", className: "bg-purple-100 text-purple-800", icon: Box },
 };
 
 export default function ProductionDetail() {
@@ -80,14 +82,51 @@ export default function ProductionDetail() {
   // Parse numeric id from "PR-5" → 5
   const numericId = batchId?.replace(/^PR-/i, "");
 
+  const [isPacking, setIsPacking] = useState(false);
+
   useEffect(() => {
     if (!numericId) return;
-    setIsLoading(true);
-    apiRequest<RunDetail>(`/production-runs/${numericId}`)
-      .then(setRun)
-      .catch((err) => setError(err.message ?? "Failed to load run details"))
-      .finally(() => setIsLoading(false));
+    fetchRun();
   }, [numericId]);
+
+  const fetchRun = async () => {
+    setIsLoading(true);
+    try {
+      const data = await apiRequest<RunDetail>(`/production-runs/${numericId}`);
+      setRun(data);
+    } catch (err: any) {
+      setError(err.message ?? "Failed to load run details");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleQuickPackRemaining = async () => {
+    if (!run || !numericId) return;
+    const batchVol = run.actual_quantity_kg ?? run.planned_quantity_kg;
+    const currentPackaged = run.packaging.reduce((s, p) => s + Number(p.volume_kg), 0);
+    const left = batchVol - currentPackaged;
+
+    if (left <= 0.01) return; // Ignore tiny remainders
+
+    setIsPacking(true);
+    try {
+      await apiRequest(`/production-runs/${numericId}/packaging`, {
+        method: "POST",
+        body: {
+          packaging_details: [{
+            pack_size_kg: left,
+            quantity_units: 1
+          }]
+        }
+      });
+      await fetchRun();
+    } catch (err: any) {
+      alert(err.message || "Failed to pack remaining volume");
+    } finally {
+      setIsPacking(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -125,7 +164,11 @@ export default function ProductionDetail() {
         >
           <ArrowLeft className="w-4 h-4" /> Back to Production
         </button>
-        <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${sc.className}`}>
+        <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${sc.className}`}>
+          {(() => {
+            const StatusIcon = sc.icon;
+            return <StatusIcon className="w-3.5 h-3.5" />;
+          })()}
           {sc.label}
         </span>
       </div>
@@ -137,7 +180,7 @@ export default function ProductionDetail() {
           <h1 className="text-3xl font-bold font-mono tracking-tight">{run.batchId}</h1>
           <p className="text-muted-foreground text-sm mt-1">{run.color_name} · {run.recipe_name} {run.recipe_version}</p>
         </div>
-        {run.status === "completed" && run.packaging.length === 0 && (
+        {(run.status === "completed" || run.status === "packaging") && run.packaging.length === 0 && (
           <Link
             to={`/production/${run.batchId}/packaging`}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-colors shadow-sm"
@@ -145,7 +188,7 @@ export default function ProductionDetail() {
             <PackageCheck className="w-4 h-4" /> Start Packaging
           </Link>
         )}
-        {run.status === "completed" && run.packaging.length > 0 && (
+        {(run.status === "completed" || run.status === "packaging") && run.packaging.length > 0 && (
           <Link
             to={`/production/${run.batchId}/packaging`}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-blue-300 hover:bg-blue-50 text-blue-700 font-semibold text-sm transition-colors"
@@ -308,7 +351,7 @@ export default function ProductionDetail() {
             <PackageCheck className="w-4 h-4 text-purple-500" />
             <h2 className="font-semibold text-sm">Packaging</h2>
           </div>
-          {run.status === "completed" && (
+          {(run.status === "completed" || run.status === "packaging") && (
             <Link
               to={`/production/${run.batchId}/packaging`}
               className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline"
@@ -348,10 +391,41 @@ export default function ProductionDetail() {
               </div>
             ))}
             <div className="flex items-center justify-between px-5 py-3 bg-slate-50 text-sm border-t">
-              <span className="font-bold text-slate-700">Total Packaged</span>
-              <span className="font-bold font-mono">{formatUnit(packaged, unitPref)}
-                <span className="text-muted-foreground font-normal ml-1.5">/ {formatUnit(run.actual_quantity_kg ?? run.planned_quantity_kg, unitPref)}</span>
-              </span>
+              <div className="flex-1 mr-8">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="font-bold text-slate-700">Packaging Progress</span>
+                  <span className="font-mono text-xs font-bold text-slate-500">
+                    {((packaged / (run.actual_quantity_kg ?? run.planned_quantity_kg)) * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                  <div 
+                    className="h-full bg-purple-500 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min((packaged / (run.actual_quantity_kg ?? run.planned_quantity_kg)) * 100, 100)}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1.5 flex justify-between items-center">
+                  <span>{formatUnit(packaged, unitPref)} done</span>
+                  <span className="flex items-center gap-2">
+                    {(run.status === "completed" || run.status === "packaging") && (run.actual_quantity_kg ?? run.planned_quantity_kg) - packaged > 0.01 && (
+                      <button
+                        onClick={handleQuickPackRemaining}
+                        disabled={isPacking}
+                        className="text-[9px] font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-1.5 py-0.5 rounded border border-purple-200 transition-colors disabled:opacity-50"
+                      >
+                        {isPacking ? "Packing..." : "Pack Remaining"}
+                      </button>
+                    )}
+                    <span>{formatUnit(Math.max(0, (run.actual_quantity_kg ?? run.planned_quantity_kg) - packaged), unitPref)} left to pack</span>
+                  </span>
+                </p>
+              </div>
+              <div className="text-right shrink-0">
+                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Total Packaged</span>
+                <span className="font-bold font-mono text-base">{formatUnit(packaged, unitPref)}
+                  <span className="text-muted-foreground font-normal text-xs ml-1.5">/ {formatUnit(run.actual_quantity_kg ?? run.planned_quantity_kg, unitPref)}</span>
+                </span>
+              </div>
             </div>
           </div>
         )}

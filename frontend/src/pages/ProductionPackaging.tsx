@@ -21,6 +21,7 @@ interface RunMeta {
   actual_quantity_kg: number | null;
   color_name: string;
   recipe_name: string;
+  packaging: { pack_size_kg: number; quantity_units: number; volume_kg: number }[];
 }
 
 interface PackRow {
@@ -76,8 +77,11 @@ export default function ProductionPackaging() {
   const batchVolume = run?.actual_quantity_kg ?? run?.planned_quantity_kg ?? 0;
   const displayBatchVolume = toDisplayValue(batchVolume, unitPref);
 
-  // Compute allocated volume from valid rows
-  const allocated = rows.reduce((sum, r) => {
+  // Volume already packaged in previous sessions
+  const alreadyPackaged = run?.packaging?.reduce((sum, p) => sum + toDisplayValue(Number(p.volume_kg), unitPref), 0) ?? 0;
+
+  // Compute allocated volume from valid rows in CURRENT session
+  const currentAllocated = rows.reduce((sum, r) => {
     const size = parseFloat(r.pack_size_kg);
     const qty = parseInt(r.quantity_units);
     if (!isNaN(size) && !isNaN(qty) && size > 0 && qty > 0) {
@@ -86,8 +90,9 @@ export default function ProductionPackaging() {
     return sum;
   }, 0);
 
-  const remaining = displayBatchVolume - allocated;
-  const isOverAllocated = allocated > displayBatchVolume;
+  const totalAllocated = alreadyPackaged + currentAllocated;
+  const remaining = displayBatchVolume - totalAllocated;
+  const isOverAllocated = totalAllocated > displayBatchVolume;
 
   const addRow = () => {
     setRows((prev) => [...prev, { pack_size_kg: "", quantity_units: "" }]);
@@ -103,6 +108,13 @@ export default function ProductionPackaging() {
       next[idx] = { ...next[idx], [field]: value };
       return next;
     });
+  };
+
+  const handlePackRemaining = () => {
+    if (remaining <= 0) return;
+    const newIdx = rows.length;
+    setCustomRows(prev => ({ ...prev, [newIdx]: true }));
+    setRows(prev => [...prev, { pack_size_kg: remaining.toFixed(2), quantity_units: "1" }]);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -122,7 +134,7 @@ export default function ProductionPackaging() {
     }
 
     if (isOverAllocated) {
-      setSubmitErr(`Allocated volume (${allocated.toFixed(1)}${unitPref}) exceeds batch size (${displayBatchVolume}${unitPref}).`);
+      setSubmitErr(`Total allocation (${totalAllocated.toFixed(1)}${unitPref}) exceeds batch size (${displayBatchVolume}${unitPref}).`);
       return;
     }
 
@@ -186,22 +198,57 @@ export default function ProductionPackaging() {
       </div>
 
       {/* Volume progress bar */}
-      <div className="rounded-xl border bg-card shadow-sm p-5 space-y-3">
+      <div className="rounded-xl border bg-card shadow-sm p-5 space-y-4">
         <div className="flex items-center justify-between text-sm">
-          <span className="font-medium text-slate-700">Volume Allocated</span>
-          <span className={`font-bold font-mono ${isOverAllocated ? "text-red-600" : "text-slate-700"}`}>
-            {allocated.toFixed(1)} / {displayBatchVolume.toLocaleString()}{unitPref}
-          </span>
+          <div>
+            <span className="font-semibold text-slate-700">Packaging Overview</span>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Progress to total batch</p>
+          </div>
+          <div className="text-right">
+            <span className={`text-lg font-bold font-mono ${isOverAllocated ? "text-red-600" : "text-slate-700"}`}>
+              {totalAllocated.toFixed(1)} / {displayBatchVolume.toLocaleString()}{unitPref}
+            </span>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+              {((totalAllocated / displayBatchVolume) * 100).toFixed(1)}% Done
+            </p>
+          </div>
         </div>
-        <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
-          <div
-            className={`h-3 rounded-full transition-all duration-300 ${isOverAllocated ? "bg-red-500" : "bg-blue-500"}`}
-            style={{ width: `${Math.min((allocated / displayBatchVolume) * 100, 100)}%` }}
-          />
+        
+        <div className="space-y-1.5">
+          <div className="w-full bg-slate-100 rounded-full h-4 overflow-hidden flex shadow-inner">
+            {/* Already Packaged (Striped/Darker) */}
+            <div
+              className="h-full bg-purple-600/50 transition-all duration-300 relative overflow-hidden"
+              style={{ width: `${(alreadyPackaged / displayBatchVolume) * 100}%` }}
+              title={`Already Packaged: ${alreadyPackaged.toFixed(1)}${unitPref}`}
+            >
+               <div className="absolute inset-0 opacity-20 bg-[linear-gradient(45deg,rgba(255,255,255,.2)_25%,transparent_25%,transparent_50%,rgba(255,255,255,.2)_50%,rgba(255,255,255,.2)_75%,transparent_75%,transparent)] bg-[length:10px_10px]" />
+            </div>
+            {/* Current Allocation (Blue) */}
+            <div
+              className={`h-full transition-all duration-300 ${isOverAllocated ? "bg-red-500" : "bg-blue-500 shadow-lg shadow-blue-500/30"}`}
+              style={{ width: `${(currentAllocated / displayBatchVolume) * 100}%` }}
+              title={`New Allocation: ${currentAllocated.toFixed(1)}${unitPref}`}
+            />
+          </div>
+          
+          <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest">
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1 text-purple-600">
+                <span className="w-2 h-2 rounded-full bg-purple-400" /> {alreadyPackaged.toFixed(1)} Done
+              </span>
+              <span className="flex items-center gap-1 text-blue-600">
+                <span className="w-2 h-2 rounded-full bg-blue-500" /> +{currentAllocated.toFixed(1)} New
+              </span>
+            </div>
+            <span className={isOverAllocated ? "text-red-600" : "text-slate-500"}>
+              {isOverAllocated 
+                ? `⚠ Over by ${(totalAllocated - displayBatchVolume).toFixed(1)}` 
+                : `${remaining.toFixed(1)} Left`
+              } {unitPref}
+            </span>
+          </div>
         </div>
-          {isOverAllocated
-            ? `⚠ Over-allocated by ${(allocated - displayBatchVolume).toFixed(1)}${unitPref}`
-            : `${remaining.toFixed(1)}${unitPref} remaining`}
       </div>
 
       {/* Success state */}
@@ -220,13 +267,24 @@ export default function ProductionPackaging() {
                 <Box className="w-4 h-4 text-purple-500" />
                 <h2 className="font-semibold text-sm">Pack Sizes</h2>
               </div>
-              <button
-                type="button"
-                onClick={addRow}
-                className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add size
-              </button>
+              <div className="flex items-center gap-4">
+                {remaining > 0 && (
+                  <button
+                    type="button"
+                    onClick={handlePackRemaining}
+                    className="flex items-center gap-1 text-xs font-bold text-purple-600 hover:text-purple-700 transition-colors bg-purple-50 px-2 py-1 rounded"
+                  >
+                    Pack Remaining ({remaining.toFixed(1)}{unitPref})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={addRow}
+                  className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add size
+                </button>
+              </div>
             </div>
 
             <div className="divide-y">
@@ -309,10 +367,10 @@ export default function ProductionPackaging() {
             </div>
 
             {/* Summary row */}
-            {allocated > 0 && (
+            {currentAllocated > 0 && (
               <div className="border-t px-4 py-3 bg-slate-50 flex justify-between text-sm">
-                <span className="font-semibold text-slate-700">Total</span>
-                <span className="font-bold font-mono">{allocated.toFixed(1)}{unitPref}</span>
+                <span className="font-semibold text-slate-700">Total Selection</span>
+                <span className="font-bold font-mono">{currentAllocated.toFixed(1)}{unitPref}</span>
               </div>
             )}
           </div>
@@ -334,7 +392,7 @@ export default function ProductionPackaging() {
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || isOverAllocated || allocated === 0}
+              disabled={isSubmitting || isOverAllocated || currentAllocated === 0}
               className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (

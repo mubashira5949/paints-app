@@ -402,10 +402,22 @@ export default async function (fastifyRaw: FastifyInstance) {
                         c.name AS color,
                         r.name AS recipe,
                         pr.planned_quantity_kg AS "targetQty",
+                        pr.actual_quantity_kg,
                         pr.status,
                         pr.started_at,
                         pr.created_at,
-                        u.username AS operator
+                        u.username AS operator,
+                        (
+                            SELECT json_agg(
+                                json_build_object(
+                                    'pack_size_kg', fst.pack_size_kg,
+                                    'quantity_units', fst.quantity_units
+                                )
+                            )
+                            FROM finished_stock_transactions fst
+                            WHERE fst.reference_id = pr.id
+                              AND fst.transaction_type = 'production_entry'
+                        ) AS packaging
                     FROM production_runs pr
                     JOIN recipes r ON pr.recipe_id = r.id
                     JOIN colors c ON r.color_id = c.id
