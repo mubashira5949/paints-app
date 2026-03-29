@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { apiRequest } from "../services/api";
-import { useAuth } from "../contexts/AuthContext";
 import {
   ShoppingCart,
   Search,
@@ -12,8 +11,9 @@ import {
   PaintBucket,
   Package,
   History,
-  X,
   ChevronRight,
+  Activity,
+  FileText,
 } from "lucide-react";
 import { useUnitPreference, formatUnit } from "../utils/units";
 
@@ -33,7 +33,6 @@ interface FinishedStock {
 }
 
 export default function Sales() {
-  const { user } = useAuth();
   const unitPref = useUnitPreference();
   const navigate = useNavigate();
   
