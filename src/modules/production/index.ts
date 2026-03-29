@@ -1055,4 +1055,83 @@ export default async function (fastifyRaw: FastifyInstance) {
             }
         }
     })
+
+    /**
+     * POST /production-runs/:id/packaging/quick - Package ALL remaining yield of a production run into one entry.
+     */
+    fastify.post('/:id/packaging/quick', {
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'operator'])],
+        schema: {
+            params: RunIdParamSchema
+        },
+        handler: async (request, reply) => {
+            const { id } = request.params
+            let client
+            try {
+                client = await fastify.db.connect()
+                await client.query('BEGIN')
+
+                // 1. Fetch run details and current packaging
+                const runRes = await client.query(`
+                    SELECT pr.actual_quantity_kg, pr.planned_quantity_kg, r.color_id,
+                           (SELECT COALESCE(SUM(pack_size_kg * quantity_units), 0)
+                            FROM finished_stock_transactions
+                            WHERE reference_id = pr.id AND transaction_type = 'production_entry') as already_packaged
+                    FROM production_runs pr
+                    JOIN recipes r ON pr.recipe_id = r.id
+                    WHERE pr.id = $1
+                `, [id])
+
+                if (runRes.rows.length === 0) {
+                    await client.query('ROLLBACK')
+                    return reply.status(404).send({ error: 'Not Found', message: 'Production run not found' })
+                }
+
+                const { actual_quantity_kg, planned_quantity_kg, color_id, already_packaged } = runRes.rows[0]
+                const yieldVol = actual_quantity_kg ?? planned_quantity_kg
+                const remaining = yieldVol - already_packaged
+
+                if (remaining <= 0.01) {
+                    await client.query('ROLLBACK')
+                    return reply.status(400).send({ error: 'Bad Request', message: 'No remaining volume to pack' })
+                }
+
+                // 2. Create one packaging entry for the total remaining
+                // Use a default pack size for remaining if it doesn't match standard? 
+                // Actually, just record it as one 'custom' pack size entry for now.
+                
+                await client.query(
+                    `INSERT INTO finished_stock_transactions
+                    (color_id, pack_size_kg, transaction_type, quantity_units, quantity_kg, reference_id, notes)
+                      VALUES($1, $2, 'production_entry', 1, $2, $3, 'Quick Pack Remaining')`,
+                    [color_id, remaining, id]
+                )
+
+                await client.query(
+                    `INSERT INTO finished_stock(color_id, pack_size_kg, quantity_units)
+                      VALUES($1, $2, 1)
+                      ON CONFLICT(color_id, pack_size_kg) 
+                      DO UPDATE SET 
+                        quantity_units = finished_stock.quantity_units + 1,
+                    updated_at = CURRENT_TIMESTAMP`,
+                    [color_id, remaining]
+                )
+
+                // 3. Update status to packaging
+                await client.query(
+                    `UPDATE production_runs SET status = 'packaging', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+                    [id]
+                )
+
+                await client.query('COMMIT')
+                return reply.send({ message: 'Quick pack successful', remaining_packed: remaining })
+            } catch (err) {
+                if (client) await client.query('ROLLBACK')
+                fastify.log.error(err)
+                return reply.status(500).send({ error: 'Internal Server Error' })
+            } finally {
+                if (client) client.release()
+            }
+        }
+    })
 }

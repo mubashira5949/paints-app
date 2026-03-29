@@ -268,7 +268,7 @@ export default function ProductionPackaging() {
                 <h2 className="font-semibold text-sm">Pack Sizes</h2>
               </div>
               <div className="flex items-center gap-4">
-                {remaining > 0 && (
+                {remaining > 0 ? (
                   <button
                     type="button"
                     onClick={handlePackRemaining}
@@ -276,11 +276,16 @@ export default function ProductionPackaging() {
                   >
                     Pack Remaining ({remaining.toFixed(1)}{unitPref})
                   </button>
+                ) : (
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 px-2 py-1 rounded border border-slate-200 shadow-inner italic">
+                    Fully Allocated
+                  </span>
                 )}
                 <button
                   type="button"
                   onClick={addRow}
-                  className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                  disabled={remaining <= 0}
+                  className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   <Plus className="w-3.5 h-3.5" /> Add size
                 </button>

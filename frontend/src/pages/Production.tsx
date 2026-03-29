@@ -162,8 +162,6 @@ export default function Production() {
     { resource_id: number; actual_quantity_used: number }[]
   >([]);
 
-  const [isEditing, setIsEditing] = useState(false);
-  
   // Completion Modal State
   const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
   const [completingRun, setCompletingRun] = useState<ActiveRun | null>(null);
@@ -171,7 +169,11 @@ export default function Production() {
   const [wasteKg, setWasteKg] = useState<number>(0);
   const [isCompleting, setIsCompleting] = useState(false);
 
-
+  // Edit State
+  const [editingRun, setEditingRun] = useState<ActiveRun | null>(null);
+  const [editTargetQty, setEditTargetQty] = useState<number>(0);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   const fetchMetrics = async () => {
     try {
@@ -212,7 +214,6 @@ export default function Production() {
     }
   };
 
-  // ── Fetch active (non-completed) runs from dedicated endpoint ──
   const fetchActiveRuns = async () => {
     setIsActiveLoading(true);
     try {
@@ -225,7 +226,12 @@ export default function Production() {
     }
   };
 
-  // ── Update a run's status via PATCH ──
+  const fetchRuns = () => {
+    fetchActiveRuns();
+    fetchMetrics();
+    fetchHistory();
+  };
+
   const updateStatus = async (id: number, status: ActiveRun["status"], payload: any = {}) => {
     setUpdatingId(id);
     try {
@@ -233,7 +239,7 @@ export default function Production() {
         method: "PATCH",
         body: { status, ...payload },
       });
-      await Promise.all([fetchActiveRuns(), fetchMetrics(), fetchHistory()]);
+      fetchRuns();
     } catch (err: any) {
       alert(err.message || "Failed to update status");
     } finally {
@@ -247,19 +253,65 @@ export default function Production() {
 
     setIsCompleting(true);
     try {
-      await updateStatus(completingRun.id, "completed", {
-        actual_quantity_kg: fromDisplayValue(actualYield, unitPref),
-        waste_kg: fromDisplayValue(wasteKg, unitPref)
+      await apiRequest(`/production-runs/${completingRun.id}/status`, {
+        method: "PATCH",
+        body: {
+          status: "completed",
+          actual_quantity_kg: fromDisplayValue(actualYield, unitPref),
+          waste_kg: fromDisplayValue(wasteKg, unitPref),
+        },
       });
       setIsCompletionModalOpen(false);
       setCompletingRun(null);
+      fetchRuns();
     } catch (err: any) {
-      console.error(err);
+      alert(err.message || "Failed to complete run");
     } finally {
       setIsCompleting(false);
     }
   };
 
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRun) return;
+
+    setIsEditing(true);
+    try {
+      await apiRequest(`/production-runs/${editingRun.id}`, {
+        method: "PATCH",
+        body: {
+          planned_quantity_kg: fromDisplayValue(editTargetQty, unitPref),
+        },
+      });
+      setIsEditModalOpen(false);
+      setEditingRun(null);
+      fetchRuns();
+    } catch (err: any) {
+      alert(err.message || "Failed to update run");
+    } finally {
+      setIsEditing(false);
+    }
+  };
+
+  const handleQuickPackRemaining = async (id: number, planned: number, actual: number | null, packaging: any[] | undefined) => {
+    const batchVol = actual ?? planned;
+    const currentPackaged = packaging?.reduce((s, p) => s + Number(p.pack_size_kg * p.quantity_units), 0) ?? 0;
+    const left = batchVol - currentPackaged;
+
+    if (left <= 0.01) return;
+
+    setUpdatingId(id);
+    try {
+      await apiRequest(`/production-runs/${id}/packaging/quick`, {
+        method: "POST"
+      });
+      fetchRuns();
+    } catch (err: any) {
+      alert(err.message || "Failed to pack remaining volume");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   useEffect(() => {
     fetchHistory();
@@ -273,7 +325,6 @@ export default function Production() {
     Promise.all([fetchColors(), fetchActiveRuns()]);
   }, []);
 
-  // Auto-refresh active runs every 10 seconds
   useEffect(() => {
     const interval = setInterval(fetchActiveRuns, 10000);
     return () => clearInterval(interval);
@@ -333,64 +384,13 @@ export default function Production() {
         },
       });
       setIsModalOpen(false);
-      await Promise.all([fetchActiveRuns(), fetchMetrics(), fetchHistory()]);
-      // Reset form
+      fetchRuns();
       setSelectedColor("");
       setSelectedRecipe(null);
     } catch (err: any) {
       alert(err.message);
     }
   };
-
-  const handleEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingRun) return;
-
-    setIsEditing(true);
-    try {
-      await apiRequest(`/production-runs/${editingRun.id}`, {
-        method: "PATCH",
-        body: {
-          targetQty: fromDisplayValue(editTargetQty, unitPref),
-        },
-      });
-      setIsEditModalOpen(false);
-      setEditingRun(null);
-      await Promise.all([fetchActiveRuns(), fetchMetrics(), fetchHistory()]);
-    } catch (err: any) {
-      alert(err.message || "Failed to update target quantity");
-    } finally {
-      setIsEditing(false);
-    }
-  };
-
-  const handleQuickPackRemaining = async (id: number, planned: number, actual: number | null, packaging: any[] | undefined) => {
-    const batchVol = actual ?? planned;
-    const currentPackaged = packaging?.reduce((s, p) => s + Number(p.pack_size_kg * p.quantity_units), 0) ?? 0;
-    const left = batchVol - currentPackaged;
-
-    if (left <= 0.01) return;
-
-    setUpdatingId(id);
-    try {
-      await apiRequest(`/production-runs/${id}/packaging`, {
-        method: "POST",
-        body: {
-          packaging_details: [{
-            pack_size_kg: left,
-            quantity_units: 1
-          }]
-        }
-      });
-      await Promise.all([fetchActiveRuns(), fetchMetrics(), fetchHistory()]);
-    } catch (err: any) {
-      alert(err.message || "Failed to pack remaining volume");
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
-
 
   return (
     <div className="space-y-6">
@@ -406,7 +406,6 @@ export default function Production() {
         </div>
       </div>
 
-      {/* Metrics Cards */}
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-xl border bg-card p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition">
           <div className="flex items-center justify-between space-y-0 pb-2">
@@ -483,7 +482,6 @@ export default function Production() {
         </div>
       </div>
 
-      {/* Global Filters */}
       <div className="rounded-xl border bg-white shadow-sm p-4 mb-6">
         <div className="flex flex-col md:flex-row items-center gap-4">
           <div className="flex-1 relative w-full">
@@ -541,7 +539,6 @@ export default function Production() {
       </div>
 
       <div className="grid gap-8 md:grid-cols-3 md:items-start pt-2">
-        {/* Create Run Card / Quick Actions */}
         <div className="md:col-span-1 space-y-6 md:sticky md:top-6">
           <div
             className="rounded-xl border border-transparent bg-gradient-to-br from-blue-600 to-indigo-700 shadow-lg p-6 flex flex-col items-center justify-center text-center space-y-4 h-64 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer group"
@@ -562,7 +559,6 @@ export default function Production() {
         </div>
 
         <div className="md:col-span-2 space-y-10">
-          {/* Active Runs */}
           <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <h2 className="text-lg font-bold flex items-center text-slate-800">
@@ -608,7 +604,6 @@ export default function Production() {
                       if (filterSearch && !run.batchId.toLowerCase().includes(filterSearch.toLowerCase())) return false;
                       if (filterColor && colors.find(c => c.id === filterColor)?.name !== run.color) return false;
                       if (filterStatus && filterStatus !== "All" && run.status !== filterStatus) return false;
-                      // Date filtering is usually complex for active runs (they are active now), so skipping date filter or keeping it for history mostly, but let's do a simple check on started_at if requested
                       if (filterFromDate && run.started_at && new Date(run.started_at) < new Date(filterFromDate)) return false;
                       if (filterToDate && run.started_at && new Date(run.started_at) > new Date(filterToDate)) return false;
                       return true;
@@ -625,7 +620,6 @@ export default function Production() {
                     const sc = statusConfig[run.status] ?? statusConfig.planned;
                     const StatusIcon = sc.icon;
 
-                    // Progress logic:
                     const produced = run.actual_quantity_kg ?? 0;
                     const packaged = run.packaging?.reduce((s, p) => s + (p.pack_size_kg * p.quantity_units), 0) ?? 0;
                     
@@ -639,8 +633,9 @@ export default function Production() {
                       currentVal = packaged;
                       targetVal = produced || run.targetQty;
                       barColor = "purple";
-                    } else if (run.status === 'completed' || run.status === 'packaging') {
-                      currentVal = produced || run.targetQty;
+                    } else if (run.status === 'completed') {
+                      currentVal = produced;
+                      targetVal = produced;
                     }
 
                     return (
