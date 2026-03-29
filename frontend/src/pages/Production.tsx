@@ -162,6 +162,13 @@ export default function Production() {
     { resource_id: number; actual_quantity_used: number }[]
   >([]);
 
+  const [isEditing, setIsEditing] = useState(false);
+
+  // Edit State
+  const [editingRun, setEditingRun] = useState<ActiveRun | null>(null);
+  const [editTargetQty, setEditTargetQty] = useState<number>(0);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  
   // Completion Modal State
   const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
   const [completingRun, setCompletingRun] = useState<ActiveRun | null>(null);
@@ -169,11 +176,6 @@ export default function Production() {
   const [wasteKg, setWasteKg] = useState<number>(0);
   const [isCompleting, setIsCompleting] = useState(false);
 
-  // Edit State
-  const [editingRun, setEditingRun] = useState<ActiveRun | null>(null);
-  const [editTargetQty, setEditTargetQty] = useState<number>(0);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
 
   const fetchMetrics = async () => {
     try {
@@ -232,6 +234,7 @@ export default function Production() {
     fetchHistory();
   };
 
+  // ── Update a run's status via PATCH ──
   const updateStatus = async (id: number, status: ActiveRun["status"], payload: any = {}) => {
     setUpdatingId(id);
     try {
@@ -253,18 +256,14 @@ export default function Production() {
 
     setIsCompleting(true);
     try {
-      await apiRequest(`/production-runs/${completingRun.id}/status`, {
-        method: "PATCH",
-        body: {
-          status: "completed",
-          actual_quantity_kg: fromDisplayValue(actualYield, unitPref),
-          waste_kg: fromDisplayValue(wasteKg, unitPref),
-        },
+      await updateStatus(completingRun.id, "completed", {
+        actual_quantity_kg: fromDisplayValue(actualYield, unitPref),
+        waste_kg: fromDisplayValue(wasteKg, unitPref)
       });
       setIsCompletionModalOpen(false);
       setCompletingRun(null);
-      fetchRuns();
     } catch (err: any) {
+      console.error(err);
       alert(err.message || "Failed to complete run");
     } finally {
       setIsCompleting(false);
