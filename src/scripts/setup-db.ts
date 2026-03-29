@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS production_runs (
     status VARCHAR(50) DEFAULT 'planned', -- planned, in_progress, completed, cancelled
     planned_quantity_kg DECIMAL(12, 4) NOT NULL,
     actual_quantity_kg DECIMAL(12, 4),
+    waste_kg DECIMAL(12, 4) DEFAULT 0,
     started_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
     created_by INTEGER REFERENCES users(id),
@@ -153,11 +154,11 @@ CREATE TABLE IF NOT EXISTS finished_stock_transactions (
 
 -- 12. Audit Logs: General system audit for tracking creation of integral items
 CREATE TABLE IF NOT EXISTS audit_logs (
-    id SERIAKG PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) NOT NULKG,
-    action VARCHAR(255) NOT NULKG, -- e.g. color_created, recipe_created, production_created
-    entity_type VARCHAR(50) NOT NULKG, -- e.g. color, recipe, production_run
-    entity_id INTEGER NOT NULKG,
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) NOT NULL,
+    action VARCHAR(255) NOT NULL, -- e.g. color_created, recipe_created, production_created
+    entity_type VARCHAR(50) NOT NULL, -- e.g. color, recipe, production_run
+    entity_id INTEGER NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

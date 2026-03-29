@@ -5,6 +5,7 @@
 
 import { FastifyInstance } from 'fastify'
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
+import { Type } from '@sinclair/typebox'
 import { authorizeRole } from '../../utils/authorizeRole'
 
 export default async function (fastifyRaw: FastifyInstance) {
@@ -161,6 +162,72 @@ export default async function (fastifyRaw: FastifyInstance) {
                     error: 'Internal Server Error',
                     message: 'Failed to generate stock report'
                 })
+            }
+        }
+    })
+    /**
+     * POST /inventory/sales
+     * Records a sale of finished stock, deducting units and adding a transaction.
+     * Accessible by 'admin', 'manager', 'operator', and 'sales'.
+     */
+    const CreateSaleSchema = Type.Object({
+        colorId: Type.Integer(),
+        packSizeKg: Type.Number({ exclusiveMinimum: 0 }),
+        quantityUnits: Type.Integer({ exclusiveMinimum: 0 }),
+        notes: Type.Optional(Type.String())
+    })
+
+    fastify.post('/sales', {
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'operator', 'sales'])],
+        schema: {
+            body: CreateSaleSchema
+        },
+        handler: async (request, reply) => {
+            const { colorId, packSizeKg, quantityUnits, notes } = request.body
+            let client
+            try {
+                client = await fastify.db.connect()
+                await client.query('BEGIN')
+
+                // 1. Check stock
+                const stockRes = await client.query(
+                    'SELECT quantity_units FROM finished_stock WHERE color_id = $1 AND pack_size_kg = $2',
+                    [colorId, packSizeKg]
+                )
+
+                if (stockRes.rows.length === 0 || stockRes.rows[0].quantity_units < quantityUnits) {
+                    await client.query('ROLLBACK')
+                    return reply.status(400).send({
+                        error: 'Bad Request',
+                        message: 'Insufficient stock or invalid product configuration for this sale'
+                    })
+                }
+
+                // 2. Deduct stock
+                await client.query(
+                    'UPDATE finished_stock SET quantity_units = quantity_units - $1, updated_at = CURRENT_TIMESTAMP WHERE color_id = $2 AND pack_size_kg = $3',
+                    [quantityUnits, colorId, packSizeKg]
+                )
+
+                // 3. Record transaction
+                await client.query(
+                    `INSERT INTO finished_stock_transactions 
+                     (color_id, pack_size_kg, transaction_type, quantity_units, quantity_kg, notes)
+                     VALUES ($1, $2, 'sale', $3, $4, $5)`,
+                    [colorId, packSizeKg, -quantityUnits, -(quantityUnits * packSizeKg), notes || 'Sale recorded']
+                )
+
+                await client.query('COMMIT')
+                return reply.send({ message: 'Sale recorded successfully' })
+            } catch (err: any) {
+                if (client) await client.query('ROLLBACK')
+                fastify.log.error(err)
+                return reply.status(500).send({
+                    error: 'Internal Server Error',
+                    message: 'Failed to record sale'
+                })
+            } finally {
+                if (client) client.release()
             }
         }
     })

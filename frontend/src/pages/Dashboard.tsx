@@ -2,6 +2,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recha
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiRequest } from "../services/api";
+import { useAuth } from "../contexts/AuthContext";
 import {
   Package,
   Layers,
@@ -14,6 +15,7 @@ import {
   Clock,
   Bell,
   Users,
+  ShoppingCart,
 } from "lucide-react";
 import { useUnitPreference, formatUnit } from "../utils/units";
 
@@ -43,6 +45,7 @@ interface DashboardData {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const unitPref = useUnitPreference();
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -268,26 +271,42 @@ export default function Dashboard() {
           </h3>
           <div className="space-y-3">
             <button
-              onClick={() => navigate("/production/new")}
+              onClick={() => navigate("/production")}
               className="w-full flex items-center p-3 rounded-lg border border-transparent bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-sm group"
             >
               <Package className="mr-3 h-5 w-5 text-blue-100 group-hover:scale-110 transition-transform" />
               <span>Start New Production Batch</span>
             </button>
-            <button
-              onClick={generateStockReport}
-              className="w-full flex items-center p-3 rounded-lg border border-transparent bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-sm group"
-            >
-              <FileText className="mr-3 h-5 w-5 text-blue-100 group-hover:scale-110 transition-transform" />
-              <span>Generate Stock Report</span>
-            </button>
-            <button
-              onClick={() => navigate("/users")}
-              className="w-full flex items-center p-3 rounded-lg border border-transparent bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-sm group"
-            >
-              <Users className="mr-3 h-5 w-5 text-blue-100 group-hover:scale-110 transition-transform" />
-              <span>Manage User Access</span>
-            </button>
+            
+            {(user?.role === 'admin' || user?.role === 'manager' || user?.role === 'operator' || user?.role === 'sales') && (
+              <button
+                onClick={() => navigate("/sales/new")}
+                className="w-full flex items-center p-3 rounded-lg border border-transparent bg-emerald-600 hover:bg-emerald-700 text-white transition-all text-sm font-medium shadow-sm group"
+              >
+                <ShoppingCart className="mr-3 h-5 w-5 text-emerald-100 group-hover:scale-110 transition-transform" />
+                <span>Record New Sale</span>
+              </button>
+            )}
+
+            {(user?.role === 'admin' || user?.role === 'manager' || user?.role === 'sales') && (
+              <button
+                onClick={generateStockReport}
+                className="w-full flex items-center p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-all text-sm font-medium shadow-sm group"
+              >
+                <FileText className="mr-3 h-5 w-5 text-slate-400 group-hover:scale-110 transition-transform" />
+                <span>Generate Stock Report</span>
+              </button>
+            )}
+
+            {user?.role === 'admin' && (
+              <button
+                onClick={() => navigate("/users")}
+                className="w-full flex items-center p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-all text-sm font-medium shadow-sm group"
+              >
+                <Users className="mr-3 h-5 w-5 text-slate-400 group-hover:scale-110 transition-transform" />
+                <span>Manage User Access</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
