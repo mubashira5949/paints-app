@@ -162,11 +162,15 @@ export default function Production() {
     { resource_id: number; actual_quantity_used: number }[]
   >([]);
 
-  // Edit Run State
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editingRun, setEditingRun] = useState<ActiveRun | null>(null);
-  const [editTargetQty, setEditTargetQty] = useState<number>(0);
   const [isEditing, setIsEditing] = useState(false);
+  
+  // Completion Modal State
+  const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
+  const [completingRun, setCompletingRun] = useState<ActiveRun | null>(null);
+  const [actualYield, setActualYield] = useState<number>(0);
+  const [wasteKg, setWasteKg] = useState<number>(0);
+  const [isCompleting, setIsCompleting] = useState(false);
+
 
 
   const fetchMetrics = async () => {
@@ -222,12 +226,12 @@ export default function Production() {
   };
 
   // ── Update a run's status via PATCH ──
-  const updateStatus = async (id: number, status: ActiveRun["status"]) => {
+  const updateStatus = async (id: number, status: ActiveRun["status"], payload: any = {}) => {
     setUpdatingId(id);
     try {
       await apiRequest(`/production-runs/${id}/status`, {
         method: "PATCH",
-        body: { status },
+        body: { status, ...payload },
       });
       await Promise.all([fetchActiveRuns(), fetchMetrics(), fetchHistory()]);
     } catch (err: any) {
@@ -236,6 +240,26 @@ export default function Production() {
       setUpdatingId(null);
     }
   };
+
+  const handleConfirmCompletion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!completingRun) return;
+
+    setIsCompleting(true);
+    try {
+      await updateStatus(completingRun.id, "completed", {
+        actual_quantity_kg: fromDisplayValue(actualYield, unitPref),
+        waste_kg: fromDisplayValue(wasteKg, unitPref)
+      });
+      setIsCompletionModalOpen(false);
+      setCompletingRun(null);
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+
 
   useEffect(() => {
     fetchHistory();
@@ -729,7 +753,12 @@ export default function Production() {
 
                                   {(run.status === "running" || run.status === "paused") && (
                                     <button
-                                      onClick={() => updateStatus(run.id, "completed")}
+                                      onClick={() => {
+                                        setCompletingRun(run);
+                                        setActualYield(toDisplayValue(run.targetQty, unitPref));
+                                        setWasteKg(0);
+                                        setIsCompletionModalOpen(true);
+                                      }}
                                       className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all shadow-sm active:scale-95"
                                     >
                                       <CheckCircle2 className="w-3.5 h-3.5" /> COMPLETE
@@ -1289,6 +1318,105 @@ export default function Production() {
                 >
                   {isEditing ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                   Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Completion Modal */}
+      {isCompletionModalOpen && completingRun && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 text-left">
+          <div className="bg-card w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-700 p-6 flex items-center justify-between text-white">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <CheckCircle2 className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold">Complete Run: {completingRun.batchId}</h3>
+                  <p className="text-emerald-50/80 text-[10px] font-bold uppercase tracking-widest">Production Finalization</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsCompletionModalOpen(false)}
+                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                disabled={isCompleting}
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleConfirmCompletion} className="p-8 space-y-8">
+              <div className="grid grid-cols-2 gap-8">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Droplets className="w-4 h-4 text-emerald-600" />
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Actual Yield</label>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      autoFocus
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-2xl font-black text-slate-800 focus:ring-4 focus:ring-emerald-500/20 focus:bg-white focus:border-emerald-500 outline-none transition-all pr-12"
+                      value={actualYield}
+                      onChange={(e) => setActualYield(Number(e.target.value))}
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{unitPref}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Target was {formatUnit(completingRun.targetQty, unitPref)}</p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <FlaskConical className="w-4 h-4 text-orange-500" />
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Waste Logged</label>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-2xl font-black text-orange-600 focus:ring-4 focus:ring-orange-500/10 focus:bg-white focus:border-orange-500 outline-none transition-all pr-12"
+                      value={wasteKg}
+                      onChange={(e) => setWasteKg(Number(e.target.value))}
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{unitPref}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight italic">Spillage or losses</p>
+                </div>
+              </div>
+
+              <div className="bg-emerald-50/50 rounded-xl p-4 border border-emerald-100 flex items-start gap-4">
+                <div className="p-2 bg-emerald-100/50 rounded-lg text-emerald-700">
+                  <Activity className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-emerald-900 mb-1 uppercase tracking-tight">Yield Efficiency</p>
+                  <p className="text-[11px] text-emerald-700/80 leading-relaxed font-semibold">
+                    Recording the actual amount of paint manufactured vs the target ensures accurate inventory and helps track formulation efficiency.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsCompletionModalOpen(false)}
+                  className="px-6 py-3 text-xs font-bold bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors uppercase tracking-widest"
+                  disabled={isCompleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCompleting || actualYield < 0}
+                  className="px-8 py-3 text-xs font-bold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2 transition-all shadow-lg shadow-emerald-200 active:scale-95 uppercase tracking-widest"
+                >
+                  {isCompleting ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Confirm Completion
                 </button>
               </div>
             </form>

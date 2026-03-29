@@ -30,6 +30,9 @@ describe('Inventory Module API', () => {
         get: (path: string, options: any) => {
             routes[`GET ${path}`] = options
         },
+        post: (path: string, options: any) => {
+            routes[`POST ${path}`] = options
+        },
         withTypeProvider: () => mockFastify
     }
 
@@ -122,6 +125,71 @@ describe('Inventory Module API', () => {
 
             expect(forbidden).toBe(true)
             expect((rep as any).getStatusCode()).toBe(403)
+        })
+    })
+
+    describe('POST /sales', () => {
+        it('should return 200 after successfully recording a sale', async () => {
+            const postRoute = routes['POST /sales']
+            const req = {
+                headers: { authorization: 'Bearer operator:testop' },
+                body: {
+                    colorId: 1,
+                    packSizeKg: 5,
+                    quantityUnits: 2,
+                    notes: 'Test sale'
+                }
+            } as unknown as FastifyRequest
+            const rep = createMockReply()
+
+            // Handle transaction commands and specific queries
+            mockClient.query.mockImplementation(async (query: string) => {
+                if (query === 'BEGIN' || query === 'COMMIT' || query === 'ROLLBACK') return { rowCount: 1 }
+                if (query.includes('SELECT quantity_units')) return { rows: [{ quantity_units: 10 }] }
+                return { rowCount: 1 }
+            })
+
+            // Execute handlers
+            for (const handler of postRoute.preHandler) { await handler(req, rep) }
+            await postRoute.handler(req, rep)
+
+            expect((rep as any).getStatusCode()).toBe(200)
+            expect((rep as any).getBody().message).toBe('Sale recorded successfully')
+            
+            // Verify DB calls
+            expect(mockClient.query).toHaveBeenCalledWith('BEGIN')
+            expect(mockClient.query).toHaveBeenCalledWith(
+                expect.stringContaining('UPDATE finished_stock'),
+                expect.any(Array)
+            )
+            expect(mockClient.query).toHaveBeenCalledWith('COMMIT')
+        })
+
+        it('should return 400 if stock is insufficient', async () => {
+            const postRoute = routes['POST /sales']
+            const req = {
+                headers: { authorization: 'Bearer sales:testuser' },
+                body: {
+                    colorId: 1,
+                    packSizeKg: 10,
+                    quantityUnits: 100
+                }
+            } as unknown as FastifyRequest
+            const rep = createMockReply()
+
+            // Mock stock check (insufficient stock)
+            mockClient.query.mockImplementation(async (query: string) => {
+                if (query === 'BEGIN' || query === 'ROLLBACK') return { rowCount: 1 }
+                if (query.includes('SELECT quantity_units')) return { rows: [{ quantity_units: 5 }] }
+                return { rowCount: 1 }
+            })
+
+            for (const handler of postRoute.preHandler) { await handler(req, rep) }
+            await postRoute.handler(req, rep)
+
+            expect((rep as any).getStatusCode()).toBe(400)
+            expect((rep as any).getBody().message).toContain('Insufficient stock')
+            expect(mockClient.query).toHaveBeenCalledWith('ROLLBACK')
         })
     })
 })

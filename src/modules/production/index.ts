@@ -37,7 +37,9 @@ export default async function (fastifyRaw: FastifyInstance) {
             Type.Literal('paused'),
             Type.Literal('completed'),
             Type.Literal('packaging')
-        ])
+        ]),
+        actual_quantity_kg: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+        waste_kg: Type.Optional(Type.Number({ minimum: 0 }))
     })
 
     const RunIdParamSchema = Type.Object({
@@ -448,7 +450,7 @@ export default async function (fastifyRaw: FastifyInstance) {
         },
         handler: async (request, reply) => {
             const { id } = request.params
-            const { status } = request.body
+            const { status, actual_quantity_kg, waste_kg } = request.body
 
             try {
                 // Fetch current status
@@ -483,19 +485,32 @@ export default async function (fastifyRaw: FastifyInstance) {
                     })
                 }
 
-                // Compute timestamps to set based on new status
-                let extraFields = ''
-                if (status === 'running') extraFields = `, started_at = CURRENT_TIMESTAMP`
-                if (status === 'completed') extraFields = `, completed_at = CURRENT_TIMESTAMP`
-
                 let client
                 try {
                     client = await fastify.db.connect()
                     await client.query('BEGIN')
 
+                    // Compute timestamps to set based on new status
+                    let extraFields = ''
+                    const queryParams: any[] = [status, id]
+                    let paramIdx = 3
+
+                    if (status === 'running') extraFields = `, started_at = CURRENT_TIMESTAMP`
+                    if (status === 'completed') {
+                        extraFields = `, completed_at = CURRENT_TIMESTAMP`
+                        if (actual_quantity_kg !== undefined) {
+                            extraFields += `, actual_quantity_kg = $${paramIdx++}`
+                            queryParams.push(actual_quantity_kg)
+                        }
+                        if (waste_kg !== undefined) {
+                            extraFields += `, waste_kg = $${paramIdx++}`
+                            queryParams.push(waste_kg)
+                        }
+                    }
+
                     await client.query(
                         `UPDATE production_runs SET status = $1${extraFields}, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
-                        [status, id]
+                        queryParams
                     )
 
                     // If transitioning to completed, populate actuals if they don't exist
@@ -508,7 +523,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                         if (actualsCheck.rows.length === 0) {
                             // Fetch run details to get recipe and quantity
                             const runDetails = await client.query(
-                                `SELECT pr.recipe_id, pr.planned_quantity_kg, r.batch_size_kg 
+                                `SELECT pr.recipe_id, pr.planned_quantity_kg, pr.actual_quantity_kg, r.batch_size_kg 
                                  FROM production_runs pr 
                                  JOIN recipes r ON pr.recipe_id = r.id 
                                  WHERE pr.id = $1`,
@@ -516,8 +531,10 @@ export default async function (fastifyRaw: FastifyInstance) {
                             )
                             
                             if (runDetails.rows.length > 0) {
-                                const { recipe_id, planned_quantity_kg, batch_size_kg } = runDetails.rows[0]
-                                const scaleFactor = planned_quantity_kg / batch_size_kg
+                                const { recipe_id, planned_quantity_kg, actual_quantity_kg: currentActual, batch_size_kg } = runDetails.rows[0]
+                                // Use the newly provided actual if available, else planned
+                                const effectiveActual = actual_quantity_kg ?? currentActual ?? planned_quantity_kg
+                                const scaleFactor = effectiveActual / batch_size_kg
 
                                 const recipeResources = await client.query(
                                     'SELECT resource_id, quantity_required FROM recipe_resources WHERE recipe_id = $1',
@@ -534,10 +551,10 @@ export default async function (fastifyRaw: FastifyInstance) {
                                         [id, res.resource_id, expectedQty, expectedQty]
                                     )
                                     
-                                    // Also deduct stock (standard behavior when production is completed)
+                                    // Also deduct stock
                                     await client.query(
                                         `INSERT INTO resource_stock_transactions (resource_id, transaction_type, quantity, reference_id, notes)
-                                         VALUES ($1, 'production_usage', $2, $3, 'Consumed in Production Run (Auto-populated)')`,
+                                         VALUES ($1, 'production_usage', $2, $3, 'Consumed in Production Run')`,
                                         [res.resource_id, -expectedQty, id]
                                     )
                                 }
