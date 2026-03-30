@@ -13,6 +13,8 @@ import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import Recipes from "./pages/Recipes";
 import Sales from "./pages/Sales";
+import SalesHistory from "./pages/SalesHistory";
+import Orders from "./pages/Orders";
 
 function App() {
   return (
@@ -35,6 +37,8 @@ function App() {
               <Route path="production/:batchId" element={<ProductionDetail />} />
               <Route path="production/:batchId/packaging" element={<ProductionPackaging />} />
               <Route path="sales/new" element={<Sales />} />
+              <Route path="sales/history" element={<SalesHistory />} />
+              <Route path="sales/orders" element={<Orders />} />
 
               {/* Manager and Admin routes */}
               <Route element={<ProtectedRoute allowedRoles={["manager", "admin"]} />}>

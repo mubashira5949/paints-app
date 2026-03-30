@@ -143,6 +143,13 @@ import inventoryApi from './modules/inventory/inventory.api'
  */
 fastify.register(inventoryApi, { prefix: '/api/inventory' })
 
+import salesModule from './modules/sales'
+
+/**
+ * Register sales module with a '/sales' prefix.
+ */
+fastify.register(salesModule, { prefix: '/sales' })
+
 /**
  * Root endpoint - returns basic API information.
  */

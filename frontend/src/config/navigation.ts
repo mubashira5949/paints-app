@@ -6,6 +6,8 @@ import {
   Factory,
   Beaker,
   ShoppingCart,
+  History,
+  ClipboardList
 } from "lucide-react";
 
 export type UserRole = "manager" | "operator" | "sales" | "admin" | "worker";
@@ -37,10 +39,22 @@ export const navigation: NavItem[] = [
     roles: ["manager", "operator", "sales", "admin", "worker"],
   },
   {
-    title: "Sales",
+    title: "New Sale",
     path: "/sales/new",
     icon: ShoppingCart,
     roles: ["manager", "operator", "sales", "admin"],
+  },
+  {
+    title: "Sales History",
+    path: "/sales/history",
+    icon: History,
+    roles: ["manager", "sales", "admin"],
+  },
+  {
+    title: "Orders",
+    path: "/sales/orders",
+    icon: ClipboardList,
+    roles: ["manager", "sales", "admin"],
   },
   {
     title: "Recipes",

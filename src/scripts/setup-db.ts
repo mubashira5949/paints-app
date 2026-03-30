@@ -149,7 +149,28 @@ CREATE TABLE IF NOT EXISTS finished_stock_transactions (
     quantity_kg DECIMAL(12, 4) NOT NULL,
     reference_id INT, -- e.g., production_run_id or sale_id
     notes TEXT,
+    created_by INTEGER REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 11a. Client Orders: Tracks customer orders
+CREATE TABLE IF NOT EXISTS client_orders (
+    id SERIAL PRIMARY KEY,
+    client_name VARCHAR(255) NOT NULL,
+    status VARCHAR(50) DEFAULT 'pending',
+    notes TEXT,
+    created_by INTEGER REFERENCES users(id) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 11b. Client Order Items: Tracks the specific paint products and sizes ordered
+CREATE TABLE IF NOT EXISTS client_order_items (
+    id SERIAL PRIMARY KEY,
+    order_id INTEGER REFERENCES client_orders(id) ON DELETE CASCADE,
+    color_id INTEGER REFERENCES colors(id) NOT NULL,
+    pack_size_kg DECIMAL(5, 2) NOT NULL,
+    quantity INTEGER NOT NULL
 );
 
 -- 12. Audit Logs: General system audit for tracking creation of integral items
