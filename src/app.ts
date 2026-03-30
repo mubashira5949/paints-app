@@ -206,7 +206,7 @@ const start = async () => {
         // Apply incremental schema migrations on startup
         await fastify.ready()
         await fastify.db.query(`
-            -- Clients entity (onboarding)
+            -- 1. Clients entity (onboarding)
             CREATE TABLE IF NOT EXISTS clients (
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
@@ -219,6 +219,8 @@ const start = async () => {
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
+
+            -- 2. Client Shipping Addresses (Many per client)
             CREATE TABLE IF NOT EXISTS client_shipping_addresses (
                 id SERIAL PRIMARY KEY,
                 client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE NOT NULL,
@@ -226,6 +228,28 @@ const start = async () => {
                 address TEXT NOT NULL,
                 is_default BOOLEAN DEFAULT FALSE
             );
+
+            -- 3. Core orders table (if not exists)
+            CREATE TABLE IF NOT EXISTS client_orders (
+                id SERIAL PRIMARY KEY,
+                client_name VARCHAR(255) NOT NULL,
+                status VARCHAR(50) DEFAULT 'pending',
+                notes TEXT,
+                created_by INTEGER REFERENCES users(id) NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            -- 4. Order Items
+            CREATE TABLE IF NOT EXISTS client_order_items (
+                id SERIAL PRIMARY KEY,
+                order_id INTEGER REFERENCES client_orders(id) ON DELETE CASCADE,
+                color_id INTEGER REFERENCES colors(id) NOT NULL,
+                pack_size_kg DECIMAL(5, 2) NOT NULL,
+                quantity INTEGER NOT NULL
+            );
+
+            -- 5. Linking existing orders to clients (if not already linked)
             ALTER TABLE client_orders ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES clients(id);
             ALTER TABLE client_orders ADD COLUMN IF NOT EXISTS shipping_address_id INTEGER REFERENCES client_shipping_addresses(id);
         `)
