@@ -7,7 +7,8 @@ import {
   Beaker,
   ShoppingCart,
   History,
-  ClipboardList
+  ClipboardList,
+  UserRound,
 } from "lucide-react";
 
 export type UserRole = "manager" | "operator" | "sales" | "admin" | "worker";
@@ -54,6 +55,12 @@ export const navigation: NavItem[] = [
     title: "Orders",
     path: "/sales/orders",
     icon: ClipboardList,
+    roles: ["manager", "sales", "admin"],
+  },
+  {
+    title: "Clients",
+    path: "/clients",
+    icon: UserRound,
     roles: ["manager", "sales", "admin"],
   },
   {
