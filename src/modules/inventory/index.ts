@@ -183,6 +183,7 @@ export default async function (fastifyRaw: FastifyInstance) {
             body: CreateSaleSchema
         },
         handler: async (request, reply) => {
+            const user = (request as any).user as { id: number }
             const { colorId, packSizeKg, quantityUnits, notes } = request.body
             let client
             try {
@@ -212,9 +213,9 @@ export default async function (fastifyRaw: FastifyInstance) {
                 // 3. Record transaction
                 await client.query(
                     `INSERT INTO finished_stock_transactions 
-                     (color_id, pack_size_kg, transaction_type, quantity_units, quantity_kg, notes)
-                     VALUES ($1, $2, 'sale', $3, $4, $5)`,
-                    [colorId, packSizeKg, -quantityUnits, -(quantityUnits * packSizeKg), notes || 'Sale recorded']
+                     (color_id, pack_size_kg, transaction_type, quantity_units, quantity_kg, notes, created_by)
+                     VALUES ($1, $2, 'sale', $3, $4, $5, $6)`,
+                    [colorId, packSizeKg, -quantityUnits, -(quantityUnits * packSizeKg), notes || 'Sale recorded', user.id]
                 )
 
                 await client.query('COMMIT')
