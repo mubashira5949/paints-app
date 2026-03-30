@@ -62,28 +62,38 @@ export default async function (fastifyRaw: FastifyInstance) {
             try {
                 client = await fastify.db.connect()
 
-                // Include item details nested as JSON
                 const result = await client.query(`
                     SELECT 
-                        o.id, o.client_name, o.status, o.notes, o.created_at, u.username as logged_by,
+                        o.id, o.status, o.notes, o.created_at,
+                        o.client_name,
+                        cl.id          AS client_id,
+                        cl.name        AS client_display_name,
+                        cl.gst_number,
+                        cl.contact_phone,
+                        cl.contact_email,
+                        sa.label       AS shipping_label,
+                        sa.address     AS shipping_address,
+                        u.username     AS logged_by,
                         COALESCE(
                             json_agg(
                                 json_build_object(
-                                    'item_id', i.id,
-                                    'color_id', c.id,
-                                    'color_name', c.name,
+                                    'item_id',      i.id,
+                                    'color_id',     c.id,
+                                    'color_name',   c.name,
                                     'business_code', c.business_code,
                                     'pack_size_kg', i.pack_size_kg,
-                                    'quantity', i.quantity
+                                    'quantity',     i.quantity
                                 )
                             ) FILTER (WHERE i.id IS NOT NULL),
                             '[]'
                         ) AS items
                     FROM client_orders o
+                    LEFT JOIN clients cl ON o.client_id = cl.id
+                    LEFT JOIN client_shipping_addresses sa ON o.shipping_address_id = sa.id
                     LEFT JOIN client_order_items i ON o.id = i.order_id
                     LEFT JOIN colors c ON i.color_id = c.id
                     LEFT JOIN users u ON o.created_by = u.id
-                    GROUP BY o.id, u.username
+                    GROUP BY o.id, cl.id, sa.id, u.username
                     ORDER BY o.created_at DESC
                 `)
                 return reply.send(result.rows)
@@ -101,12 +111,13 @@ export default async function (fastifyRaw: FastifyInstance) {
      * Creates a new client order.
      */
     const CreateOrderSchema = Type.Object({
-        clientName: Type.String({ minLength: 1 }),
-        notes: Type.Optional(Type.String()),
+        clientId:          Type.Integer(),
+        shippingAddressId: Type.Optional(Type.Integer()),
+        notes:             Type.Optional(Type.String()),
         items: Type.Array(Type.Object({
-            colorId: Type.Integer(),
+            colorId:    Type.Integer(),
             packSizeKg: Type.Number({ exclusiveMinimum: 0 }),
-            quantity: Type.Integer({ exclusiveMinimum: 0 })
+            quantity:   Type.Integer({ exclusiveMinimum: 0 })
         }))
     })
 
@@ -115,16 +126,24 @@ export default async function (fastifyRaw: FastifyInstance) {
         schema: { body: CreateOrderSchema },
         handler: async (request, reply) => {
             const user = (request as any).user as { id: number }
-            const { clientName, notes, items } = request.body
+            const { clientId, shippingAddressId, notes, items } = request.body
             let client
             try {
                 client = await fastify.db.connect()
                 await client.query('BEGIN')
 
+                // Resolve the client name from the FK so we keep client_name in sync
+                const clientRes = await client.query('SELECT name FROM clients WHERE id = $1', [clientId])
+                if (clientRes.rows.length === 0) {
+                    await client.query('ROLLBACK')
+                    return reply.status(404).send({ error: 'Not Found', message: 'Client not found' })
+                }
+                const clientName = clientRes.rows[0].name
+
                 const orderRes = await client.query(
-                    `INSERT INTO client_orders (client_name, notes, created_by)
-                     VALUES ($1, $2, $3) RETURNING id`,
-                    [clientName, notes || null, user.id]
+                    `INSERT INTO client_orders (client_id, client_name, shipping_address_id, notes, created_by)
+                     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+                    [clientId, clientName, shippingAddressId || null, notes || null, user.id]
                 )
                 const orderId = orderRes.rows[0].id
 

@@ -150,6 +150,13 @@ import salesModule from './modules/sales'
  */
 fastify.register(salesModule, { prefix: '/sales' })
 
+import clientsModule from './modules/clients'
+
+/**
+ * Register clients module with a '/clients' prefix.
+ */
+fastify.register(clientsModule, { prefix: '/clients' })
+
 /**
  * Root endpoint - returns basic API information.
  */
@@ -195,7 +202,34 @@ fastify.get('/health', async (request, reply) => {
 const start = async () => {
     try {
         const port = parseInt(process.env.PORT || '3000')
-        // Listen on the specified port and host
+
+        // Apply incremental schema migrations on startup
+        await fastify.ready()
+        await fastify.db.query(`
+            -- Clients entity (onboarding)
+            CREATE TABLE IF NOT EXISTS clients (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                gst_number VARCHAR(20) UNIQUE,
+                contact_name VARCHAR(255),
+                contact_phone VARCHAR(30),
+                contact_email VARCHAR(255),
+                billing_address TEXT,
+                created_by INTEGER REFERENCES users(id),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS client_shipping_addresses (
+                id SERIAL PRIMARY KEY,
+                client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE NOT NULL,
+                label VARCHAR(100) NOT NULL,
+                address TEXT NOT NULL,
+                is_default BOOLEAN DEFAULT FALSE
+            );
+            ALTER TABLE client_orders ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES clients(id);
+            ALTER TABLE client_orders ADD COLUMN IF NOT EXISTS shipping_address_id INTEGER REFERENCES client_shipping_addresses(id);
+        `)
+
         await fastify.listen({ port, host: '0.0.0.0' })
     } catch (err) {
         // Log entry point errors and exit the process

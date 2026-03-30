@@ -15,6 +15,7 @@ import Recipes from "./pages/Recipes";
 import Sales from "./pages/Sales";
 import SalesHistory from "./pages/SalesHistory";
 import Orders from "./pages/Orders";
+import Clients from "./pages/Clients";
 
 function App() {
   return (
@@ -39,6 +40,7 @@ function App() {
               <Route path="sales/new" element={<Sales />} />
               <Route path="sales/history" element={<SalesHistory />} />
               <Route path="sales/orders" element={<Orders />} />
+              <Route path="clients" element={<Clients />} />
 
               {/* Manager and Admin routes */}
               <Route element={<ProtectedRoute allowedRoles={["manager", "admin"]} />}>

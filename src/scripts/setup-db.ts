@@ -153,10 +153,35 @@ CREATE TABLE IF NOT EXISTS finished_stock_transactions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 11a. Client Orders: Tracks customer orders
+-- 11a. Clients: Company/customer onboarding records
+CREATE TABLE IF NOT EXISTS clients (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    gst_number VARCHAR(20) UNIQUE,
+    contact_name VARCHAR(255),
+    contact_phone VARCHAR(30),
+    contact_email VARCHAR(255),
+    billing_address TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 11b. Client Shipping Addresses: Multiple delivery points per client
+CREATE TABLE IF NOT EXISTS client_shipping_addresses (
+    id SERIAL PRIMARY KEY,
+    client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE NOT NULL,
+    label VARCHAR(100) NOT NULL,
+    address TEXT NOT NULL,
+    is_default BOOLEAN DEFAULT FALSE
+);
+
+-- 11c. Client Orders: Tracks customer orders (linked to clients)
 CREATE TABLE IF NOT EXISTS client_orders (
     id SERIAL PRIMARY KEY,
+    client_id INTEGER REFERENCES clients(id),
     client_name VARCHAR(255) NOT NULL,
+    shipping_address_id INTEGER REFERENCES client_shipping_addresses(id),
     status VARCHAR(50) DEFAULT 'pending',
     notes TEXT,
     created_by INTEGER REFERENCES users(id) NOT NULL,
@@ -164,7 +189,7 @@ CREATE TABLE IF NOT EXISTS client_orders (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 11b. Client Order Items: Tracks the specific paint products and sizes ordered
+-- 11d. Client Order Items: Tracks the specific paint products and sizes ordered
 CREATE TABLE IF NOT EXISTS client_order_items (
     id SERIAL PRIMARY KEY,
     order_id INTEGER REFERENCES client_orders(id) ON DELETE CASCADE,
