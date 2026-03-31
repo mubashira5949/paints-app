@@ -246,7 +246,7 @@ export default function Sales() {
               {/* Selection Form */}
               <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-md relative overflow-hidden">
                 {success && (
-                  <div className="absolute inset-0 bg-white/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center animate-in fade-in duration-300">
+                  <div className="absolute inset-0 bg-white/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center animate-in fade-in duration-300 rounded-3xl">
                     <div className="bg-emerald-100 p-4 rounded-full mb-4">
                        <CheckCircle2 className="w-12 h-12 text-emerald-600" />
                     </div>

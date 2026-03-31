@@ -115,6 +115,8 @@ export default function Recipes() {
   useEffect(() => {
     if (selectedColor) {
       fetchRecipes(selectedColor.id);
+    } else {
+      setIsRecipeModalOpen(false); // Close modal if no color is selected
     }
   }, [selectedColor]);
 
@@ -495,14 +497,24 @@ export default function Recipes() {
 
       {/* Add / Edit Color Modal — compact layout */}
       {isColorModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-md rounded-xl shadow-2xl border overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div 
+            className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" 
+            onClick={() => setIsColorModalOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="bg-white w-full max-w-md rounded-xl shadow-2xl border overflow-hidden max-h-[90vh] flex flex-col relative z-10 scale-in-center">
             <div className="flex items-center justify-between px-4 py-3 border-b bg-slate-50 shrink-0">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Palette className="h-4 w-4 text-blue-600" />
                 {editingColor ? "Edit Color" : "Add New Color"}
               </h3>
-              <button onClick={() => setIsColorModalOpen(false)} className="text-slate-400 hover:bg-slate-200 p-1 rounded-full transition-colors">
+              <button 
+                type="button"
+                onClick={() => setIsColorModalOpen(false)} 
+                className="text-slate-400 hover:bg-slate-200 p-1 rounded-full transition-colors"
+                aria-label="Close modal"
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -570,14 +582,24 @@ export default function Recipes() {
 
       {/* Add Recipe Modal */}
       {isRecipeModalOpen && selectedColor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-2xl rounded-xl shadow-2xl border flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div 
+            className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" 
+            onClick={() => setIsRecipeModalOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="bg-white w-full max-w-2xl rounded-xl shadow-2xl border flex flex-col max-h-[90vh] relative z-10 scale-in-center">
             <div className="flex items-center justify-between p-5 border-b bg-slate-50 shrink-0">
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 <Beaker className="h-5 w-5 text-blue-600" />
                 {editingRecipe ? "Edit Recipe" : `Create Recipe for ${selectedColor.name}`}
               </h3>
-              <button onClick={() => setIsRecipeModalOpen(false)} className="text-slate-400 hover:bg-slate-200 p-1.5 rounded-full transition-colors">
+              <button 
+                type="button"
+                onClick={() => setIsRecipeModalOpen(false)} 
+                className="text-slate-400 hover:bg-slate-200 p-1.5 rounded-full transition-colors"
+                aria-label="Close modal"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>

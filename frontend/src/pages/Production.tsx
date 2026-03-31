@@ -1109,8 +1109,13 @@ export default function Production() {
 
       {/* New Production Run Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-card w-full max-w-2xl rounded-xl shadow-2xl border overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div 
+            className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" 
+            onClick={() => setIsModalOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="bg-card w-full max-w-2xl rounded-xl shadow-2xl border overflow-hidden relative z-10 scale-in-center">
             <div className="flex items-center justify-between p-6 border-b">
               <h3 className="text-xl font-bold">New Production Run</h3>
               <button
@@ -1272,8 +1277,13 @@ export default function Production() {
 
       {/* Edit Production Run Modal */}
       {isEditModalOpen && editingRun && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-card w-full max-w-md rounded-xl shadow-2xl border overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div 
+            className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" 
+            onClick={() => setIsEditModalOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="bg-card w-full max-w-md rounded-xl shadow-2xl border overflow-hidden relative z-10 scale-in-center">
             <div className="flex items-center justify-between p-6 border-b">
               <h3 className="text-xl font-bold">Edit Run: {editingRun.batchId}</h3>
               <button
@@ -1320,8 +1330,13 @@ export default function Production() {
       )}
       {/* Completion Modal */}
       {isCompletionModalOpen && completingRun && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 text-left">
-          <div className="bg-card w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200 text-left">
+          <div 
+            className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" 
+            onClick={() => setIsCompletionModalOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="bg-card w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden relative z-10 scale-in-center">
             <div className="bg-gradient-to-r from-emerald-600 to-teal-700 p-6 flex items-center justify-between text-white">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-white/20 rounded-lg">

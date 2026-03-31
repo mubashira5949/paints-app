@@ -27,8 +27,9 @@ export function Sidebar({ userRole, isOpen, setIsOpen }: SidebarProps) {
       {/* Mobile overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden animate-in fade-in duration-300"
           onClick={() => setIsOpen(false)}
+          aria-hidden="true"
         />
       )}
 
