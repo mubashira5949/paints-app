@@ -25,6 +25,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                         c.contact_phone, c.contact_email, c.billing_address,
                         c.created_at, c.updated_at,
                         u.username AS onboarded_by,
+                        uu.username AS updated_by_username,
                         COALESCE(
                             json_agg(
                                 json_build_object(
@@ -38,8 +39,9 @@ export default async function (fastifyRaw: FastifyInstance) {
                         ) AS shipping_addresses
                     FROM clients c
                     LEFT JOIN users u ON c.created_by = u.id
+                    LEFT JOIN users uu ON c.updated_by = uu.id
                     LEFT JOIN client_shipping_addresses a ON c.id = a.client_id
-                    GROUP BY c.id, u.username
+                    GROUP BY c.id, u.username, uu.username
                     ORDER BY c.name ASC
                 `)
                 return reply.send(result.rows)
@@ -64,6 +66,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                         c.contact_phone, c.contact_email, c.billing_address,
                         c.created_at, c.updated_at,
                         u.username AS onboarded_by,
+                        uu.username AS updated_by_username,
                         COALESCE(
                             json_agg(
                                 json_build_object(
@@ -77,9 +80,10 @@ export default async function (fastifyRaw: FastifyInstance) {
                         ) AS shipping_addresses
                     FROM clients c
                     LEFT JOIN users u ON c.created_by = u.id
+                    LEFT JOIN users uu ON c.updated_by = uu.id
                     LEFT JOIN client_shipping_addresses a ON c.id = a.client_id
                     WHERE c.id = $1
-                    GROUP BY c.id, u.username
+                    GROUP BY c.id, u.username, uu.username
                 `, [id])
 
                 if (result.rows.length === 0) {
@@ -170,6 +174,7 @@ export default async function (fastifyRaw: FastifyInstance) {
         schema: { body: UpdateClientSchema },
         handler: async (request, reply) => {
             const { id } = request.params as { id: string }
+            const user = (request as any).user as { id: number }
             const { name, gstNumber, contactName, contactPhone, contactEmail, billingAddress } = request.body
             try {
                 const result = await fastify.db.query(
@@ -180,9 +185,10 @@ export default async function (fastifyRaw: FastifyInstance) {
                         contact_phone  = COALESCE($4, contact_phone),
                         contact_email  = COALESCE($5, contact_email),
                         billing_address = COALESCE($6, billing_address),
+                        updated_by     = $8,
                         updated_at     = CURRENT_TIMESTAMP
                      WHERE id = $7 RETURNING id`,
-                    [name, gstNumber, contactName, contactPhone, contactEmail, billingAddress, id]
+                    [name, gstNumber, contactName, contactPhone, contactEmail, billingAddress, id, user.id]
                 )
                 if (result.rows.length === 0) {
                     return reply.status(404).send({ error: 'Not Found', message: 'Client not found' })
@@ -262,6 +268,37 @@ export default async function (fastifyRaw: FastifyInstance) {
             } catch (err) {
                 fastify.log.error(err)
                 return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to remove address' })
+            }
+        }
+    })
+
+    // -------------------------------------------------------------------------
+    // DELETE /clients/:id — delete entire client (admin/manager only)
+    // -------------------------------------------------------------------------
+    fastify.delete('/:id', {
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
+        handler: async (request, reply) => {
+            const { id } = request.params as { id: string }
+            let dbClient
+            try {
+                dbClient = await fastify.db.connect()
+                await dbClient.query('BEGIN')
+                // Delete shipping addresses first
+                await dbClient.query('DELETE FROM client_shipping_addresses WHERE client_id = $1', [id])
+                // Delete the client
+                const result = await dbClient.query('DELETE FROM clients WHERE id = $1 RETURNING id', [id])
+                if (result.rows.length === 0) {
+                    await dbClient.query('ROLLBACK')
+                    return reply.status(404).send({ error: 'Not Found', message: 'Client not found' })
+                }
+                await dbClient.query('COMMIT')
+                return reply.send({ message: 'Client deleted successfully' })
+            } catch (err) {
+                if (dbClient) await dbClient.query('ROLLBACK')
+                fastify.log.error(err)
+                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to delete client' })
+            } finally {
+                if (dbClient) dbClient.release()
             }
         }
     })
