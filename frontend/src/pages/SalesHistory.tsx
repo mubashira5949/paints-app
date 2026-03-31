@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { apiRequest } from "../services/api";
 import { History, Loader2, Package, Search } from "lucide-react";
 import { formatUnit, useUnitPreference } from "../utils/units";
+import { useDateFormatPreference, formatDate } from "../utils/dateFormatter";
 
 interface SalesTransaction {
   id: number;
@@ -17,6 +18,7 @@ interface SalesTransaction {
 }
 
 export default function SalesHistory() {
+  const dateFormat = useDateFormatPreference();
   const unitPref = useUnitPreference();
   const [transactions, setTransactions] = useState<SalesTransaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -106,7 +108,7 @@ export default function SalesHistory() {
                 filtered.map((t) => (
                   <tr key={t.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <p className="font-bold text-slate-700">{new Date(t.created_at).toLocaleDateString()}</p>
+                      <p className="font-bold text-slate-700">{formatDate(t.created_at, dateFormat)}</p>
                       <p className="text-[10px] text-slate-400 uppercase tracking-wider">{new Date(t.created_at).toLocaleTimeString()}</p>
                     </td>
                     <td className="px-6 py-4">

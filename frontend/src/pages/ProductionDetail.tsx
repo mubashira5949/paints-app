@@ -17,6 +17,7 @@ import {
   Timer,
 } from "lucide-react";
 import { useUnitPreference, formatUnit } from "../utils/units";
+import { useDateFormatPreference, formatDate } from "../utils/dateFormatter";
 
 interface ResourceActual {
   resource_id: number;
@@ -74,6 +75,7 @@ const statusConfig: Record<string, { label: string; className: string; icon: any
 export default function ProductionDetail() {
   const { batchId } = useParams<{ batchId: string }>();
   const navigate = useNavigate();
+  const dateFormat = useDateFormatPreference();
   const unitPref = useUnitPreference();
   const [run, setRun] = useState<RunDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -271,18 +273,18 @@ export default function ProductionDetail() {
         {run.started_at && (
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Started</p>
-            <p className="font-medium">{new Date(run.started_at).toLocaleString()}</p>
+            <p className="font-medium">{formatDate(run.started_at, dateFormat, true)}</p>
           </div>
         )}
         {run.completed_at && (
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Completed</p>
-            <p className="font-medium">{new Date(run.completed_at).toLocaleString()}</p>
+            <p className="font-medium">{formatDate(run.completed_at, dateFormat, true)}</p>
           </div>
         )}
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Created</p>
-          <p className="font-medium">{new Date(run.created_at).toLocaleDateString()}</p>
+          <p className="font-medium">{formatDate(run.created_at, dateFormat)}</p>
         </div>
       </div>
 

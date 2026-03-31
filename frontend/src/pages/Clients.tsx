@@ -5,6 +5,7 @@ import {
   Phone, Mail, Building2, ChevronDown, ChevronUp,
   Receipt, CheckCircle2,
 } from "lucide-react";
+import { useDateFormatPreference, formatDate } from "../utils/dateFormatter";
 
 interface ShippingAddress {
   id: number;
@@ -29,6 +30,7 @@ interface Client {
 interface NewAddress { label: string; address: string; isDefault: boolean }
 
 export default function Clients() {
+  const dateFormat = useDateFormatPreference();
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -262,7 +264,7 @@ export default function Clients() {
                       </div>
                     </div>
                     <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-4 border-t border-slate-100 pt-3">
-                      Onboarded by {c.onboarded_by || "system"} · {new Date(c.created_at).toLocaleDateString()}
+                      Onboarded by {c.onboarded_by || "system"} · {formatDate(c.created_at, dateFormat)}
                     </p>
                   </div>
                 )}
