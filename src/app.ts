@@ -252,6 +252,9 @@ const start = async () => {
             -- 5. Linking existing orders to clients (if not already linked)
             ALTER TABLE client_orders ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES clients(id);
             ALTER TABLE client_orders ADD COLUMN IF NOT EXISTS shipping_address_id INTEGER REFERENCES client_shipping_addresses(id);
+
+            -- 6. Add created_by to transactional tables if they don't exist
+            ALTER TABLE finished_stock_transactions ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id);
         `)
 
         await fastify.listen({ port, host: '0.0.0.0' })
