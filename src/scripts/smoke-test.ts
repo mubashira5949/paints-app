@@ -25,7 +25,7 @@ async function runSmokeTest() {
       const latency = Date.now() - loginStart;
 
       if (loginRes.ok) {
-        const data = await loginRes.json();
+        const data = await loginRes.json() as { token: string };
         token = data.token;
         console.log(`✅ OK [${loginRes.status}] (${latency}ms)`);
         passCount++;
