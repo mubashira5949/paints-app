@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiRequest } from "../services/api";
 import { ClipboardList, Plus, Loader2, Search, X, ShoppingCart, UserRound, MapPin, Receipt } from "lucide-react";
+import { useDateFormatPreference, formatDate } from "../utils/dateFormatter";
 
 interface OrderItem {
   item_id: number;
@@ -50,6 +51,7 @@ interface InventoryItem {
 }
 
 export default function Orders() {
+  const dateFormat = useDateFormatPreference();
   const [orders, setOrders] = useState<ClientOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -212,7 +214,7 @@ export default function Orders() {
                       {o.client_display_name || o.client_name}
                     </h3>
                     <div className="flex flex-wrap gap-3 mt-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      <span>Order #{o.id} · {new Date(o.created_at).toLocaleDateString()}</span>
+                      <span>Order #{o.id} · {formatDate(o.created_at, dateFormat)}</span>
                       {o.gst_number && (
                         <span className="flex items-center gap-1 text-amber-600">
                           <Receipt className="w-3 h-3" /> {o.gst_number}

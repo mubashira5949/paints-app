@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { getUnitPreference, setUnitPreference } from "../utils/units";
 import type { UnitPreference } from "../utils/units";
+import { getDateFormatPreference, setDateFormatPreference } from "../utils/dateFormatter";
+import type { DateFormatPreference } from "../utils/dateFormatter";
 import {
   Settings as SettingsIcon,
   PaintBucket,
@@ -216,10 +218,13 @@ export default function Settings() {
                     <Calendar className="h-4 w-4 text-gray-400" />
                     <p className="font-medium text-sm">Date Format</p>
                   </div>
-                  <select onChange={handleChange} className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white transition-all shadow-sm">
-                    <option selected>DD-MM-YYYY</option>
-                    <option>MM-DD-YYYY</option>
-                    <option>YYYY-MM-DD</option>
+                  <select value={getDateFormatPreference()} onChange={(e) => {
+                    setDateFormatPreference(e.target.value as DateFormatPreference);
+                    handleChange();
+                  }} className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white transition-all shadow-sm">
+                    <option value="DD-MM-YYYY">DD-MM-YYYY</option>
+                    <option value="MM-DD-YYYY">MM-DD-YYYY</option>
+                    <option value="YYYY-MM-DD">YYYY-MM-DD</option>
                   </select>
                 </div>
               </div>
