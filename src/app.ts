@@ -255,6 +255,9 @@ const start = async () => {
 
             -- 6. Add created_by to transactional tables if they don't exist
             ALTER TABLE finished_stock_transactions ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id);
+
+            -- 7. Track who last updated a client
+            ALTER TABLE clients ADD COLUMN IF NOT EXISTS updated_by INTEGER REFERENCES users(id);
         `)
 
         await fastify.listen({ port, host: '0.0.0.0' })

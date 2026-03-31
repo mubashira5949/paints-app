@@ -3,9 +3,10 @@ import { apiRequest } from "../services/api";
 import {
   UserRound, Plus, Loader2, Search, X, MapPin,
   Phone, Mail, Building2, ChevronDown, ChevronUp,
-  Receipt, CheckCircle2,
+  Receipt, CheckCircle2, Pencil, Trash2, AlertTriangle,
 } from "lucide-react";
 import { useDateFormatPreference, formatDate } from "../utils/dateFormatter";
+import { useAuth } from "../contexts/AuthContext";
 
 interface ShippingAddress {
   id: number;
@@ -23,7 +24,9 @@ interface Client {
   contact_email: string | null;
   billing_address: string | null;
   onboarded_by: string | null;
+  updated_by_username: string | null;
   created_at: string;
+  updated_at: string | null;
   shipping_addresses: ShippingAddress[];
 }
 
@@ -31,17 +34,44 @@ interface NewAddress { label: string; address: string; isDefault: boolean }
 
 export default function Clients() {
   const dateFormat = useDateFormatPreference();
+  const { user } = useAuth();
+  const isManager = user?.role === 'admin' || user?.role === 'manager';
+
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  // Modal state
+  // Create modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
-  // Form fields
+  // Edit modal state
+  const [editClient, setEditClient] = useState<Client | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false);
+  const [editSuccess, setEditSuccess] = useState(false);
+
+  // Edit form fields
+  const [editName, setEditName] = useState("");
+  const [editGst, setEditGst] = useState("");
+  const [editContactName, setEditContactName] = useState("");
+  const [editContactPhone, setEditContactPhone] = useState("");
+  const [editContactEmail, setEditContactEmail] = useState("");
+  const [editBillingAddress, setEditBillingAddress] = useState("");
+
+  // Edit — new address form
+  const [editAddrLabel, setEditAddrLabel] = useState("");
+  const [editAddrAddress, setEditAddrAddress] = useState("");
+  const [editAddrIsDefault, setEditAddrIsDefault] = useState(false);
+  const [isAddingAddress, setIsAddingAddress] = useState(false);
+
+  // Delete confirmation
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Create form fields
   const [name, setName] = useState("");
   const [gstNumber, setGstNumber] = useState("");
   const [contactName, setContactName] = useState("");
@@ -67,6 +97,7 @@ export default function Clients() {
     }
   };
 
+  // ── Create Modal helpers ──────────────────────────────────────────────────
   const resetForm = () => {
     setName(""); setGstNumber(""); setContactName("");
     setContactPhone(""); setContactEmail(""); setBillingAddress("");
@@ -116,6 +147,98 @@ export default function Clients() {
       alert(err.message || "Failed to onboard client");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // ── Edit Modal helpers ────────────────────────────────────────────────────
+  const openEditModal = (c: Client) => {
+    setEditClient(c);
+    setEditName(c.name);
+    setEditGst(c.gst_number || "");
+    setEditContactName(c.contact_name || "");
+    setEditContactPhone(c.contact_phone || "");
+    setEditContactEmail(c.contact_email || "");
+    setEditBillingAddress(c.billing_address || "");
+    setEditAddrLabel(""); setEditAddrAddress(""); setEditAddrIsDefault(false);
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editClient) return;
+    setIsEditSubmitting(true);
+    try {
+      await apiRequest(`/clients/${editClient.id}`, {
+        method: "PUT",
+        body: {
+          name: editName || undefined,
+          gstNumber: editGst || undefined,
+          contactName: editContactName || undefined,
+          contactPhone: editContactPhone || undefined,
+          contactEmail: editContactEmail || undefined,
+          billingAddress: editBillingAddress || undefined,
+        }
+      });
+      setEditSuccess(true);
+      setTimeout(() => {
+        setEditSuccess(false);
+        setIsEditModalOpen(false);
+        setEditClient(null);
+        fetchClients();
+      }, 1200);
+    } catch (err: any) {
+      alert(err.message || "Failed to update client");
+    } finally {
+      setIsEditSubmitting(false);
+    }
+  };
+
+  const handleAddEditAddress = async () => {
+    if (!editClient || !editAddrLabel || !editAddrAddress) return;
+    setIsAddingAddress(true);
+    try {
+      await apiRequest(`/clients/${editClient.id}/addresses`, {
+        method: "POST",
+        body: { label: editAddrLabel, address: editAddrAddress, isDefault: editAddrIsDefault }
+      });
+      // Refresh client addresses
+      const updated = await apiRequest<Client[]>("/clients");
+      setClients(updated);
+      const refreshed = updated.find(c => c.id === editClient.id);
+      if (refreshed) setEditClient(refreshed);
+      setEditAddrLabel(""); setEditAddrAddress(""); setEditAddrIsDefault(false);
+    } catch (err: any) {
+      alert(err.message || "Failed to add address");
+    } finally {
+      setIsAddingAddress(false);
+    }
+  };
+
+  const handleRemoveEditAddress = async (addrId: number) => {
+    if (!editClient) return;
+    try {
+      await apiRequest(`/clients/${editClient.id}/addresses/${addrId}`, { method: "DELETE" });
+      const updated = await apiRequest<Client[]>("/clients");
+      setClients(updated);
+      const refreshed = updated.find(c => c.id === editClient.id);
+      if (refreshed) setEditClient(refreshed);
+    } catch (err: any) {
+      alert(err.message || "Failed to remove address");
+    }
+  };
+
+  // ── Delete helpers ────────────────────────────────────────────────────────
+  const handleDeleteClient = async () => {
+    if (!deleteConfirmId) return;
+    setIsDeleting(true);
+    try {
+      await apiRequest(`/clients/${deleteConfirmId}`, { method: "DELETE" });
+      setDeleteConfirmId(null);
+      fetchClients();
+    } catch (err: any) {
+      alert(err.message || "Failed to delete client");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -179,43 +302,69 @@ export default function Clients() {
             filtered.map((c) => (
               <div key={c.id} className="group">
                 {/* Client row */}
-                <div
-                  onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
-                  className="p-5 flex items-start gap-5 cursor-pointer hover:bg-slate-50/60 transition-colors"
-                >
-                  <div className="w-11 h-11 rounded-xl bg-violet-100 flex items-center justify-center shrink-0 shadow-inner">
-                    <Building2 className="w-5 h-5 text-violet-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-black text-slate-900 text-lg leading-tight">{c.name}</h3>
-                      {c.gst_number && (
-                        <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-100 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest">
-                          <Receipt className="w-3 h-3" /> GST: {c.gst_number}
-                        </span>
-                      )}
+                <div className="p-5 flex items-start gap-5 hover:bg-slate-50/60 transition-colors">
+                  {/* Clickable expand area */}
+                  <div
+                    onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
+                    className="flex items-start gap-5 flex-1 min-w-0 cursor-pointer"
+                  >
+                    <div className="w-11 h-11 rounded-xl bg-violet-100 flex items-center justify-center shrink-0 shadow-inner">
+                      <Building2 className="w-5 h-5 text-violet-600" />
                     </div>
-                    <div className="flex flex-wrap gap-4 mt-1.5 text-xs text-slate-500 font-medium">
-                      {c.contact_name && <span className="font-bold text-slate-700">{c.contact_name}</span>}
-                      {c.contact_phone && (
-                        <span className="flex items-center gap-1">
-                          <Phone className="w-3 h-3" /> {c.contact_phone}
-                        </span>
-                      )}
-                      {c.contact_email && (
-                        <span className="flex items-center gap-1">
-                          <Mail className="w-3 h-3" /> {c.contact_email}
-                        </span>
-                      )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-black text-slate-900 text-lg leading-tight">{c.name}</h3>
+                        {c.gst_number && (
+                          <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-100 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest">
+                            <Receipt className="w-3 h-3" /> GST: {c.gst_number}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-4 mt-1.5 text-xs text-slate-500 font-medium">
+                        {c.contact_name && <span className="font-bold text-slate-700">{c.contact_name}</span>}
+                        {c.contact_phone && (
+                          <span className="flex items-center gap-1">
+                            <Phone className="w-3 h-3" /> {c.contact_phone}
+                          </span>
+                        )}
+                        {c.contact_email && (
+                          <span className="flex items-center gap-1">
+                            <Mail className="w-3 h-3" /> {c.contact_email}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 shrink-0">
+
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-2 shrink-0">
                     <span className="px-2.5 py-1 bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-lg border border-slate-200">
-                      {c.shipping_addresses.length} ship. addr.
+                      {c.shipping_addresses.length} addr.
                     </span>
-                    {expandedId === c.id
-                      ? <ChevronUp className="w-4 h-4 text-slate-400" />
-                      : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openEditModal(c); }}
+                      className="p-2 rounded-lg hover:bg-violet-50 text-slate-400 hover:text-violet-600 transition-colors"
+                      title="Edit client"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    {isManager && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(c.id); }}
+                        className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
+                        title="Delete client"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    <div
+                      onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
+                      className="cursor-pointer p-1"
+                    >
+                      {expandedId === c.id
+                        ? <ChevronUp className="w-4 h-4 text-slate-400" />
+                        : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                    </div>
                   </div>
                 </div>
 
@@ -263,9 +412,17 @@ export default function Clients() {
                         )}
                       </div>
                     </div>
-                    <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-4 border-t border-slate-100 pt-3">
-                      Onboarded by {c.onboarded_by || "system"} · {formatDate(c.created_at, dateFormat)}
-                    </p>
+                    {/* Audit trail */}
+                    <div className="flex flex-wrap gap-x-6 gap-y-1 mt-4 border-t border-slate-100 pt-3">
+                      <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
+                        Created by {c.onboarded_by || "system"} · {formatDate(c.created_at, dateFormat)}
+                      </p>
+                      {c.updated_at && c.updated_at !== c.created_at && (
+                        <p className="text-[10px] text-violet-500 uppercase tracking-widest font-bold">
+                          Last edited{c.updated_by_username ? ` by ${c.updated_by_username}` : ""} · {formatDate(c.updated_at, dateFormat)}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -274,7 +431,224 @@ export default function Clients() {
         </div>
       </div>
 
-      {/* Onboard Client Modal */}
+      {/* ── Delete Confirmation Dialog ───────────────────────────────────────── */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setDeleteConfirmId(null)} />
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md relative z-10 p-6 animate-in slide-in-from-bottom-4 duration-200 border border-red-100">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="bg-red-100 p-2.5 rounded-xl">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-black text-slate-900">Delete Client?</h2>
+                <p className="text-xs text-slate-500 mt-0.5">This action cannot be undone.</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-600 mb-6">
+              All shipping addresses associated with this client will also be permanently removed.
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setDeleteConfirmId(null)}
+                className="px-5 py-2.5 text-sm font-bold text-slate-500 uppercase tracking-widest hover:text-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteClient}
+                disabled={isDeleting}
+                className="inline-flex items-center px-5 py-2.5 text-sm font-black bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all disabled:opacity-50 shadow-lg shadow-red-200"
+              >
+                {isDeleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Delete Client
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Client Modal ────────────────────────────────────────────────── */}
+      {isEditModalOpen && editClient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { setIsEditModalOpen(false); setEditClient(null); }} />
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl relative z-10 flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-8 duration-300 border border-slate-200">
+
+            {/* Modal header */}
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+                  <Pencil className="w-5 h-5 text-violet-600" /> Edit Client
+                </h2>
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">{editClient.name}</p>
+              </div>
+              <button onClick={() => { setIsEditModalOpen(false); setEditClient(null); }} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Success overlay */}
+            {editSuccess && (
+              <div className="absolute inset-0 bg-white/95 z-50 flex flex-col items-center justify-center rounded-3xl animate-in fade-in duration-200">
+                <div className="bg-emerald-100 p-4 rounded-full mb-4">
+                  <CheckCircle2 className="w-12 h-12 text-emerald-600" />
+                </div>
+                <h3 className="text-xl font-black text-slate-900">Client Updated!</h3>
+              </div>
+            )}
+
+            <div className="p-6 overflow-y-auto flex-1 space-y-6">
+              {/* Company Info */}
+              <form id="edit-client-form" onSubmit={handleEditSubmit}>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Company Information</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Company / Client Name *</label>
+                    <input
+                      type="text" required value={editName} onChange={e => setEditName(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all text-sm font-medium outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">GST Number</label>
+                    <input
+                      type="text" value={editGst} onChange={e => setEditGst(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all text-sm font-medium outline-none font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Billing Address</label>
+                    <input
+                      type="text" value={editBillingAddress} onChange={e => setEditBillingAddress(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all text-sm font-medium outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Contact Info */}
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 mt-5">Primary Contact</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Contact Name</label>
+                    <input
+                      type="text" value={editContactName} onChange={e => setEditContactName(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all text-sm font-medium outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Phone</label>
+                    <input
+                      type="tel" value={editContactPhone} onChange={e => setEditContactPhone(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all text-sm font-medium outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Email</label>
+                    <input
+                      type="email" value={editContactEmail} onChange={e => setEditContactEmail(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all text-sm font-medium outline-none"
+                    />
+                  </div>
+                </div>
+              </form>
+
+              {/* Shipping Addresses section */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Shipping Addresses</p>
+                <div className="rounded-2xl border border-slate-200 overflow-hidden">
+                  {/* Existing addresses */}
+                  {editClient.shipping_addresses.length === 0 ? (
+                    <div className="p-4 text-sm text-slate-400 italic text-center">No shipping addresses yet</div>
+                  ) : (
+                    <div className="divide-y divide-slate-50">
+                      {editClient.shipping_addresses.map(addr => (
+                        <div key={addr.id} className="flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50/50 transition-colors">
+                          <div className="flex items-start gap-3">
+                            <MapPin className={`w-4 h-4 mt-0.5 shrink-0 ${addr.is_default ? 'text-violet-600' : 'text-slate-400'}`} />
+                            <div>
+                              <p className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                {addr.label}
+                                {addr.is_default && (
+                                  <span className="text-[9px] bg-violet-600 text-white px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Default</span>
+                                )}
+                              </p>
+                              <p className="text-xs text-slate-500 mt-0.5">{addr.address}</p>
+                            </div>
+                          </div>
+                          {isManager && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveEditAddress(addr.id)}
+                              className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors ml-3 shrink-0"
+                              title="Remove address"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add new address */}
+                  <div className="p-4 bg-slate-50/50 border-t border-slate-100">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Add New Address</p>
+                    <div className="flex flex-col md:flex-row gap-3 items-end">
+                      <div className="w-full md:w-36">
+                        <input
+                          type="text" value={editAddrLabel} onChange={e => setEditAddrLabel(e.target.value)}
+                          placeholder="Label (e.g. Main)"
+                          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm font-medium outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <input
+                          type="text" value={editAddrAddress} onChange={e => setEditAddrAddress(e.target.value)}
+                          placeholder="Full address"
+                          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm font-medium outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 pb-1">
+                        <input
+                          type="checkbox" id="edit-addr-default" checked={editAddrIsDefault}
+                          onChange={e => setEditAddrIsDefault(e.target.checked)}
+                          className="w-4 h-4 rounded accent-violet-600"
+                        />
+                        <label htmlFor="edit-addr-default" className="text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">Default</label>
+                      </div>
+                      <button
+                        type="button" onClick={handleAddEditAddress}
+                        disabled={!editAddrLabel || !editAddrAddress || isAddingAddress}
+                        className="px-4 py-2 bg-slate-900 text-white text-xs font-black uppercase tracking-widest rounded-lg disabled:opacity-40 hover:bg-slate-800 transition-colors h-[38px] flex items-center gap-1.5"
+                      >
+                        {isAddingAddress ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-5 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-3 rounded-b-3xl">
+              <button type="button" onClick={() => { setIsEditModalOpen(false); setEditClient(null); }} className="px-5 py-2.5 text-sm font-bold text-slate-500 uppercase tracking-widest hover:text-slate-800 transition-colors">
+                Cancel
+              </button>
+              <button
+                type="submit" form="edit-client-form"
+                disabled={isEditSubmitting || !editName}
+                className="inline-flex items-center px-6 py-2.5 text-sm font-black bg-violet-600 shadow-lg shadow-violet-200 text-white rounded-xl hover:bg-violet-700 transition-all disabled:opacity-50 uppercase tracking-widest active:scale-95"
+              >
+                {isEditSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Onboard Client Modal ─────────────────────────────────────────────── */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { setIsModalOpen(false); resetForm(); }} />
