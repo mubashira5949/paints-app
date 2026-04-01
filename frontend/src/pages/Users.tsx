@@ -270,14 +270,19 @@ export default function Users() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-4">
               <h2 className="text-base font-bold text-slate-800">System Users</h2>
-              {filteredUsers.length > 10 && (
-                <button 
-                  onClick={() => setShowAllUsers(!showAllUsers)}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  {showAllUsers ? 'View Less' : 'View All'}
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                  {showAllUsers ? `Showing all ${filteredUsers.length}` : `Showing ${Math.min(10, filteredUsers.length)} of ${filteredUsers.length}`}
+                </span>
+                {filteredUsers.length > 10 && (
+                  <button 
+                    onClick={() => setShowAllUsers(!showAllUsers)}
+                    className="text-xs text-blue-600 hover:text-blue-700 font-bold uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded border border-blue-100"
+                  >
+                    {showAllUsers ? 'View Less' : 'View All'}
+                  </button>
+                )}
+              </div>
             </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -361,7 +366,7 @@ export default function Users() {
                   </td>
                 </tr>
               ) : (
-                filteredUsers.slice(0, showAllUsers ? undefined : 10).map((user) => (
+                (showAllUsers ? filteredUsers : filteredUsers.slice(0, 10)).map((user) => (
                   <tr key={user.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -423,14 +428,19 @@ export default function Users() {
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-800">Device Enrollment Requests</h2>
-              <p className="text-xs text-slate-500">Approve or reject new device login requests</p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-slate-500">Approve or reject new device login requests</p>
+                <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
+                  {showAllRequests ? `Showing all ${deviceRequests.length}` : `Showing ${Math.min(10, deviceRequests.length)} of ${deviceRequests.length}`}
+                </span>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-4">
             {deviceRequests.length > 10 && (
               <button 
                 onClick={() => setShowAllRequests(!showAllRequests)}
-                className="text-sm text-amber-600 hover:text-amber-700 font-medium"
+                className="text-xs text-amber-600 hover:text-amber-700 font-bold uppercase tracking-wider bg-amber-50 px-2 py-0.5 rounded border border-amber-100"
               >
                 {showAllRequests ? 'View Less' : 'View All'}
               </button>
@@ -462,7 +472,7 @@ export default function Users() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {deviceRequests.slice(0, showAllRequests ? undefined : 10).map((req) => (
+                {(showAllRequests ? deviceRequests : deviceRequests.slice(0, 10)).map((req) => (
                   <tr key={req.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">

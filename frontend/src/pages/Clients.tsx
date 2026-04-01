@@ -433,9 +433,13 @@ export default function Clients() {
 
       {/* ── Delete Confirmation Dialog ───────────────────────────────────────── */}
       {deleteConfirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setDeleteConfirmId(null)} />
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md relative z-10 p-6 animate-in slide-in-from-bottom-4 duration-200 border border-red-100">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div 
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" 
+            onClick={() => setDeleteConfirmId(null)} 
+            aria-hidden="true"
+          />
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md relative z-10 p-6 border border-red-100 scale-in-center">
             <div className="flex items-center gap-3 mb-4">
               <div className="bg-red-100 p-2.5 rounded-xl">
                 <AlertTriangle className="w-5 h-5 text-red-600" />
@@ -470,9 +474,13 @@ export default function Clients() {
 
       {/* ── Edit Client Modal ────────────────────────────────────────────────── */}
       {isEditModalOpen && editClient && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { setIsEditModalOpen(false); setEditClient(null); }} />
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl relative z-10 flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-8 duration-300 border border-slate-200">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div 
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" 
+            onClick={() => { setIsEditModalOpen(false); setEditClient(null); }} 
+            aria-hidden="true"
+          />
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl relative z-10 flex flex-col max-h-[90vh] border border-slate-200 scale-in-center">
 
             {/* Modal header */}
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
@@ -650,9 +658,13 @@ export default function Clients() {
 
       {/* ── Onboard Client Modal ─────────────────────────────────────────────── */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { setIsModalOpen(false); resetForm(); }} />
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl relative z-10 flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-8 duration-300 border border-slate-200">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div 
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" 
+            onClick={() => { setIsModalOpen(false); resetForm(); }} 
+            aria-hidden="true"
+          />
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl relative z-10 flex flex-col max-h-[90vh] border border-slate-200 scale-in-center">
 
             {/* Modal header */}
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">

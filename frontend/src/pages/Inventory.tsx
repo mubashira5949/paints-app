@@ -177,17 +177,21 @@ export default function Inventory() {
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
         <div className="p-5 border-b bg-slate-50/50 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <h2 className="text-lg font-bold text-slate-900 uppercase tracking-tight">Inventory Table</h2>
-            <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-full uppercase tracking-widest">{inventory.length} Entries</span>
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-bold text-slate-900 uppercase tracking-tight">Inventory Table</h2>
+              <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
+                {showAllInventory ? `Showing all ${inventory.length}` : `Showing ${Math.min(10, inventory.length)} of ${inventory.length}`}
+              </span>
+            </div>
+            {inventory.length > 10 && (
+              <button 
+                onClick={() => setShowAllInventory(!showAllInventory)}
+                className="text-xs text-blue-600 hover:text-blue-700 font-bold uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded border border-blue-100"
+              >
+                {showAllInventory ? 'View Less' : 'View All'}
+              </button>
+            )}
           </div>
-          {inventory.length > 2 && (
-            <button 
-              onClick={() => setShowAllInventory(!showAllInventory)}
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-            >
-              {showAllInventory ? 'View Less' : 'View All'}
-            </button>
-          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -232,7 +236,7 @@ export default function Inventory() {
                   </td>
                 </tr>
               ) : (
-                inventory.slice(0, showAllInventory ? undefined : 2).map((item) => (
+                (showAllInventory ? inventory : inventory.slice(0, 10)).map((item) => (
                   <React.Fragment key={item.id}>
                     <tr
                       onClick={() => toggleRow(item.id)}
@@ -468,20 +472,23 @@ export default function Inventory() {
       {/* Raw Material alerts moved to bottom to follow "Ideal Layout" focus */}
       {alerts.length > 0 && (
         <div className="rounded-xl border bg-white p-0 overflow-hidden border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between p-5 border-b bg-slate-50/30">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-500" />
-              <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Secondary Alerts: Raw Materials</h2>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Secondary Alerts: Raw Materials</h2>
+              </div>
+              <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
+                {showAllAlerts ? `Showing all ${alerts.length}` : `Showing ${Math.min(5, alerts.length)} of ${alerts.length}`}
+              </span>
             </div>
-            {alerts.length > 2 && (
+            {alerts.length > 5 && (
               <button 
                 onClick={() => setShowAllAlerts(!showAllAlerts)}
-                className="text-sm text-amber-600 hover:text-amber-700 font-medium"
+                className="text-xs text-amber-600 hover:text-amber-700 font-bold uppercase tracking-wider bg-amber-50 px-2 py-0.5 rounded border border-amber-100"
               >
                 {showAllAlerts ? 'View Less' : 'View All'}
               </button>
             )}
-          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -493,7 +500,7 @@ export default function Inventory() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {alerts.slice(0, showAllAlerts ? undefined : 2).map(alert => (
+                {(showAllAlerts ? alerts : alerts.slice(0, 5)).map(alert => (
                   <tr key={alert.id} className="hover:bg-amber-50/50 transition-colors">
                     <td className="p-4 px-6 font-extrabold text-slate-900">{alert.name}</td>
                     <td className="p-4 px-6">

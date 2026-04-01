@@ -560,22 +560,25 @@ export default function Production() {
         <div className="md:col-span-2 space-y-10">
           <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <h2 className="text-lg font-bold flex items-center text-slate-800">
+              <div className="flex items-center gap-3">
                 <Droplets className="mr-3 h-5 w-5 text-blue-500" />
-                Active Production Runs
-              </h2>
+                <h2 className="text-lg font-bold text-slate-800">Active Production Runs</h2>
+                <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
+                  {showAllActive ? `Showing all ${activeRuns.length}` : `Showing ${Math.min(5, activeRuns.length)} of ${activeRuns.length}`}
+                </span>
+              </div>
               <div className="flex items-center gap-3">
                 {activeRuns.length > 0 && (
-                  <span className="text-xs font-bold bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full border border-blue-200 shadow-sm">
+                  <span className="text-xs font-bold bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full border border-blue-200 shadow-sm hidden sm:inline">
                     {activeRuns.length} active
                   </span>
                 )}
-                {activeRuns.length > 2 && (
+                {activeRuns.length > 5 && (
                   <button 
                     onClick={() => setShowAllActive(!showAllActive)}
-                    className="text-sm text-blue-600 hover:text-blue-800 font-bold transition-colors"
+                    className="text-xs text-blue-600 hover:text-blue-800 font-bold tracking-wider uppercase bg-blue-50 px-2 py-1 rounded border border-blue-100 transition-colors"
                   >
-                    {showAllActive ? 'Hide' : 'See All'}
+                    {showAllActive ? 'View Less' : 'View All'}
                   </button>
                 )}
               </div>
@@ -607,7 +610,7 @@ export default function Production() {
                       if (filterToDate && run.started_at && new Date(run.started_at) > new Date(filterToDate)) return false;
                       return true;
                     })
-                    .slice(0, showAllActive ? undefined : 2).map((run) => {
+                    .slice(0, showAllActive ? activeRuns.length : 5).map((run) => {
                     const isUpdating = updatingId === run.id;
                     const statusConfig: Record<string, { label: string; className: string; icon: any; color: "blue" | "green" | "purple" | "orange" }> = {
                       planned:   { label: "Planned",   className: "bg-slate-100 text-slate-700", icon: Activity, color: "blue" },
@@ -784,18 +787,18 @@ export default function Production() {
           <div className="rounded-xl border bg-white shadow-sm overflow-hidden mt-6">
             <div className="p-5 border-b flex flex-col gap-4 bg-slate-50">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold flex items-center">
-                  <Activity className="mr-2 h-5 w-5 text-green-500" />
-                  Production History
-                </h2>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-muted-foreground">
-                    {historyRuns.length} run{historyRuns.length !== 1 ? "s" : ""}
+                  <Activity className="mr-2 h-5 w-5 text-green-500" />
+                  <h2 className="text-lg font-semibold text-slate-800">Production History</h2>
+                  <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
+                    {showAllHistory ? `Showing all ${historyRuns.length}` : `Showing ${Math.min(10, historyRuns.length)} of ${historyRuns.length}`}
                   </span>
-                  {historyRuns.length > 2 && (
+                </div>
+                <div className="flex items-center gap-3">
+                  {historyRuns.length > 10 && (
                     <button 
                       onClick={() => setShowAllHistory(!showAllHistory)}
-                      className="text-sm text-green-600 hover:text-green-700 font-medium"
+                      className="text-xs text-slate-600 hover:text-slate-800 font-bold tracking-wider uppercase bg-slate-50 px-2 py-1 rounded border border-slate-200 transition-colors"
                     >
                       {showAllHistory ? 'View Less' : 'View All'}
                     </button>
@@ -966,7 +969,7 @@ export default function Production() {
                         if (sortOrder === "asc") return valA - valB;
                         return valB - valA;
                       })
-                      .slice(0, showAllHistory ? undefined : 2)
+                      .slice(0, showAllHistory ? historyRuns.length : 10)
                       .map((run) => {
                       const expected = run.planned_quantity_kg;
                       const actual = run.actual_quantity_kg ?? expected;
@@ -1093,13 +1096,16 @@ export default function Production() {
                 </tbody>
               </table>
             </div>
-            {historyRuns.length > 2 && (
-              <div className="p-3 border-t bg-slate-50 flex justify-center">
+            {historyRuns.length > 10 && (
+              <div className="p-3 border-t bg-slate-50 flex justify-center items-center gap-4">
+                <span className="text-xs font-medium text-slate-400">
+                   {showAllHistory ? `All ${historyRuns.length} entries shown` : `Showing 10 of ${historyRuns.length}`}
+                </span>
                 <button
                   onClick={() => setShowAllHistory(!showAllHistory)}
-                  className="text-sm font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                  className="text-sm font-bold text-blue-600 hover:text-blue-700 uppercase tracking-widest bg-blue-50 px-4 py-1.5 rounded-lg border border-blue-100 shadow-sm transition-all"
                 >
-                  {showAllHistory ? "View Less" : `View All (${historyRuns.length})`}
+                  {showAllHistory ? "View Less" : "View All History"}
                 </button>
               </div>
             )}
@@ -1109,8 +1115,13 @@ export default function Production() {
 
       {/* New Production Run Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-card w-full max-w-2xl rounded-xl shadow-2xl border overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div 
+            className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" 
+            onClick={() => setIsModalOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="bg-card w-full max-w-2xl rounded-xl shadow-2xl border overflow-hidden relative z-10 scale-in-center">
             <div className="flex items-center justify-between p-6 border-b">
               <h3 className="text-xl font-bold">New Production Run</h3>
               <button
@@ -1272,8 +1283,13 @@ export default function Production() {
 
       {/* Edit Production Run Modal */}
       {isEditModalOpen && editingRun && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-card w-full max-w-md rounded-xl shadow-2xl border overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div 
+            className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" 
+            onClick={() => setIsEditModalOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="bg-card w-full max-w-md rounded-xl shadow-2xl border overflow-hidden relative z-10 scale-in-center">
             <div className="flex items-center justify-between p-6 border-b">
               <h3 className="text-xl font-bold">Edit Run: {editingRun.batchId}</h3>
               <button
@@ -1320,8 +1336,13 @@ export default function Production() {
       )}
       {/* Completion Modal */}
       {isCompletionModalOpen && completingRun && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 text-left">
-          <div className="bg-card w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200 text-left">
+          <div 
+            className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" 
+            onClick={() => setIsCompletionModalOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="bg-card w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden relative z-10 scale-in-center">
             <div className="bg-gradient-to-r from-emerald-600 to-teal-700 p-6 flex items-center justify-between text-white">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-white/20 rounded-lg">

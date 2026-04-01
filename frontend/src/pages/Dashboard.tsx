@@ -314,14 +314,17 @@ export default function Dashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <div className="col-span-2 rounded-xl border bg-card p-6 shadow-sm">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="font-semibold flex items-center">
+            <div className="flex items-center gap-3">
               <Clock className="mr-2 h-4 w-4 text-blue-600" />
-              Recent Production Runs
-            </h3>
+              <h3 className="font-semibold">Recent Production Runs</h3>
+              <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
+                {data?.recentRuns && (showAllRuns ? `Showing all ${data.recentRuns.length}` : `Showing ${Math.min(3, data.recentRuns.length)} of ${data.recentRuns.length}`)}
+              </span>
+            </div>
             {data?.recentRuns && data.recentRuns.length > 3 && (
               <button
                 onClick={() => setShowAllRuns(!showAllRuns)}
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                className="text-xs text-blue-600 hover:text-blue-700 font-bold uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded border border-blue-100"
               >
                 {showAllRuns ? 'View Less' : 'View All'}
               </button>
@@ -356,7 +359,7 @@ export default function Dashboard() {
                   </tr>
                 ) : (
                   data?.recentRuns
-                    .slice(0, showAllRuns ? undefined : 3)
+                    .slice(0, showAllRuns ? data.recentRuns.length : 3)
                     .map((run, i) => (
                       <tr key={i} className="hover:bg-gray-50 transition-colors">
                         <td className="p-6 font-bold text-blue-600 tracking-tight">{run.batchId}</td>
@@ -377,14 +380,17 @@ export default function Dashboard() {
 
         <div className="col-span-1 rounded-xl border bg-card p-6 shadow-sm border-t-4 border-t-orange-500">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold flex items-center text-orange-600">
+            <div className="flex items-center gap-3">
               <Bell className="mr-2 h-5 w-5" />
-              Inventory Alerts
-            </h3>
+              <h3 className="font-semibold">Inventory Alerts</h3>
+              <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
+                {data?.inventoryAlerts && (showAllAlerts ? `Showing all ${data.inventoryAlerts.length}` : `Showing ${Math.min(3, data.inventoryAlerts.length)} of ${data.inventoryAlerts.length}`)}
+              </span>
+            </div>
             {data?.inventoryAlerts && data.inventoryAlerts.length > 3 && (
               <button
                 onClick={() => setShowAllAlerts(!showAllAlerts)}
-                className="text-sm text-orange-600 hover:text-orange-700 font-medium"
+                className="text-xs text-orange-600 hover:text-orange-700 font-bold uppercase tracking-wider bg-orange-50 px-2 py-0.5 rounded border border-orange-100"
               >
                 {showAllAlerts ? 'View Less' : 'View All'}
               </button>
@@ -409,7 +415,7 @@ export default function Dashboard() {
                   </tr>
                 ) : (
                   data?.inventoryAlerts
-                    .slice(0, showAllAlerts ? undefined : 3)
+                    .slice(0, showAllAlerts ? data.inventoryAlerts.length : 3)
                     .map((alert, i) => (
                       <tr key={i} className="hover:bg-gray-50 transition-colors">
                         <td className="px-3 py-3">
