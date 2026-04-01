@@ -18,6 +18,7 @@ interface InventoryItem {
   color_code: string;
   business_code: string;
   series: string;
+  ink_series: string | null;
   hsn_code: string | null;
   tags: string[] | null;
   min_threshold_kg: number;
@@ -260,7 +261,8 @@ export default function Inventory() {
                             <div className="flex flex-wrap gap-1.5 text-[11px] text-slate-500 font-medium mt-0.5">
                               {item.business_code && <span>Code: {item.business_code}</span>}
                               {item.business_code && item.series && <span>•</span>}
-                              {item.series && <span>Series: {item.series}</span>}
+                              {item.series && <span>Type: {item.series}</span>}
+                              {item.ink_series && <><span>•</span><span>Series: {item.ink_series}</span></>}
                               {item.hsn_code && <><span>•</span><span>HSN: {item.hsn_code}</span></>}
                             </div>
                             {item.tags && item.tags.length > 0 && (
@@ -350,8 +352,12 @@ export default function Inventory() {
                                    <span className="font-mono font-semibold">{item.hsn_code || '—'}</span>
                                  </div>
                                  <div className="flex justify-between py-1 border-b border-border/50">
-                                   <span className="text-muted-foreground font-medium">Ink Series</span>
+                                   <span className="text-muted-foreground font-medium">Product Type</span>
                                    <span className="font-semibold">{item.series || '—'}</span>
+                                 </div>
+                                 <div className="flex justify-between py-1 border-b border-border/50">
+                                   <span className="text-muted-foreground font-medium">Ink Series</span>
+                                   <span className="font-semibold">{item.ink_series || '—'}</span>
                                  </div>
                                  {item.tags && item.tags.length > 0 && (
                                    <div className="pt-1">
@@ -452,7 +458,7 @@ export default function Inventory() {
           </div>
         </div>
         <div className="w-full md:w-32">
-          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">Series</label>
+          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">Product Type</label>
           <div className="relative">
             <select
               className="w-full pl-4 pr-10 py-3 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none transition-all"

@@ -63,20 +63,20 @@ async function seed() {
             ON CONFLICT (name) DO NOTHING;
         `);
 
-        // 4. Recipes
-        console.log('Inserting recipes...');
+        // 4. Formulas
+        console.log('Inserting formulas...');
         const oceanBlueId = (await pool.query("SELECT id FROM colors WHERE name = 'Ocean Blue'")).rows[0].id;
         const sunsetRedId = (await pool.query("SELECT id FROM colors WHERE name = 'Sunset Red'")).rows[0].id;
         const cloudWhiteId = (await pool.query("SELECT id FROM colors WHERE name = 'Cloud White'")).rows[0].id;
 
         await pool.query(`
-            INSERT INTO recipes (color_id, name, batch_size_kg)
+            INSERT INTO formulas (color_id, name, batch_size_kg)
             VALUES 
                 ($1, 'Ocean Blue Standard', 100),
                 ($2, 'Sunset Red Exterior', 150),
                 ($3, 'Cloud White Base', 200)
             -- simplified, real app would check conflict or just run once
-        `, [oceanBlueId, sunsetRedId, cloudWhiteId]).catch(e => console.log('Recipes might exist, skipping error'));
+        `, [oceanBlueId, sunsetRedId, cloudWhiteId]).catch(e => console.log('Formulas might exist, skipping error'));
 
         // 5. Finished Stock
         console.log('Inserting finished stock...');
@@ -95,32 +95,32 @@ async function seed() {
 
         // 6. Production Runs (Recent)
         console.log('Inserting production runs...');
-        const oceanRecipeId = (await pool.query("SELECT id FROM recipes WHERE color_id = $1 LIMIT 1", [oceanBlueId])).rows[0]?.id;
-        const sunsetRecipeId = (await pool.query("SELECT id FROM recipes WHERE color_id = $1 LIMIT 1", [sunsetRedId])).rows[0]?.id;
-        const whiteRecipeId = (await pool.query("SELECT id FROM recipes WHERE color_id = $1 LIMIT 1", [cloudWhiteId])).rows[0]?.id;
+        const oceanFormulaId = (await pool.query("SELECT id FROM formulas WHERE color_id = $1 LIMIT 1", [oceanBlueId])).rows[0]?.id;
+        const sunsetFormulaId = (await pool.query("SELECT id FROM formulas WHERE color_id = $1 LIMIT 1", [sunsetRedId])).rows[0]?.id;
+        const whiteFormulaId = (await pool.query("SELECT id FROM formulas WHERE color_id = $1 LIMIT 1", [cloudWhiteId])).rows[0]?.id;
 
-        if (oceanRecipeId && sunsetRecipeId && whiteRecipeId) {
+        if (oceanFormulaId && sunsetFormulaId && whiteFormulaId) {
              await pool.query(`
-                INSERT INTO production_runs (recipe_id, status, planned_quantity_kg, actual_quantity_kg, created_by, created_at)
+                INSERT INTO production_runs (formula_id, status, planned_quantity_kg, actual_quantity_kg, created_by, created_at)
                 VALUES 
                     ($1, 'completed', 100, 102, $4, NOW() - INTERVAKG '1 hour'),
                     ($2, 'completed', 150, 148, $4, NOW() - INTERVAKG '3 hours'),
                     ($3, 'in_progress', 200, NULKG, $4, NOW() - INTERVAKG '30 minutes'),
                     ($1, 'planned', 100, NULKG, $4, NOW()),
                     ($2, 'completed', 150, 150, $4, NOW() - INTERVAKG '1 day')
-             `, [oceanRecipeId, sunsetRecipeId, whiteRecipeId, userId]);
+             `, [oceanFormulaId, sunsetFormulaId, whiteFormulaId, userId]);
         }
         
         // 7. Historical Production Runs for Chart (Spread over last 5 months)
         console.log('Inserting historical production runs for charts...');
-        if (oceanRecipeId) {
+        if (oceanFormulaId) {
             await pool.query(`
-                INSERT INTO production_runs (recipe_id, status, planned_quantity_kg, actual_quantity_kg, created_by, created_at)
+                INSERT INTO production_runs (formula_id, status, planned_quantity_kg, actual_quantity_kg, created_by, created_at)
                 SELECT 
                     $1, 'completed', 100, 100, $2, 
                     NOW() - (random() * interval '150 days')
                 FROM generate_series(1, 40)
-            `, [oceanRecipeId, userId]);
+            `, [oceanFormulaId, userId]);
         }
 
         console.log('Database seeded successfully!');

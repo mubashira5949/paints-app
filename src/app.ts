@@ -88,7 +88,7 @@ import userModule from './modules/users'
 import authModule from './modules/auth'
 import resourcesModule from './modules/resources'
 import colorsModule from './modules/colors'
-import recipesModule from './modules/recipes'
+import formulasModule from './modules/formulas'
 import productionModule from './modules/production'
 import dashboardModule from './modules/dashboard'
 
@@ -120,9 +120,9 @@ fastify.register(resourcesModule, { prefix: '/resources' })
 fastify.register(colorsModule, { prefix: '/colors' })
 
 /**
- * Register recipes module with a '/recipes' prefix.
+ * Register formulas module with a '/formulas' prefix.
  */
-fastify.register(recipesModule, { prefix: '/recipes' })
+fastify.register(formulasModule, { prefix: '/formulas' })
 
 /**
  * Register production runs module with a '/production-runs' prefix.

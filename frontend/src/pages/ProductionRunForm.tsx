@@ -18,7 +18,7 @@ interface Color {
   business_code: string;
 }
 
-interface Recipe {
+interface Formula {
   id: number;
   name: string;
   batch_size_kg: number;
@@ -44,12 +44,12 @@ export default function ProductionRunForm() {
 
   // Form options
   const [colors, setColors] = useState<Color[]>([]);
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [formulas, setFormulas] = useState<Formula[]>([]);
   const [operators, setOperators] = useState<Operator[]>([]);
 
   // Form values
   const [selectedColor, setSelectedColor] = useState<number | "">("");
-  const [selectedRecipe, setSelectedRecipe] = useState<number | "">("");
+  const [selectedFormula, setSelectedFormula] = useState<number | "">("");
   const [targetQty, setTargetQty] = useState<string>("");
   const [selectedOperator, setSelectedOperator] = useState<number | "">("");
 
@@ -59,7 +59,7 @@ export default function ProductionRunForm() {
 
   // UI state
   const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingRecipes, setIsLoadingRecipes] = useState(false);
+  const [isLoadingFormulas, setIsLoadingFormulas] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // ── Fetch colors + operators on mount ──
@@ -84,25 +84,25 @@ export default function ProductionRunForm() {
     fetchInitialData();
   }, []);
 
-  // ── Fetch recipes when color changes ──
+  // ── Fetch formulas when color changes ──
   useEffect(() => {
     if (!selectedColor) {
-      setRecipes([]);
-      setSelectedRecipe("");
+      setFormulas([]);
+      setSelectedFormula("");
       return;
     }
-    const fetchRecipes = async () => {
-      setIsLoadingRecipes(true);
+    const fetchFormulas = async () => {
+      setIsLoadingFormulas(true);
       try {
-        const recipesData = await apiRequest<Recipe[]>(`/recipes/${selectedColor}`);
-        setRecipes(recipesData);
+        const formulasData = await apiRequest<Formula[]>(`/formulas/${selectedColor}`);
+        setFormulas(formulasData);
       } catch {
-        setRecipes([]);
+        setFormulas([]);
       } finally {
-        setIsLoadingRecipes(false);
+        setIsLoadingFormulas(false);
       }
     };
-    fetchRecipes();
+    fetchFormulas();
   }, [selectedColor]);
 
   // ── Handle form submission ──
@@ -110,7 +110,7 @@ export default function ProductionRunForm() {
     e.preventDefault();
     setError(null);
 
-    if (!selectedColor || !selectedRecipe || !targetQty || !selectedOperator) {
+    if (!selectedColor || !selectedFormula || !targetQty || !selectedOperator) {
       setError("Please fill in all fields before submitting.");
       return;
     }
@@ -128,7 +128,7 @@ export default function ProductionRunForm() {
       }>("/production-runs/plan", {
         method: "POST",
         body: {
-          recipeId: Number(selectedRecipe),
+          formulaId: Number(selectedFormula),
           colorId: Number(selectedColor),
           targetQty: Number(targetQty),
           operatorId: Number(selectedOperator),
@@ -203,7 +203,7 @@ export default function ProductionRunForm() {
             onClick={() => {
               setSuccessRunId(null);
               setSelectedColor("");
-              setSelectedRecipe("");
+              setSelectedFormula("");
               setTargetQty("");
               setSelectedOperator("");
               setExpectedResources([]);
@@ -251,7 +251,7 @@ export default function ProductionRunForm() {
         onSubmit={handleSubmit}
         className="bg-white rounded-2xl border shadow-sm p-6 space-y-6"
       >
-        {/* Row 1: Color + Recipe */}
+        {/* Row 1: Color + Formula */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           {/* Select Color */}
           <div className="space-y-1.5">
@@ -262,7 +262,7 @@ export default function ProductionRunForm() {
               value={selectedColor}
               onChange={(e) => {
                 setSelectedColor(e.target.value ? Number(e.target.value) : "");
-                setSelectedRecipe("");
+                setSelectedFormula("");
               }}
               required
               className="w-full p-2.5 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm transition-shadow"
@@ -276,41 +276,41 @@ export default function ProductionRunForm() {
             </select>
           </div>
 
-          {/* Select Recipe */}
+          {/* Select Formula */}
           <div className="space-y-1.5">
             <label className="text-sm font-semibold text-slate-700">
-              Select Recipe <span className="text-red-500">*</span>
+              Select Formula <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <select
-                value={selectedRecipe}
+                value={selectedFormula}
                 onChange={(e) =>
-                  setSelectedRecipe(e.target.value ? Number(e.target.value) : "")
+                  setSelectedFormula(e.target.value ? Number(e.target.value) : "")
                 }
-                disabled={!selectedColor || isLoadingRecipes}
+                disabled={!selectedColor || isLoadingFormulas}
                 required
                 className="w-full p-2.5 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm transition-shadow disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <option value="">
-                  {isLoadingRecipes
-                    ? "Loading recipes..."
+                  {isLoadingFormulas
+                    ? "Loading formulas..."
                     : selectedColor
-                    ? "— Select Recipe —"
+                    ? "— Select Formula —"
                     : "— Select a color first —"}
                 </option>
-                {recipes.map((r) => (
+                {formulas.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.name} (batch: {r.batch_size_kg}kg)
                   </option>
                 ))}
               </select>
-              {isLoadingRecipes && (
+              {isLoadingFormulas && (
                 <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-slate-400 pointer-events-none" />
               )}
             </div>
-            {selectedColor && !isLoadingRecipes && recipes.length === 0 && (
+            {selectedColor && !isLoadingFormulas && formulas.length === 0 && (
               <p className="text-xs text-amber-600">
-                No recipes found for this color.
+                No formulas found for this color.
               </p>
             )}
           </div>
@@ -333,11 +333,11 @@ export default function ProductionRunForm() {
               required
               className="w-full p-2.5 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-shadow"
             />
-            {selectedRecipe && recipes.length > 0 && (
+            {selectedFormula && formulas.length > 0 && (
               <p className="text-xs text-slate-500">
                 Standard batch size:{" "}
                 <strong>
-                  {recipes.find((r) => r.id === Number(selectedRecipe))
+                  {formulas.find((r) => r.id === Number(selectedFormula))
                     ?.batch_size_kg ?? "—"}
                   kg
                 </strong>
@@ -371,7 +371,7 @@ export default function ProductionRunForm() {
         {/* Hint */}
         <p className="text-xs text-slate-400 border-t pt-4">
           Expected material requirements will be calculated automatically from
-          the selected recipe and shown after submission.
+          the selected formula and shown after submission.
         </p>
 
         {/* Submit */}
@@ -380,7 +380,7 @@ export default function ProductionRunForm() {
           disabled={
             isLoading ||
             !selectedColor ||
-            !selectedRecipe ||
+            !selectedFormula ||
             !targetQty ||
             !selectedOperator
           }

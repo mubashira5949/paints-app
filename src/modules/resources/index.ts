@@ -249,11 +249,11 @@ export default async function (fastifyRaw: FastifyInstance) {
                     message: 'Resource deleted successfully'
                 })
             } catch (err: any) {
-                // Check for foreign key constraint violation (e.g., resource used in recipe)
+                // Check for foreign key constraint violation (e.g., resource used in formula)
                 if (err.code === '23503') {
                     return reply.status(400).send({
                         error: 'Bad Request',
-                        message: 'Cannot delete resource: it is currently used in recipes or transactions.'
+                        message: 'Cannot delete resource: it is currently used in formulas or transactions.'
                     })
                 }
                 fastify.log.error(err)

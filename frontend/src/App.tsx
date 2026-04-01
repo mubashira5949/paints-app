@@ -11,7 +11,7 @@ import ProductionRunForm from "./pages/ProductionRunForm";
 import Users from "./pages/Users";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
-import Recipes from "./pages/Recipes";
+import Formulas from "./pages/Formulas";
 import Sales from "./pages/Sales";
 import SalesHistory from "./pages/SalesHistory";
 import Orders from "./pages/Orders";
@@ -32,7 +32,7 @@ function App() {
 
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="inventory" element={<Inventory />} />
-              <Route path="recipes" element={<Recipes />} />
+              <Route path="formulas" element={<Formulas />} />
               <Route path="production" element={<Production />} />
               <Route path="production/new" element={<ProductionRunForm />} />
               <Route path="production/:batchId" element={<ProductionDetail />} />

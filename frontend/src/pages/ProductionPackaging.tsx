@@ -20,7 +20,7 @@ interface RunMeta {
   planned_quantity_kg: number;
   actual_quantity_kg: number | null;
   color_name: string;
-  recipe_name: string;
+  formula_name: string;
   packaging: { pack_size_kg: number; quantity_units: number; volume_kg: number }[];
 }
 
@@ -193,7 +193,7 @@ export default function ProductionPackaging() {
           Package Batch
         </h1>
         <p className="text-muted-foreground text-sm mt-1">
-          {run.color_name} · {run.recipe_name} · {displayBatchVolume.toLocaleString()}{unitPref} available
+          {run.color_name} · {run.formula_name} · {displayBatchVolume.toLocaleString()}{unitPref} available
         </p>
       </div>
 

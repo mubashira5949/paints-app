@@ -20,8 +20,7 @@ const pool = new Pool({
 });
 
 /**
- * SQKG Schema definition for the Paints App.
- * Includes tables for users, roles, resources, colors, recipes, production runs, and stock transactions.
+ * Includes tables for users, roles, resources, colors, formulas, production runs, and stock transactions.
  */
 const schema = `
 -- 1. Roles table: Stores user access levels
@@ -70,8 +69,8 @@ CREATE TABLE IF NOT EXISTS colors (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 5. Recipes table: Stores formulas for different colors
-CREATE TABLE IF NOT EXISTS recipes (
+-- 5. Formulas table: Stores formulas for different colors
+CREATE TABLE IF NOT EXISTS formulas (
     id SERIAL PRIMARY KEY,
     color_id INTEGER REFERENCES colors(id) NOT NULL,
     name VARCHAR(255) NOT NULL,
@@ -82,19 +81,19 @@ CREATE TABLE IF NOT EXISTS recipes (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 6. Recipe Resources table: Defines raw material requirements for each recipe (Bill of Materials)
-CREATE TABLE IF NOT EXISTS recipe_resources (
+-- 6. Formula Resources table: Defines raw material requirements for each formula (Bill of Materials)
+CREATE TABLE IF NOT EXISTS formula_resources (
     id SERIAL PRIMARY KEY,
-    recipe_id INTEGER REFERENCES recipes(id) ON DELETE CASCADE NOT NULL,
+    formula_id INTEGER REFERENCES formulas(id) ON DELETE CASCADE NOT NULL,
     resource_id INTEGER REFERENCES resources(id) NOT NULL,
     quantity_required DECIMAL(12, 4) NOT NULL,
-    UNIQUE(recipe_id, resource_id)
+    UNIQUE(formula_id, resource_id)
 );
 
 -- 7. Production Runs table: Tracks the process of manufacturing paint
 CREATE TABLE IF NOT EXISTS production_runs (
     id SERIAL PRIMARY KEY,
-    recipe_id INTEGER REFERENCES recipes(id) NOT NULL,
+    formula_id INTEGER REFERENCES formulas(id) NOT NULL,
     status VARCHAR(50) DEFAULT 'planned', -- planned, in_progress, completed, cancelled
     planned_quantity_kg DECIMAL(12, 4) NOT NULL,
     actual_quantity_kg DECIMAL(12, 4),
@@ -202,8 +201,8 @@ CREATE TABLE IF NOT EXISTS client_order_items (
 CREATE TABLE IF NOT EXISTS audit_logs (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) NOT NULL,
-    action VARCHAR(255) NOT NULL, -- e.g. color_created, recipe_created, production_created
-    entity_type VARCHAR(50) NOT NULL, -- e.g. color, recipe, production_run
+    action VARCHAR(255) NOT NULL, -- e.g. color_created, formula_created, production_created
+    entity_type VARCHAR(50) NOT NULL, -- e.g. color, formula, production_run
     entity_id INTEGER NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
