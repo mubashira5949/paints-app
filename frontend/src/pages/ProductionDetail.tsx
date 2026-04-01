@@ -52,9 +52,9 @@ interface RunDetail {
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
-  recipe_id: number;
-  recipe_name: string;
-  recipe_version: string;
+  formula_id: number;
+  formula_name: string;
+  formula_version: string;
   batch_size_kg: number;
   color_name: string;
   color_code: string;
@@ -183,7 +183,7 @@ export default function ProductionDetail() {
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1">Batch</p>
           <h1 className="text-3xl font-bold font-mono tracking-tight">{run.batchId}</h1>
-          <p className="text-muted-foreground text-sm mt-1">{run.color_name} · {run.recipe_name} {run.recipe_version}</p>
+          <p className="text-muted-foreground text-sm mt-1">{run.color_name} · {run.formula_name} {run.formula_version}</p>
         </div>
         {(run.status === "completed" || run.status === "packaging") && run.packaging.length === 0 && (
           <Link
@@ -260,10 +260,10 @@ export default function ProductionDetail() {
           </div>
         </div>
         <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Recipe</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Formula</p>
           <div className="flex items-center gap-1.5 font-medium">
             <BookOpen className="w-3.5 h-3.5 text-muted-foreground" />
-            {run.recipe_name} {run.recipe_version && <span className="text-muted-foreground text-xs">v{run.recipe_version}</span>}
+            {run.formula_name} {run.formula_version && <span className="text-muted-foreground text-xs">v{run.formula_version}</span>}
           </div>
         </div>
         <div>

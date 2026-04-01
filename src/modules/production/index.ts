@@ -12,7 +12,7 @@ export default async function (fastifyRaw: FastifyInstance) {
     const fastify = fastifyRaw.withTypeProvider<TypeBoxTypeProvider>()
 
     const CreateProductionRunSchema = Type.Object({
-        recipeId: Type.Integer(),
+        formulaId: Type.Integer(),
         expectedOutput: Type.Number({ exclusiveMinimum: 0 }),
         actualResources: Type.Array(
             Type.Object({
@@ -24,7 +24,7 @@ export default async function (fastifyRaw: FastifyInstance) {
     })
 
     const PlanProductionRunSchema = Type.Object({
-        recipeId: Type.Integer(),
+        formulaId: Type.Integer(),
         colorId: Type.Integer(),
         targetQty: Type.Number({ exclusiveMinimum: 0 }),
         operatorId: Type.Integer()
@@ -47,7 +47,7 @@ export default async function (fastifyRaw: FastifyInstance) {
     })
 
     const EditRunSchema = Type.Object({
-        recipeId: Type.Optional(Type.Integer()),
+        formulaId: Type.Optional(Type.Integer()),
         targetQty: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
         operatorId: Type.Optional(Type.Integer())
     })
@@ -160,7 +160,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                         pr.started_at,
                         pr.completed_at,
                         pr.created_at,
-                        r.name AS recipe_name,
+                        r.name AS formula_name,
                         c.name AS color_name,
                         (
                             SELECT json_agg(
@@ -174,7 +174,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                               AND fst.transaction_type = 'production_entry'
                         ) AS packaging
                     FROM production_runs pr
-                    JOIN recipes r ON pr.recipe_id = r.id
+                    JOIN formulas r ON pr.formula_id = r.id
                     JOIN colors c ON r.color_id = c.id
                     WHERE 1=1
                 `
@@ -221,7 +221,7 @@ export default async function (fastifyRaw: FastifyInstance) {
 
     /**
      * GET /production-runs/:id - Full detail for a single production run.
-     * Returns recipe, expected resources, actual consumption + variance, packaging, operator.
+     * Returns formula, expected resources, actual consumption + variance, packaging, operator.
      * Accessible by 'admin', 'manager', or 'operator' roles.
      */
     fastify.get('/:id', {
@@ -246,15 +246,15 @@ export default async function (fastifyRaw: FastifyInstance) {
                         pr.completed_at,
                         pr.created_at,
                         pr.updated_at,
-                        r.id AS recipe_id,
-                        r.name AS recipe_name,
-                        r.version AS recipe_version,
+                        r.id AS formula_id,
+                        r.name AS formula_name,
+                        r.version AS formula_version,
                         r.batch_size_kg,
                         c.name AS color_name,
                         c.color_code,
                         u.username AS operator
                     FROM production_runs pr
-                    JOIN recipes r ON pr.recipe_id = r.id
+                    JOIN formulas r ON pr.formula_id = r.id
                     JOIN colors c ON r.color_id = c.id
                     LEFT JOIN users u ON pr.created_by = u.id
                     WHERE pr.id = $1
@@ -269,18 +269,18 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 const run = runResult.rows[0]
 
-                // 2. Expected resources from recipe (scaled to planned qty)
+                // 2. Expected resources from formula (scaled to planned qty)
                 const expectedResult = await fastify.db.query(`
                     SELECT
                         rr.resource_id,
                         res.name,
                         res.unit,
                         ROUND((rr.quantity_required * $2 / r.batch_size_kg)::numeric, 4) AS expected_qty
-                    FROM recipe_resources rr
+                    FROM formula_resources rr
                     JOIN resources res ON rr.resource_id = res.id
-                    JOIN recipes r ON rr.recipe_id = r.id
-                    WHERE rr.recipe_id = $1
-                `, [run.recipe_id, run.planned_quantity_kg])
+                    JOIN formulas r ON rr.formula_id = r.id
+                    WHERE rr.formula_id = $1
+                `, [run.formula_id, run.planned_quantity_kg])
 
                 // 3. Actual resource consumption with variance
                 const actualResult = await fastify.db.query(`
@@ -338,13 +338,13 @@ export default async function (fastifyRaw: FastifyInstance) {
             try {
                 let query = `
                     SELECT pr.id, pr.status, pr.planned_quantity_kg, pr.actual_quantity_kg, 
-                           pr.started_at, pr.completed_at, pr.created_at, r.name as recipe_name, c.name as color_name,
+                           pr.started_at, pr.completed_at, pr.created_at, r.name as formula_name, c.name as color_name,
                            (SELECT json_agg(json_build_object('pack_size_kg', fst.pack_size_kg, 'quantity_units', fst.quantity_units))
                             FROM finished_stock_transactions fst
                             WHERE fst.reference_id = pr.id AND fst.transaction_type = 'production_entry'
                            ) as packaging
                     FROM production_runs pr
-                    JOIN recipes r ON pr.recipe_id = r.id
+                    JOIN formulas r ON pr.formula_id = r.id
                     JOIN colors c ON r.color_id = c.id
                     WHERE 1=1
                 `
@@ -402,7 +402,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                         pr.id,
                         'PR-' || pr.id AS "batchId",
                         c.name AS color,
-                        r.name AS recipe,
+                        r.name AS formula,
                         pr.planned_quantity_kg AS "targetQty",
                         pr.actual_quantity_kg,
                         pr.status,
@@ -421,7 +421,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                               AND fst.transaction_type = 'production_entry'
                         ) AS packaging
                     FROM production_runs pr
-                    JOIN recipes r ON pr.recipe_id = r.id
+                    JOIN formulas r ON pr.formula_id = r.id
                     JOIN colors c ON r.color_id = c.id
                     LEFT JOIN users u ON pr.created_by = u.id
                     WHERE pr.status NOT IN ('completed')
@@ -521,27 +521,27 @@ export default async function (fastifyRaw: FastifyInstance) {
                         )
 
                         if (actualsCheck.rows.length === 0) {
-                            // Fetch run details to get recipe and quantity
+                            // Fetch run details to get formula and quantity
                             const runDetails = await client.query(
-                                `SELECT pr.recipe_id, pr.planned_quantity_kg, pr.actual_quantity_kg, r.batch_size_kg 
+                                `SELECT pr.formula_id, pr.planned_quantity_kg, pr.actual_quantity_kg, r.batch_size_kg 
                                  FROM production_runs pr 
-                                 JOIN recipes r ON pr.recipe_id = r.id 
+                                 JOIN formulas r ON pr.formula_id = r.id 
                                  WHERE pr.id = $1`,
                                 [id]
                             )
                             
                             if (runDetails.rows.length > 0) {
-                                const { recipe_id, planned_quantity_kg, actual_quantity_kg: currentActual, batch_size_kg } = runDetails.rows[0]
+                                const { formula_id, planned_quantity_kg, actual_quantity_kg: currentActual, batch_size_kg } = runDetails.rows[0]
                                 // Use the newly provided actual if available, else planned
                                 const effectiveActual = actual_quantity_kg ?? currentActual ?? planned_quantity_kg
                                 const scaleFactor = effectiveActual / batch_size_kg
 
-                                const recipeResources = await client.query(
-                                    'SELECT resource_id, quantity_required FROM recipe_resources WHERE recipe_id = $1',
-                                    [recipe_id]
+                                const formulaResources = await client.query(
+                                    'SELECT resource_id, quantity_required FROM formula_resources WHERE formula_id = $1',
+                                    [formula_id]
                                 )
 
-                                for (const res of recipeResources.rows) {
+                                for (const res of formulaResources.rows) {
                                     const expectedQty = res.quantity_required * scaleFactor
                                     // Assume actual = expected for default transition
                                     await client.query(
@@ -598,7 +598,7 @@ export default async function (fastifyRaw: FastifyInstance) {
         },
         handler: async (request, reply) => {
             const { id } = request.params
-            const { recipeId, targetQty, operatorId } = request.body
+            const { formulaId, targetQty, operatorId } = request.body
 
             try {
                 // Fetch current status
@@ -620,11 +620,11 @@ export default async function (fastifyRaw: FastifyInstance) {
                     })
                 }
 
-                // If recipeId is provided, validate it
-                if (recipeId) {
-                    const recipeCheck = await fastify.db.query('SELECT id FROM recipes WHERE id = $1', [recipeId])
-                    if (recipeCheck.rows.length === 0) {
-                        return reply.status(400).send({ error: 'Bad Request', message: 'Invalid recipe ID' })
+                // If formulaId is provided, validate it
+                if (formulaId) {
+                    const formulaCheck = await fastify.db.query('SELECT id FROM formulas WHERE id = $1', [formulaId])
+                    if (formulaCheck.rows.length === 0) {
+                        return reply.status(400).send({ error: 'Bad Request', message: 'Invalid formula ID' })
                     }
                 }
 
@@ -641,9 +641,9 @@ export default async function (fastifyRaw: FastifyInstance) {
                 const params: any[] = []
                 let paramIdx = 1
 
-                if (recipeId !== undefined) {
-                    updates.push(`recipe_id = $${paramIdx++}`)
-                    params.push(recipeId)
+                if (formulaId !== undefined) {
+                    updates.push(`formula_id = $${paramIdx++}`)
+                    params.push(formulaId)
                 }
                 if (targetQty !== undefined) {
                     updates.push(`planned_quantity_kg = $${paramIdx++}`)
@@ -748,7 +748,7 @@ export default async function (fastifyRaw: FastifyInstance) {
             body: CreateProductionRunSchema
         },
         handler: async (request, reply) => {
-            const { recipeId, expectedOutput, actualResources } = request.body
+            const { formulaId, expectedOutput, actualResources } = request.body
             const user = request.user as any
             const user_id = user.id
 
@@ -758,32 +758,32 @@ export default async function (fastifyRaw: FastifyInstance) {
                 client = await fastify.db.connect()
                 await client.query('BEGIN')
 
-                // 1. Fetch the recipe to validate it exists and get its batch specifications
-                const recipeResult = await client.query(
-                    'SELECT id, color_id, batch_size_kg FROM recipes WHERE id = $1',
-                    [recipeId]
+                // 1. Fetch the formula to validate it exists and get its batch specifications
+                const formulaResult = await client.query(
+                    'SELECT id, color_id, batch_size_kg FROM formulas WHERE id = $1',
+                    [formulaId]
                 )
 
-                if (recipeResult.rows.length === 0) {
+                if (formulaResult.rows.length === 0) {
                     await client.query('ROLLBACK')
                     return reply.status(404).send({
                         error: 'Not Found',
-                        message: 'Valid recipe not found'
+                        message: 'Valid formula not found'
                     })
                 }
 
-                const recipe = recipeResult.rows[0]
-                const colorId = recipe.color_id
+                const formula = formulaResult.rows[0]
+                const colorId = formula.color_id
 
-                // 2. Fetch expected recipe resources to validate the components provided
+                // 2. Fetch expected formula resources to validate the components provided
                 const expectedResourcesResult = await client.query(
-                    'SELECT resource_id, quantity_required FROM recipe_resources WHERE recipe_id = $1',
-                    [recipeId]
+                    'SELECT resource_id, quantity_required FROM formula_resources WHERE formula_id = $1',
+                    [formulaId]
                 )
                 const expectedResources = expectedResourcesResult.rows
                 const expectedResourceIds = expectedResources.map((r: any) => r.resource_id)
 
-                // Validate that all submitted actual resources belong to the recipe
+                // Validate that all submitted actual resources belong to the formula
                 const providedResourceIds = actualResources.map((ar: any) => ar.resourceId)
                 const hasInvalidResources = providedResourceIds.some((id: number) => !expectedResourceIds.includes(id))
 
@@ -791,21 +791,21 @@ export default async function (fastifyRaw: FastifyInstance) {
                     await client.query('ROLLBACK')
                     return reply.status(400).send({
                         error: 'Bad Request',
-                        message: 'Provided resources do not match the selected recipe blueprint'
+                        message: 'Provided resources do not match the selected formula blueprint'
                     })
                 }
 
                 // 3. Create the overarching production run record
                 const productionRunResult = await client.query(
-                    `INSERT INTO production_runs (recipe_id, status, planned_quantity_kg, actual_quantity_kg, started_at, completed_at, created_by) 
+                    `INSERT INTO production_runs (formula_id, status, planned_quantity_kg, actual_quantity_kg, started_at, completed_at, created_by) 
                       VALUES ($1, 'completed', $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $4)
                       RETURNING id, created_at`,
-                    [recipeId, expectedOutput, expectedOutput, user_id] // assume perfectly yielded run
+                    [formulaId, expectedOutput, expectedOutput, user_id] // assume perfectly yielded run
                 )
                 const runId = productionRunResult.rows[0].id
 
                 // 4. Iterate over actual resources: track actuals, write stock audit, deduct stock
-                const scaleFactor = expectedOutput / recipe.batch_size_kg
+                const scaleFactor = expectedOutput / formula.batch_size_kg
 
                 for (const actual of actualResources) {
                     // Find expected mapping requirements
@@ -884,23 +884,23 @@ export default async function (fastifyRaw: FastifyInstance) {
             body: PlanProductionRunSchema
         },
         handler: async (request, reply) => {
-            const { recipeId, colorId, targetQty, operatorId } = request.body
+            const { formulaId, colorId, targetQty, operatorId } = request.body
 
             try {
-                // 1. Validate the recipe exists and belongs to the specified color
-                const recipeResult = await fastify.db.query(
-                    'SELECT id, color_id, batch_size_kg FROM recipes WHERE id = $1 AND color_id = $2',
-                    [recipeId, colorId]
+                // 1. Validate the formula exists and belongs to the specified color
+                const formulaResult = await fastify.db.query(
+                    'SELECT id, color_id, batch_size_kg FROM formulas WHERE id = $1 AND color_id = $2',
+                    [formulaId, colorId]
                 )
 
-                if (recipeResult.rows.length === 0) {
+                if (formulaResult.rows.length === 0) {
                     return reply.status(404).send({
                         error: 'Not Found',
-                        message: 'Recipe not found or does not belong to the specified color'
+                        message: 'Formula not found or does not belong to the specified color'
                     })
                 }
 
-                const recipe = recipeResult.rows[0]
+                const formula = formulaResult.rows[0]
 
                 // 2. Validate operator user exists
                 const operatorResult = await fastify.db.query(
@@ -918,10 +918,10 @@ export default async function (fastifyRaw: FastifyInstance) {
                 // 3. Create the production run with status = 'planned'
                 const runResult = await fastify.db.query(
                     `INSERT INTO production_runs
-                       (recipe_id, status, planned_quantity_kg, created_by)
+                       (formula_id, status, planned_quantity_kg, created_by)
                      VALUES ($1, 'planned', $2, $3)
                      RETURNING id, status, created_at`,
-                    [recipeId, targetQty, operatorId]
+                    [formulaId, targetQty, operatorId]
                 )
 
                 const runId = runResult.rows[0].id
@@ -930,10 +930,10 @@ export default async function (fastifyRaw: FastifyInstance) {
                 const resourcesResult = await fastify.db.query(
                     `SELECT rr.resource_id, r.name, r.unit,
                             ROUND((rr.quantity_required * $2 / $3)::numeric, 4) AS expected_quantity
-                     FROM recipe_resources rr
+                     FROM formula_resources rr
                      JOIN resources r ON rr.resource_id = r.id
-                     WHERE rr.recipe_id = $1`,
-                    [recipeId, targetQty, recipe.batch_size_kg]
+                     WHERE rr.formula_id = $1`,
+                    [formulaId, targetQty, formula.batch_size_kg]
                 )
 
                 return reply.status(201).send({
@@ -976,7 +976,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                 const runResult = await client.query(
                     `SELECT pr.actual_quantity_kg, pr.planned_quantity_kg, pr.status, r.color_id 
                       FROM production_runs pr
-                      JOIN recipes r ON pr.recipe_id = r.id
+                      JOIN formulas r ON pr.formula_id = r.id
                       WHERE pr.id = $1`,
                     [id]
                 )
@@ -1078,7 +1078,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                             FROM finished_stock_transactions
                             WHERE reference_id = pr.id AND transaction_type = 'production_entry') as already_packaged
                     FROM production_runs pr
-                    JOIN recipes r ON pr.recipe_id = r.id
+                    JOIN formulas r ON pr.formula_id = r.id
                     WHERE pr.id = $1
                 `, [id])
 

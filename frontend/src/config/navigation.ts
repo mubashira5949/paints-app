@@ -64,8 +64,8 @@ export const navigation: NavItem[] = [
     roles: ["manager", "sales", "admin"],
   },
   {
-    title: "Recipes",
-    path: "/recipes",
+    title: "Formulas",
+    path: "/formulas",
     icon: Beaker,
     roles: ["manager", "admin", "operator"],
   },

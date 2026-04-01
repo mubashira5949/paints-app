@@ -41,12 +41,12 @@ async function runTest() {
         console.log('📊 Preparing test data...');
 
         // Clean up previous test data
-        await pool.query("DELETE FROM production_resource_actuals WHERE production_run_id IN (SELECT id FROM production_runs WHERE recipe_id IN (SELECT id FROM recipes WHERE name = 'Test Recipe'))");
+        await pool.query("DELETE FROM production_resource_actuals WHERE production_run_id IN (SELECT id FROM production_runs WHERE formula_id IN (SELECT id FROM formulas WHERE name = 'Test Formula'))");
         await pool.query("DELETE FROM finished_stock_transactions WHERE color_id IN (SELECT id FROM colors WHERE name = 'Test Color')");
         await pool.query("DELETE FROM finished_stock WHERE color_id IN (SELECT id FROM colors WHERE name = 'Test Color')");
-        await pool.query("DELETE FROM production_runs WHERE recipe_id IN (SELECT id FROM recipes WHERE name = 'Test Recipe')");
-        await pool.query("DELETE FROM recipe_resources WHERE recipe_id IN (SELECT id FROM recipes WHERE name = 'Test Recipe')");
-        await pool.query("DELETE FROM recipes WHERE name = 'Test Recipe'");
+        await pool.query("DELETE FROM production_runs WHERE formula_id IN (SELECT id FROM formulas WHERE name = 'Test Formula')");
+        await pool.query("DELETE FROM formula_resources WHERE formula_id IN (SELECT id FROM formulas WHERE name = 'Test Formula')");
+        await pool.query("DELETE FROM formulas WHERE name = 'Test Formula'");
         await pool.query("DELETE FROM colors WHERE name = 'Test Color'");
         await pool.query("DELETE FROM resource_stock_transactions WHERE resource_id IN (SELECT id FROM resources WHERE name = 'Test Pigment')");
         await pool.query("DELETE FROM resources WHERE name = 'Test Pigment'");
@@ -69,20 +69,20 @@ async function runTest() {
         );
         const colorId = colorResult.rows[0].id;
 
-        // Create Recipe
-        const recipeResult = await pool.query(
-            "INSERT INTO recipes (color_id, name, batch_size_kg) VALUES ($1, 'Test Recipe', 100) RETURNING id",
+        // Create Formula
+        const formulaResult = await pool.query(
+            "INSERT INTO formulas (color_id, name, batch_size_kg) VALUES ($1, 'Test Formula', 100) RETURNING id",
             [colorId]
         );
-        const recipeId = recipeResult.rows[0].id;
+        const formulaId = formulaResult.rows[0].id;
 
-        // Map Resource to Recipe (10kg for 100kg batch)
+        // Map Resource to Formula (10kg for 100kg batch)
         await pool.query(
-            "INSERT INTO recipe_resources (recipe_id, resource_id, quantity_required) VALUES ($1, $2, 10)",
-            [recipeId, resourceId]
+            "INSERT INTO formula_resources (formula_id, resource_id, quantity_required) VALUES ($1, $2, 10)",
+            [formulaId, resourceId]
         );
 
-        console.log(`✅ Test data prepared: Resource=${resourceId}, Color=${colorId}, Recipe=${recipeId}`);
+        console.log(`✅ Test data prepared: Resource=${resourceId}, Color=${colorId}, Formula=${formulaId}`);
 
         // 3. Execute Production Run
         console.log('🏗️ Executing Production Run...');
@@ -90,7 +90,7 @@ async function runTest() {
             method: 'POST',
             headers: authHeader,
             body: JSON.stringify({
-                recipeId: recipeId,
+                formulaId: formulaId,
                 expectedOutput: 50, // 50kg batch
                 actualResources: [
                     { resourceId: resourceId, quantity: 5 } // Using 5kg (exact match for 50/100 scale)

@@ -81,7 +81,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                             pr.actual_quantity_kg::float as output, 
                             u.username as operator
                         FROM production_runs pr
-                        JOIN recipes r ON pr.recipe_id = r.id
+                        JOIN formulas r ON pr.formula_id = r.id
                         JOIN colors c ON r.color_id = c.id
                         JOIN users u ON pr.created_by = u.id
                         ORDER BY pr.created_at DESC

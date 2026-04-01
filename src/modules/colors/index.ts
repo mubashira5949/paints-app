@@ -18,6 +18,7 @@ export default async function (fastifyRaw: FastifyInstance) {
         hsn_code: Type.Optional(Type.String()),
         business_code: Type.Optional(Type.String()),
         series: Type.Optional(Type.String()),
+        ink_series: Type.Optional(Type.String()),
         tags: Type.Optional(Type.Array(Type.String())),
         min_threshold_kg: Type.Optional(Type.Number({ default: 0 }))
     })
@@ -29,6 +30,7 @@ export default async function (fastifyRaw: FastifyInstance) {
         hsn_code: Type.Optional(Type.String()),
         business_code: Type.Optional(Type.String()),
         series: Type.Optional(Type.String()),
+        ink_series: Type.Optional(Type.String()),
         tags: Type.Optional(Type.Array(Type.String())),
         min_threshold_kg: Type.Optional(Type.Number())
     })
@@ -46,7 +48,7 @@ export default async function (fastifyRaw: FastifyInstance) {
         handler: async (request, reply) => {
             try {
                 const result = await fastify.db.query(
-                    `SELECT id, name, color_code, business_code, series, hsn_code, tags, description, min_threshold_kg, created_at, updated_at
+                    `SELECT id, name, color_code, business_code, series, ink_series, hsn_code, tags, description, min_threshold_kg, created_at, updated_at
                      FROM colors ORDER BY id DESC`
                 )
 
@@ -71,7 +73,7 @@ export default async function (fastifyRaw: FastifyInstance) {
             body: CreateColorSchema
         },
         handler: async (request, reply) => {
-            const { name, color_code, description, hsn_code, business_code, series, tags, min_threshold_kg } = request.body
+            const { name, color_code, description, hsn_code, business_code, series, ink_series, tags, min_threshold_kg } = request.body
             const client = await fastify.db.connect() // Get a client from the pool
 
             try {
@@ -79,9 +81,9 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 // Create the color entry
                 const insertResult = await client.query(
-                    `INSERT INTO colors (name, color_code, description, hsn_code, business_code, series, tags, min_threshold_kg)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-                    [name, color_code, description, hsn_code ?? null, business_code ?? null, series ?? null, JSON.stringify(tags ?? []), min_threshold_kg ?? 0]
+                    `INSERT INTO colors (name, color_code, description, hsn_code, business_code, series, ink_series, tags, min_threshold_kg)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+                    [name, color_code, description, hsn_code ?? null, business_code ?? null, series ?? null, ink_series ?? null, JSON.stringify(tags ?? []), min_threshold_kg ?? 0]
                 )
                 const newColor = insertResult.rows[0]
 
@@ -130,9 +132,15 @@ export default async function (fastifyRaw: FastifyInstance) {
         },
         handler: async (request, reply) => {
             const { id } = request.params
-            const { name, color_code, description, hsn_code, business_code, series, tags, min_threshold_kg } = request.body
+            const { name, color_code, description, hsn_code, business_code, series, ink_series, tags, min_threshold_kg } = request.body
 
             try {
+                const existingResult = await fastify.db.query('SELECT series, ink_series FROM colors WHERE id = $1', [id])
+                if (existingResult.rows.length === 0) {
+                    return reply.status(404).send({ error: 'Not Found', message: 'Color not found' })
+                }
+                const existing = existingResult.rows[0]
+
                 const updates: string[] = []
                 const values: any[] = []
                 let paramIdx = 1
@@ -149,6 +157,8 @@ export default async function (fastifyRaw: FastifyInstance) {
                     updates.push(`description = $${paramIdx++}`)
                     values.push(description)
                 }
+                
+                // Regular updatable fields
                 if (hsn_code !== undefined) {
                     updates.push(`hsn_code = $${paramIdx++}`)
                     values.push(hsn_code)
@@ -157,9 +167,15 @@ export default async function (fastifyRaw: FastifyInstance) {
                     updates.push(`business_code = $${paramIdx++}`)
                     values.push(business_code)
                 }
-                if (series !== undefined) {
+                
+                // Static field logic: Only update if the current value is NULL or empty
+                if (series !== undefined && (!existing.series || existing.series.trim() === '')) {
                     updates.push(`series = $${paramIdx++}`)
                     values.push(series)
+                }
+                if (ink_series !== undefined && (!existing.ink_series || existing.ink_series.trim() === '')) {
+                    updates.push(`ink_series = $${paramIdx++}`)
+                    values.push(ink_series)
                 }
                 if (tags !== undefined) {
                     updates.push(`tags = $${paramIdx++}`)
@@ -235,13 +251,13 @@ export default async function (fastifyRaw: FastifyInstance) {
                 client = await fastify.db.connect()
                 await client.query('BEGIN')
 
-                // Find all recipes for this color and wipe out associated data
-                const recipesResult = await client.query('SELECT id FROM recipes WHERE color_id = $1', [id])
-                for (const row of recipesResult.rows) {
-                    const recipeId = row.id
+                // Find all formulas for this color and wipe out associated data
+                const formulasResult = await client.query('SELECT id FROM formulas WHERE color_id = $1', [id])
+                for (const row of formulasResult.rows) {
+                    const formulaId = row.id
                     
-                    // Find and delete all production runs using this recipe
-                    const runsResult = await client.query('SELECT id FROM production_runs WHERE recipe_id = $1', [recipeId])
+                    // Find and delete all production runs using this formula
+                    const runsResult = await client.query('SELECT id FROM production_runs WHERE formula_id = $1', [formulaId])
                     for (const runRow of runsResult.rows) {
                         const runId = runRow.id
                         // Clean up child dependencies of the production run
@@ -252,16 +268,16 @@ export default async function (fastifyRaw: FastifyInstance) {
                         await client.query('DELETE FROM production_runs WHERE id = $1', [runId])
                     }
 
-                    // Delete the recipe resources mapping
-                    await client.query('DELETE FROM recipe_resources WHERE recipe_id = $1', [recipeId])
+                    // Delete the formula resources mapping
+                    await client.query('DELETE FROM formula_resources WHERE formula_id = $1', [formulaId])
                 }
 
                 // Delete all finished stock and general transactions for this color
                 await client.query('DELETE FROM finished_stock_transactions WHERE color_id = $1', [id])
                 await client.query('DELETE FROM finished_stock WHERE color_id = $1', [id])
                 
-                // Delete the recipes
-                await client.query('DELETE FROM recipes WHERE color_id = $1', [id])
+                // Delete the formulas
+                await client.query('DELETE FROM formulas WHERE color_id = $1', [id])
 
                 const deleteResult = await client.query(
                     'DELETE FROM colors WHERE id = $1 RETURNING id',
@@ -285,7 +301,7 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 await client.query('COMMIT')
                 return reply.send({
-                    message: 'Color and associated recipes deleted successfully'
+                    message: 'Color and associated formulas deleted successfully'
                 })
             } catch (err: any) {
                 if (client) await client.query('ROLLBACK')

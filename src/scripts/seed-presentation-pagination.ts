@@ -16,18 +16,18 @@ async function main() {
     if (userRes.rows.length === 0) throw new Error("No users found");
     const userId = userRes.rows[0].id;
 
-    // 2. Get some recipes
-    const recipesRes = await pool.query("SELECT id, color_id FROM recipes LIMIT 5");
-    if (recipesRes.rows.length === 0) throw new Error("No recipes found");
-    const recipes = recipesRes.rows;
+    // 2. Get some formulas
+    const formulasRes = await pool.query("SELECT id, color_id FROM formulas LIMIT 5");
+    if (formulasRes.rows.length === 0) throw new Error("No formulas found");
+    const formulas = formulasRes.rows;
     
     // 3. Ensure 6 Active Production Runs (status: 'running', 'paused', 'packaging', 'planned')
     const activeRes = await pool.query("SELECT COUNT(*) FROM production_runs WHERE status IN ('planned', 'running', 'paused', 'packaging')");
     let activeCount = parseInt(activeRes.rows[0].count);
     while (activeCount < 6) {
-      const r = recipes[Math.floor(Math.random() * recipes.length)];
+      const r = formulas[Math.floor(Math.random() * formulas.length)];
       await pool.query(`
-        INSERT INTO production_runs (recipe_id, status, planned_quantity_kg, created_by)
+        INSERT INTO production_runs (formula_id, status, planned_quantity_kg, created_by)
         VALUES ($1, 'running', $2, $3)
       `, [r.id, Math.floor(Math.random() * 200) + 100, userId]);
       activeCount++;
@@ -38,11 +38,11 @@ async function main() {
     const histRes = await pool.query("SELECT COUNT(*) FROM production_runs WHERE status IN ('completed', 'flagged')");
     let histCount = parseInt(histRes.rows[0].count);
     while (histCount < 11) {
-      const r = recipes[Math.floor(Math.random() * recipes.length)];
+      const r = formulas[Math.floor(Math.random() * formulas.length)];
       const target = Math.floor(Math.random() * 200) + 100;
       const actual = target + (Math.random() * 10 - 5);
       await pool.query(`
-        INSERT INTO production_runs (recipe_id, status, planned_quantity_kg, actual_quantity_kg, created_by, created_at)
+        INSERT INTO production_runs (formula_id, status, planned_quantity_kg, actual_quantity_kg, created_by, created_at)
         VALUES ($1, 'completed', $2, $3, $4, NOW() - (random() * interval '30 days'))
       `, [r.id, target, actual, userId]);
       histCount++;

@@ -33,7 +33,7 @@ interface Resource {
   quantity_required: number;
 }
 
-interface Recipe {
+interface Formula {
   id: number;
   name: string;
   version: string;
@@ -64,7 +64,7 @@ interface HistoryRun {
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
-  recipe_name: string;
+  formula_name: string;
   color_name: string;
   packaging?: { pack_size_kg: number; quantity_units: number }[];
 }
@@ -73,7 +73,7 @@ interface ActiveRun {
   id: number;
   batchId: string;
   color: string;
-  recipe: string;
+  formula: string;
   targetQty: number;
   actual_quantity_kg?: number | null;
   status: "planned" | "running" | "paused" | "completed" | "packaging";
@@ -135,7 +135,7 @@ export default function Production() {
   const [historyRuns, setHistoryRuns] = useState<HistoryRun[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [colors, setColors] = useState<Color[]>([]);
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [formulas, setFormulas] = useState<Formula[]>([]);
   const [activeRuns, setActiveRuns] = useState<ActiveRun[]>([]);
   const [isActiveLoading, setIsActiveLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
@@ -156,7 +156,7 @@ export default function Production() {
 
   // New Run Form State
   const [selectedColor, setSelectedColor] = useState<number | "">("");
-  const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
+  const [selectedFormula, setSelectedFormula] = useState<Formula | null>(null);
   const [planned_quantity_kg, setPlannedQuantityKg] = useState<number>(0);
   const [actualResources, setActualResources] = useState<
     { resource_id: number; actual_quantity_used: number }[]
@@ -331,21 +331,21 @@ export default function Production() {
 
   useEffect(() => {
     if (selectedColor) {
-      apiRequest<Recipe[]>(`/recipes/${selectedColor}`)
-        .then(setRecipes)
+      apiRequest<Formula[]>(`/formulas/${selectedColor}`)
+        .then(setFormulas)
         .catch(console.error);
     } else {
-      setRecipes([]);
+      setFormulas([]);
     }
   }, [selectedColor]);
 
-  const handleRecipeSelect = (recipeId: string) => {
-    const recipe = recipes.find((r) => r.id === Number(recipeId)) || null;
-    setSelectedRecipe(recipe);
-    if (recipe) {
-      setPlannedQuantityKg(toDisplayValue(Number(recipe.batch_size_kg), unitPref));
+  const handleFormulaSelect = (formulaId: string) => {
+    const formula = formulas.find((r) => r.id === Number(formulaId)) || null;
+    setSelectedFormula(formula);
+    if (formula) {
+      setPlannedQuantityKg(toDisplayValue(Number(formula.batch_size_kg), unitPref));
       setActualResources(
-        recipe.resources.map((res) => ({
+        formula.resources.map((res) => ({
           resource_id: res.resource_id,
           actual_quantity_used: res.quantity_required,
         })),
@@ -355,10 +355,10 @@ export default function Production() {
 
   const handleQuantityChange = (qty: number) => {
     setPlannedQuantityKg(qty);
-    if (selectedRecipe) {
-      const scaleFactor = fromDisplayValue(qty, unitPref) / Number(selectedRecipe.batch_size_kg);
+    if (selectedFormula) {
+      const scaleFactor = fromDisplayValue(qty, unitPref) / Number(selectedFormula.batch_size_kg);
       setActualResources(
-        selectedRecipe.resources.map((res) => ({
+        selectedFormula.resources.map((res) => ({
           resource_id: res.resource_id,
           actual_quantity_used: Number(
             (res.quantity_required * scaleFactor).toFixed(4),
@@ -370,13 +370,13 @@ export default function Production() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedRecipe || !selectedColor) return;
+    if (!selectedFormula || !selectedColor) return;
 
     try {
       await apiRequest("/production-runs/plan", {
         method: "POST",
         body: {
-          recipeId: selectedRecipe.id,
+          formulaId: selectedFormula.id,
           colorId: Number(selectedColor),
           targetQty: fromDisplayValue(planned_quantity_kg, unitPref),
           operatorId: user?.id ?? 1,
@@ -385,7 +385,7 @@ export default function Production() {
       setIsModalOpen(false);
       fetchRuns();
       setSelectedColor("");
-      setSelectedRecipe(null);
+      setSelectedFormula(null);
     } catch (err: any) {
       alert(err.message);
     }
@@ -551,7 +551,7 @@ export default function Production() {
                 Start New Batch
               </h3>
               <p className="text-sm text-blue-100 mt-2 px-2 font-medium">
-                Create a batch using a selected recipe tracking realtime usage.
+                Create a batch using a selected formula tracking realtime usage.
               </p>
             </div>
           </div>
@@ -663,10 +663,10 @@ export default function Production() {
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
                             <div className="space-y-4">
                               <div className="space-y-1">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Recipe</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Formula</p>
                                 <p className="text-xs font-semibold text-slate-600 flex items-center gap-2">
                                   <BookOpen className="w-3.5 h-3.5 text-slate-400" />
-                                  {run.recipe}
+                                  {run.formula}
                                 </p>
                               </div>
                               <div className="flex gap-10">
@@ -880,7 +880,7 @@ export default function Production() {
                       Color
                     </th>
                     <th className="h-12 px-4 text-left align-middle font-bold text-slate-500 text-[10px] uppercase tracking-widest">
-                      Recipe
+                      Formula
                     </th>
                     <th 
                       className="h-12 px-4 text-center align-middle font-bold text-slate-500 text-[10px] uppercase tracking-widest cursor-pointer hover:bg-slate-200/50 hover:text-slate-800 transition-colors group select-none"
@@ -1029,7 +1029,7 @@ export default function Production() {
                             {run.color_name}
                           </td>
                           <td className="p-4 text-slate-500 text-xs border-r italic">
-                            {run.recipe_name}
+                            {run.formula_name}
                           </td>
                           <td className="p-4 text-center font-mono text-slate-400 border-r">
                             {formatUnit(expected, unitPref)}
@@ -1154,20 +1154,20 @@ export default function Production() {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Select Recipe</label>
+                  <label className="text-sm font-medium">Select Formula</label>
                   <select
                     className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-blue-600"
                     disabled={!selectedColor}
-                    value={selectedRecipe?.id || ""}
-                    onChange={(e) => handleRecipeSelect(e.target.value)}
+                    value={selectedFormula?.id || ""}
+                    onChange={(e) => handleFormulaSelect(e.target.value)}
                     required
                   >
                     <option value="">
                       {selectedColor
-                        ? "Choose a recipe..."
+                        ? "Choose a formula..."
                         : "Select color first"}
                     </option>
-                    {recipes.map((r) => (
+                    {formulas.map((r) => (
                       <option key={r.id} value={r.id}>
                         {r.name} (v{r.version})
                       </option>
@@ -1176,7 +1176,7 @@ export default function Production() {
                 </div>
               </div>
 
-              {selectedRecipe && (
+              {selectedFormula && (
                 <div className="space-y-4 animate-in slide-in-from-top-2 duration-300">
                   <div className="rounded-lg border bg-muted/30 p-4">
                     <div className="flex items-center justify-between mb-4">
@@ -1207,10 +1207,10 @@ export default function Production() {
                             Actual
                           </div>
                         </div>
-                        {selectedRecipe.resources.map((res, idx) => {
+                        {selectedFormula.resources.map((res, idx) => {
                           const scaleFactor =
                             fromDisplayValue(planned_quantity_kg, unitPref) /
-                            Number(selectedRecipe.batch_size_kg);
+                            Number(selectedFormula.batch_size_kg);
                           const expectedQty = Number(
                             (res.quantity_required * scaleFactor).toFixed(4),
                           );
@@ -1269,7 +1269,7 @@ export default function Production() {
                 </button>
                 <button
                   type="submit"
-                  disabled={!selectedRecipe}
+                  disabled={!selectedFormula}
                   className="inline-flex items-center px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
                 >
                   <Play className="mr-2 h-4 w-4" />

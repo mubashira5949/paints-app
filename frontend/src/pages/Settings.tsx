@@ -35,13 +35,13 @@ export default function Settings() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "restart">("idle");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  // Ink series management
-  const INK_SERIES_KEY = "ink_series_options";
-  const loadInkSeries = (): string[] => {
-    try { return JSON.parse(localStorage.getItem(INK_SERIES_KEY) || "[]"); } catch { return []; }
+  // Product Type management
+  const PRODUCT_TYPE_KEY = "product_type_options";
+  const loadProductTypes = (): string[] => {
+    try { return JSON.parse(localStorage.getItem(PRODUCT_TYPE_KEY) || "[]"); } catch { return []; }
   };
-  const [customInkSeries, setCustomInkSeries] = useState<string[]>(loadInkSeries);
-  const [newSeriesInput, setNewSeriesInput] = useState("");
+  const [customProductTypes, setCustomProductTypes] = useState<string[]>(loadProductTypes);
+  const [newTypeInput, setNewTypeInput] = useState("");
 
   // Packaging sizes management
   const PACKAGING_SIZES_KEY = "default_packaging_sizes";
@@ -49,20 +49,20 @@ export default function Settings() {
     localStorage.getItem(PACKAGING_SIZES_KEY) || "0.5kg, 1kg, 5kg, 10kg, 20kg"
   );
 
-  const addInkSeries = () => {
-    const val = newSeriesInput.trim();
+  const addProductType = () => {
+    const val = newTypeInput.trim();
     if (!val) return;
-    const updated = Array.from(new Set([...customInkSeries, val]));
-    setCustomInkSeries(updated);
-    localStorage.setItem(INK_SERIES_KEY, JSON.stringify(updated));
-    setNewSeriesInput("");
+    const updated = Array.from(new Set([...customProductTypes, val]));
+    setCustomProductTypes(updated);
+    localStorage.setItem(PRODUCT_TYPE_KEY, JSON.stringify(updated));
+    setNewTypeInput("");
     setHasUnsavedChanges(true);
   };
 
-  const removeInkSeries = (series: string) => {
-    const updated = customInkSeries.filter(s => s !== series);
-    setCustomInkSeries(updated);
-    localStorage.setItem(INK_SERIES_KEY, JSON.stringify(updated));
+  const removeProductType = (series: string) => {
+    const updated = customProductTypes.filter(s => s !== series);
+    setCustomProductTypes(updated);
+    localStorage.setItem(PRODUCT_TYPE_KEY, JSON.stringify(updated));
     setHasUnsavedChanges(true);
   };
 
@@ -301,7 +301,7 @@ export default function Settings() {
                   <div className="flex items-center gap-2 text-gray-700">
                     <Layers className="h-4 w-4 text-gray-400" />
                     <div>
-                      <p className="font-medium text-sm">Ink Series Options</p>
+                      <p className="font-medium text-sm">Product Type Options</p>
                       <p className="text-xs text-gray-500 mt-0.5">Appear in the Color form dropdown</p>
                     </div>
                   </div>
@@ -311,25 +311,25 @@ export default function Settings() {
                       {["Water Based Ink", "Oil Based Ink"].map(s => (
                         <span key={s} className="flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium">{s} <span className="text-blue-300 text-[10px]">default</span></span>
                       ))}
-                      {customInkSeries.map(s => (
+                      {customProductTypes.map(s => (
                         <span key={s} className="flex items-center gap-1 text-xs bg-gray-100 text-gray-700 border border-gray-200 px-2 py-0.5 rounded-full font-medium">
                           {s}
-                          <button onClick={() => removeInkSeries(s)} className="ml-0.5 text-red-400 hover:text-red-600 transition-colors" title="Remove">&times;</button>
+                          <button onClick={() => removeProductType(s)} className="ml-0.5 text-red-400 hover:text-red-600 transition-colors" title="Remove">&times;</button>
                         </span>
                       ))}
                     </div>
                     <div className="flex gap-2">
                       <input
                         type="text"
-                        value={newSeriesInput}
-                        onChange={e => setNewSeriesInput(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addInkSeries())}
+                        value={newTypeInput}
+                        onChange={e => setNewTypeInput(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addProductType())}
                         placeholder="e.g. UV Cured Ink"
                         className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm"
                       />
                       <button
                         type="button"
-                        onClick={addInkSeries}
+                        onClick={addProductType}
                         className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors shadow-sm"
                       >Add</button>
                     </div>

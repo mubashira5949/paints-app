@@ -61,13 +61,13 @@ describe('Production Runs Module API', () => {
         mockClient.query.mockImplementation(async (query: string, params?: any[]) => {
             if (query === 'BEGIN' || query === 'COMMIT' || query === 'ROLLBACK') return
 
-            if (query.includes('FROM recipes')) {
-                // If it asks for recipe_id 1, mock success
+            if (query.includes('FROM formulas')) {
+                // If it asks for formula_id 1, mock success
                 if (params![0] === 1) return { rows: [{ id: 1, color_id: 10, batch_size_kg: 100 }] }
                 return { rows: [] }
             }
-            if (query.includes('FROM recipe_resources')) {
-                // Mock dependencies for recipe_id 1 (batch_size = 100)
+            if (query.includes('FROM formula_resources')) {
+                // Mock dependencies for formula_id 1 (batch_size = 100)
                 // expects exactly matching scale:
                 // For 200KG planned: expected_qty = 20 & 30 respectively
                 if (params![0] === 1) return { rows: [{ resource_id: 101, quantity_required: 10 }, { resource_id: 102, quantity_required: 15 }] }
@@ -144,7 +144,7 @@ describe('Production Runs Module API', () => {
                 headers: { authorization: 'Bearer operator:testoperator' },
                 user: { id: 10 },
                 body: {
-                    recipeId: 1,
+                    formulaId: 1,
                     expectedOutput: 200,
                     actualResources: [{ resourceId: 101, quantity: 10 }, { resourceId: 102, quantity: 15 }]
                 }
@@ -166,13 +166,13 @@ describe('Production Runs Module API', () => {
             expect(mockClient.release).toHaveBeenCalledTimes(1)
         })
 
-        it('should rollback transaction if an invalid recipe is requested', async () => {
+        it('should rollback transaction if an invalid formula is requested', async () => {
             const postRoute = routes['POST /']
             const req = {
                 headers: { authorization: 'Bearer manager:testuser' },
                 user: { id: 10 },
                 body: {
-                    recipeId: 2, // will return empty due to our mock constraint
+                    formulaId: 2, // will return empty due to our mock constraint
                     expectedOutput: 200,
                     actualResources: [{ resourceId: 101, quantity: 10 }]
                 }
@@ -183,22 +183,22 @@ describe('Production Runs Module API', () => {
             await postRoute.handler(req, rep)
 
             expect((rep as any).getStatusCode()).toBe(404)
-            expect((rep as any).getBody().message).toBe('Valid recipe not found')
+            expect((rep as any).getBody().message).toBe('Valid formula not found')
 
             // Should properly close and rollback DB
             expect(mockClient.query).toHaveBeenCalledWith('ROLLBACK')
             expect(mockClient.release).toHaveBeenCalledTimes(1)
         })
 
-        it('should rollback transaction if submitted resources differ from the recipe mapping', async () => {
+        it('should rollback transaction if submitted resources differ from the formula mapping', async () => {
             const postRoute = routes['POST /']
             const req = {
                 headers: { authorization: 'Bearer admin:testuser' },
                 user: { id: 10 },
                 body: {
-                    recipeId: 1,
+                    formulaId: 1,
                     expectedOutput: 200,
-                    actualResources: [{ resourceId: 999, quantity: 10 }] // Invalid payload component for this recipe
+                    actualResources: [{ resourceId: 999, quantity: 10 }] // Invalid payload component for this formula
                 }
             } as unknown as FastifyRequest
             const rep = createMockReply()
@@ -207,7 +207,7 @@ describe('Production Runs Module API', () => {
             await postRoute.handler(req, rep)
 
             expect((rep as any).getStatusCode()).toBe(400)
-            expect((rep as any).getBody().message).toBe('Provided resources do not match the selected recipe blueprint')
+            expect((rep as any).getBody().message).toBe('Provided resources do not match the selected formula blueprint')
 
             // Should properly close and rollback DB
             expect(mockClient.query).toHaveBeenCalledWith('ROLLBACK')
@@ -219,7 +219,7 @@ describe('Production Runs Module API', () => {
 
             // Re-mock DB connection locally to intercept the constraint during log insertion
             mockClient.query.mockImplementationOnce(async (q) => { if (q === 'BEGIN') return })
-                .mockImplementationOnce(async () => { return { rows: [{ id: 1, color_id: 10, batch_size_kg: 100 }] } }) // fetch recipe
+                .mockImplementationOnce(async () => { return { rows: [{ id: 1, color_id: 10, batch_size_kg: 100 }] } }) // fetch formula
                 .mockImplementationOnce(async () => { return { rows: [{ resource_id: 101, quantity_required: 10 }] } }) // fetch blueprint
                 .mockImplementationOnce(async () => { return { rows: [{ id: 999 }] } }) // fake prod id
                 .mockImplementationOnce(async () => { }) // Insert production_resource_actuals ok
@@ -234,7 +234,7 @@ describe('Production Runs Module API', () => {
                 headers: { authorization: 'Bearer manager:testuser' },
                 user: { id: 10 },
                 body: {
-                    recipeId: 1,
+                    formulaId: 1,
                     expectedOutput: 200,
                     actualResources: [{ resourceId: 101, quantity: 10000 }] // enormous depletion expected to trip bound 
                 }
@@ -274,7 +274,7 @@ describe('Production Runs Module API', () => {
                 headers: { authorization: 'Bearer manager:testuser' },
                 user: { id: 10 },
                 body: {
-                    recipeId: 1,
+                    formulaId: 1,
                     expectedOutput: 200,
                     actualResources: [
                         { resourceId: 101, quantity: 20 }, // Exact expected amount (200 / 100 * 10) = 20
