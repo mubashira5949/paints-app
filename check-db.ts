@@ -9,7 +9,8 @@ const pool = new Pool({
 
 async function check() {
     try {
-        const res = await pool.query("SELECT name, product_type, pg_typeof(product_type) FROM colors LIMIT 1;");
+        const res = await pool.query("SELECT name, color_code FROM colors LIMIT 1;");
+        console.log("Database connection successful. Sample data:");
         console.log(JSON.stringify(res.rows[0], null, 2));
         process.exit(0);
     } catch (err) {

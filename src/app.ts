@@ -209,78 +209,93 @@ const start = async () => {
     try {
         const port = parseInt(process.env.PORT || '3000')
 
-        // Apply incremental schema migrations on startup
+        // Apply incremental schema migrations on startup with retry logic for transient DNS/connection issues
         await fastify.ready()
-        await fastify.db.query(`
-            -- 1. Clients entity (onboarding)
-            CREATE TABLE IF NOT EXISTS clients (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(255) NOT NULL,
-                gst_number VARCHAR(20) UNIQUE,
-                contact_name VARCHAR(255),
-                contact_phone VARCHAR(30),
-                contact_email VARCHAR(255),
-                billing_address TEXT,
-                created_by INTEGER REFERENCES users(id),
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
+        
+        const runMigrations = async (retries = 5, delay = 2000) => {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    await fastify.db.query(`
+                        -- 1. Clients entity (onboarding)
+                        CREATE TABLE IF NOT EXISTS clients (
+                            id SERIAL PRIMARY KEY,
+                            name VARCHAR(255) NOT NULL,
+                            gst_number VARCHAR(20) UNIQUE,
+                            contact_name VARCHAR(255),
+                            contact_phone VARCHAR(30),
+                            contact_email VARCHAR(255),
+                            billing_address TEXT,
+                            created_by INTEGER REFERENCES users(id),
+                            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                        );
 
-            -- 2. Client Shipping Addresses (Many per client)
-            CREATE TABLE IF NOT EXISTS client_shipping_addresses (
-                id SERIAL PRIMARY KEY,
-                client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE NOT NULL,
-                label VARCHAR(100) NOT NULL,
-                address TEXT NOT NULL,
-                is_default BOOLEAN DEFAULT FALSE
-            );
+                        -- 2. Client Shipping Addresses (Many per client)
+                        CREATE TABLE IF NOT EXISTS client_shipping_addresses (
+                            id SERIAL PRIMARY KEY,
+                            client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE NOT NULL,
+                            label VARCHAR(100) NOT NULL,
+                            address TEXT NOT NULL,
+                            is_default BOOLEAN DEFAULT FALSE
+                        );
 
-            -- 3. Core orders table (if not exists)
-            CREATE TABLE IF NOT EXISTS client_orders (
-                id SERIAL PRIMARY KEY,
-                client_name VARCHAR(255) NOT NULL,
-                status VARCHAR(50) DEFAULT 'pending',
-                notes TEXT,
-                created_by INTEGER REFERENCES users(id) NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
+                        -- 3. Core orders table (if not exists)
+                        CREATE TABLE IF NOT EXISTS client_orders (
+                            id SERIAL PRIMARY KEY,
+                            client_name VARCHAR(255) NOT NULL,
+                            status VARCHAR(50) DEFAULT 'pending',
+                            notes TEXT,
+                            created_by INTEGER REFERENCES users(id) NOT NULL,
+                            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                        );
 
-            -- 4. Order Items
-            CREATE TABLE IF NOT EXISTS client_order_items (
-                id SERIAL PRIMARY KEY,
-                order_id INTEGER REFERENCES client_orders(id) ON DELETE CASCADE,
-                color_id INTEGER REFERENCES colors(id) NOT NULL,
-                pack_size_kg DECIMAL(5, 2) NOT NULL,
-                quantity INTEGER NOT NULL
-            );
+                        -- 4. Order Items
+                        CREATE TABLE IF NOT EXISTS client_order_items (
+                            id SERIAL PRIMARY KEY,
+                            order_id INTEGER REFERENCES client_orders(id) ON DELETE CASCADE,
+                            color_id INTEGER REFERENCES colors(id) NOT NULL,
+                            pack_size_kg DECIMAL(5, 2) NOT NULL,
+                            quantity INTEGER NOT NULL
+                        );
 
-            -- 5. Linking existing orders to clients (if not already linked)
-            ALTER TABLE client_orders ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES clients(id);
-            ALTER TABLE client_orders ADD COLUMN IF NOT EXISTS shipping_address_id INTEGER REFERENCES client_shipping_addresses(id);
+                        -- 5. Linking existing orders to clients (if not already linked)
+                        ALTER TABLE client_orders ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES clients(id);
+                        ALTER TABLE client_orders ADD COLUMN IF NOT EXISTS shipping_address_id INTEGER REFERENCES client_shipping_addresses(id);
 
-            -- 6. Add created_by to transactional tables if they don't exist
-            ALTER TABLE finished_stock_transactions ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id);
+                        -- 6. Add created_by to transactional tables if they don't exist
+                        ALTER TABLE finished_stock_transactions ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id);
 
-            -- 7. Track who last updated a client
-            ALTER TABLE clients ADD COLUMN IF NOT EXISTS updated_by INTEGER REFERENCES users(id);
+                        -- 7. Track who last updated a client
+                        ALTER TABLE clients ADD COLUMN IF NOT EXISTS updated_by INTEGER REFERENCES users(id);
 
-            -- 10. Dynamic Product Types
-            CREATE TABLE IF NOT EXISTS product_types (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(50) UNIQUE NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
+                        -- 10. Dynamic Product Types
+                        CREATE TABLE IF NOT EXISTS product_types (
+                            id SERIAL PRIMARY KEY,
+                            name VARCHAR(50) UNIQUE NOT NULL,
+                            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                        );
 
-            -- Seed defaults if empty
-            INSERT INTO product_types (name) 
-            SELECT 'Water Based Ink' WHERE NOT EXISTS (SELECT 1 FROM product_types WHERE name = 'Water Based Ink');
-            INSERT INTO product_types (name) 
-            SELECT 'Oil Based Ink' WHERE NOT EXISTS (SELECT 1 FROM product_types WHERE name = 'Oil Based Ink');
+                        -- Seed defaults if empty
+                        INSERT INTO product_types (name) 
+                        SELECT 'Water Based Ink' WHERE NOT EXISTS (SELECT 1 FROM product_types WHERE name = 'Water Based Ink');
+                        INSERT INTO product_types (name) 
+                        SELECT 'Oil Based Ink' WHERE NOT EXISTS (SELECT 1 FROM product_types WHERE name = 'Oil Based Ink');
 
-            -- 11. Add ink_series to production_runs table
-            ALTER TABLE production_runs ADD COLUMN IF NOT EXISTS ink_series VARCHAR(20);
-        `)
+                        -- 11. Add ink_series to production_runs table
+                        ALTER TABLE production_runs ADD COLUMN IF NOT EXISTS ink_series VARCHAR(20);
+                    `)
+                    return;
+                } catch (err) {
+                    if (i === retries - 1) throw err;
+                    const waitTime = delay * Math.pow(2, i);
+                    fastify.log.warn(`Database migration attempt ${i + 1} failed. Retrying in ${waitTime}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
+                }
+            }
+        };
+
+        await runMigrations();
 
         await fastify.listen({ port, host: '0.0.0.0' })
     } catch (err) {
