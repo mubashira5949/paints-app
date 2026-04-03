@@ -17,10 +17,11 @@ export default async function (fastifyRaw: FastifyInstance) {
         description: Type.Optional(Type.String()),
         hsn_code: Type.Optional(Type.String()),
         business_code: Type.Optional(Type.String()),
-        series: Type.Optional(Type.String()),
-        ink_series: Type.Optional(Type.String()),
         tags: Type.Optional(Type.Array(Type.String())),
-        min_threshold_kg: Type.Optional(Type.Number({ default: 0 }))
+        min_threshold_kg: Type.Optional(Type.Number({ default: 0 })),
+        type_ids: Type.Optional(Type.Array(Type.Integer())),
+        series_ids: Type.Optional(Type.Array(Type.Integer())),
+        grade_ids: Type.Optional(Type.Array(Type.Integer()))
     })
 
     const UpdateColorSchema = Type.Object({
@@ -29,10 +30,11 @@ export default async function (fastifyRaw: FastifyInstance) {
         description: Type.Optional(Type.String()),
         hsn_code: Type.Optional(Type.String()),
         business_code: Type.Optional(Type.String()),
-        series: Type.Optional(Type.String()),
-        ink_series: Type.Optional(Type.String()),
         tags: Type.Optional(Type.Array(Type.String())),
-        min_threshold_kg: Type.Optional(Type.Number())
+        min_threshold_kg: Type.Optional(Type.Number()),
+        type_ids: Type.Optional(Type.Array(Type.Integer())),
+        series_ids: Type.Optional(Type.Array(Type.Integer())),
+        grade_ids: Type.Optional(Type.Array(Type.Integer()))
     })
 
     const ColorIdParamSchema = Type.Object({
@@ -48,8 +50,22 @@ export default async function (fastifyRaw: FastifyInstance) {
         handler: async (request, reply) => {
             try {
                 const result = await fastify.db.query(
-                    `SELECT id, name, color_code, business_code, series, ink_series, hsn_code, tags, description, min_threshold_kg, created_at, updated_at
-                     FROM colors ORDER BY id DESC`
+                    `SELECT 
+                        c.id, c.name, c.color_code, c.business_code, c.hsn_code, c.tags, c.description, c.min_threshold_kg, c.created_at, c.updated_at,
+                        COALESCE(json_agg(DISTINCT pt.name) FILTER (WHERE pt.name IS NOT NULL), '[]') as product_types,
+                        COALESCE(json_agg(DISTINCT psc.name) FILTER (WHERE psc.name IS NOT NULL), '[]') as product_series,
+                        COALESCE(json_agg(DISTINCT ig.name) FILTER (WHERE ig.name IS NOT NULL), '[]') as ink_grades,
+                        COALESCE(json_agg(DISTINCT pt.id) FILTER (WHERE pt.id IS NOT NULL), '[]') as type_ids,
+                        COALESCE(json_agg(DISTINCT psc.id) FILTER (WHERE psc.id IS NOT NULL), '[]') as series_ids,
+                        COALESCE(json_agg(DISTINCT ig.id) FILTER (WHERE ig.id IS NOT NULL), '[]') as grade_ids
+                     FROM colors c
+                     LEFT JOIN color_product_types cpt ON c.id = cpt.color_id
+                     LEFT JOIN product_types pt ON cpt.type_id = pt.id
+                     LEFT JOIN color_product_series cps ON c.id = cps.color_id
+                     LEFT JOIN product_series_categories psc ON cps.series_id = psc.id
+                     LEFT JOIN color_ink_grades cig ON c.id = cig.color_id
+                     LEFT JOIN ink_grades ig ON cig.grade_id = ig.id
+                     GROUP BY c.id ORDER BY c.id DESC`
                 )
 
                 return reply.send(result.rows)
@@ -73,21 +89,38 @@ export default async function (fastifyRaw: FastifyInstance) {
             body: CreateColorSchema
         },
         handler: async (request, reply) => {
-            const { name, color_code, description, hsn_code, business_code, series, ink_series, tags, min_threshold_kg } = request.body
-            const client = await fastify.db.connect() // Get a client from the pool
+            const { name, color_code, description, hsn_code, business_code, tags, min_threshold_kg, type_ids, series_ids, grade_ids } = request.body
+            const client = await fastify.db.connect()
 
             try {
-                await client.query('BEGIN') // Start transaction
+                await client.query('BEGIN')
 
-                // Create the color entry
+                // Create the color entry (removed old relational columns)
                 const insertResult = await client.query(
-                    `INSERT INTO colors (name, color_code, description, hsn_code, business_code, series, ink_series, tags, min_threshold_kg)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-                    [name, color_code, description, hsn_code ?? null, business_code ?? null, series ?? null, ink_series ?? null, JSON.stringify(tags ?? []), min_threshold_kg ?? 0]
+                    `INSERT INTO colors (name, color_code, description, hsn_code, business_code, tags, min_threshold_kg)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+                    [name, color_code, description, hsn_code ?? null, business_code ?? null, JSON.stringify(tags ?? []), min_threshold_kg ?? 0]
                 )
                 const newColor = insertResult.rows[0]
 
-                // Log the creation in the audit_logs table
+                // Insert into junction tables
+                if (type_ids && type_ids.length > 0) {
+                    for (const tid of type_ids) {
+                        await client.query('INSERT INTO color_product_types (color_id, type_id) VALUES ($1, $2)', [newColor.id, tid])
+                    }
+                }
+                if (series_ids && series_ids.length > 0) {
+                    for (const sid of series_ids) {
+                        await client.query('INSERT INTO color_product_series (color_id, series_id) VALUES ($1, $2)', [newColor.id, sid])
+                    }
+                }
+                if (grade_ids && grade_ids.length > 0) {
+                    for (const gid of grade_ids) {
+                        await client.query('INSERT INTO color_ink_grades (color_id, grade_id) VALUES ($1, $2)', [newColor.id, gid])
+                    }
+                }
+
+                // Log the creation
                 const user = request.user as any
                 await client.query(
                     `INSERT INTO audit_logs (user_id, action, entity_type, entity_id)
@@ -95,11 +128,32 @@ export default async function (fastifyRaw: FastifyInstance) {
                     [user.id, newColor.id]
                 )
 
-                await client.query('COMMIT') // Commit transaction
+                await client.query('COMMIT')
+
+                const fetchResult = await fastify.db.query(
+                    `SELECT 
+                        c.id, c.name, c.color_code, c.business_code, c.hsn_code, c.tags, c.description, c.min_threshold_kg, c.created_at, c.updated_at,
+                        COALESCE(json_agg(DISTINCT pt.name) FILTER (WHERE pt.name IS NOT NULL), '[]') as product_types,
+                        COALESCE(json_agg(DISTINCT psc.name) FILTER (WHERE psc.name IS NOT NULL), '[]') as product_series,
+                        COALESCE(json_agg(DISTINCT ig.name) FILTER (WHERE ig.name IS NOT NULL), '[]') as ink_grades,
+                        COALESCE(json_agg(DISTINCT pt.id) FILTER (WHERE pt.id IS NOT NULL), '[]') as type_ids,
+                        COALESCE(json_agg(DISTINCT psc.id) FILTER (WHERE psc.id IS NOT NULL), '[]') as series_ids,
+                        COALESCE(json_agg(DISTINCT ig.id) FILTER (WHERE ig.id IS NOT NULL), '[]') as grade_ids
+                     FROM colors c
+                     LEFT JOIN color_product_types cpt ON c.id = cpt.color_id
+                     LEFT JOIN product_types pt ON cpt.type_id = pt.id
+                     LEFT JOIN color_product_series cps ON c.id = cps.color_id
+                     LEFT JOIN product_series_categories psc ON cps.series_id = psc.id
+                     LEFT JOIN color_ink_grades cig ON c.id = cig.color_id
+                     LEFT JOIN ink_grades ig ON cig.grade_id = ig.id
+                     WHERE c.id = $1
+                     GROUP BY c.id`,
+                    [newColor.id]
+                )
 
                 return reply.status(201).send({
                     message: 'Color created successfully',
-                    color: newColor
+                    color: fetchResult.rows[0]
                 })
             } catch (err: any) {
                 await client.query('ROLLBACK')
@@ -132,14 +186,17 @@ export default async function (fastifyRaw: FastifyInstance) {
         },
         handler: async (request, reply) => {
             const { id } = request.params
-            const { name, color_code, description, hsn_code, business_code, series, ink_series, tags, min_threshold_kg } = request.body
+            const { name, color_code, description, hsn_code, business_code, tags, min_threshold_kg, type_ids, series_ids, grade_ids } = request.body
+            const client = await fastify.db.connect()
 
             try {
-                const existingResult = await fastify.db.query('SELECT series, ink_series FROM colors WHERE id = $1', [id])
+                await client.query('BEGIN')
+
+                const existingResult = await client.query('SELECT id FROM colors WHERE id = $1', [id])
                 if (existingResult.rows.length === 0) {
+                    await client.query('ROLLBACK')
                     return reply.status(404).send({ error: 'Not Found', message: 'Color not found' })
                 }
-                const existing = existingResult.rows[0]
 
                 const updates: string[] = []
                 const values: any[] = []
@@ -157,8 +214,6 @@ export default async function (fastifyRaw: FastifyInstance) {
                     updates.push(`description = $${paramIdx++}`)
                     values.push(description)
                 }
-                
-                // Regular updatable fields
                 if (hsn_code !== undefined) {
                     updates.push(`hsn_code = $${paramIdx++}`)
                     values.push(hsn_code)
@@ -166,16 +221,6 @@ export default async function (fastifyRaw: FastifyInstance) {
                 if (business_code !== undefined) {
                     updates.push(`business_code = $${paramIdx++}`)
                     values.push(business_code)
-                }
-                
-                // Static field logic: Only update if the current value is NULL or empty
-                if (series !== undefined && (!existing.series || existing.series.trim() === '')) {
-                    updates.push(`series = $${paramIdx++}`)
-                    values.push(series)
-                }
-                if (ink_series !== undefined && (!existing.ink_series || existing.ink_series.trim() === '')) {
-                    updates.push(`ink_series = $${paramIdx++}`)
-                    values.push(ink_series)
                 }
                 if (tags !== undefined) {
                     updates.push(`tags = $${paramIdx++}`)
@@ -186,27 +231,56 @@ export default async function (fastifyRaw: FastifyInstance) {
                     values.push(min_threshold_kg)
                 }
 
-                if (updates.length === 0) {
-                    const existing = await fastify.db.query('SELECT * FROM colors WHERE id = $1', [id])
-                    if (existing.rows.length === 0) {
-                        return reply.status(404).send({ error: 'Not Found', message: 'Color not found' })
+                if (updates.length > 0) {
+                    updates.push(`updated_at = CURRENT_TIMESTAMP`)
+                    values.push(id)
+                    const updateQuery = `UPDATE colors SET ${updates.join(', ')} WHERE id = $${paramIdx}`
+                    await client.query(updateQuery, values)
+                }
+
+                // Sync Function tables
+                if (type_ids !== undefined) {
+                    await client.query('DELETE FROM color_product_types WHERE color_id = $1', [id])
+                    for (const tid of type_ids) {
+                        await client.query('INSERT INTO color_product_types (color_id, type_id) VALUES ($1, $2)', [id, tid])
                     }
-                    return reply.send(existing.rows[0])
+                }
+                if (series_ids !== undefined) {
+                    await client.query('DELETE FROM color_product_series WHERE color_id = $1', [id])
+                    for (const sid of series_ids) {
+                        await client.query('INSERT INTO color_product_series (color_id, series_id) VALUES ($1, $2)', [id, sid])
+                    }
+                }
+                if (grade_ids !== undefined) {
+                    await client.query('DELETE FROM color_ink_grades WHERE color_id = $1', [id])
+                    for (const gid of grade_ids) {
+                        await client.query('INSERT INTO color_ink_grades (color_id, grade_id) VALUES ($1, $2)', [id, gid])
+                    }
                 }
 
-                updates.push(`updated_at = CURRENT_TIMESTAMP`)
-                values.push(id)
+                await client.query('COMMIT')
 
-                const updateQuery = `UPDATE colors SET ${updates.join(', ')} WHERE id = $${paramIdx} RETURNING *`
-                const updateResult = await fastify.db.query(updateQuery, values)
-
-                if (updateResult.rows.length === 0) {
-                    return reply.status(404).send({
-                        error: 'Not Found',
-                        message: 'Color not found'
-                    })
-                }
-
+                const finalResult = await fastify.db.query(
+                    `SELECT 
+                        c.id, c.name, c.color_code, c.business_code, c.hsn_code, c.tags, c.description, c.min_threshold_kg, c.created_at, c.updated_at,
+                        COALESCE(json_agg(DISTINCT pt.name) FILTER (WHERE pt.name IS NOT NULL), '[]') as product_types,
+                        COALESCE(json_agg(DISTINCT psc.name) FILTER (WHERE psc.name IS NOT NULL), '[]') as product_series,
+                        COALESCE(json_agg(DISTINCT ig.name) FILTER (WHERE ig.name IS NOT NULL), '[]') as ink_grades,
+                        COALESCE(json_agg(DISTINCT pt.id) FILTER (WHERE pt.id IS NOT NULL), '[]') as type_ids,
+                        COALESCE(json_agg(DISTINCT psc.id) FILTER (WHERE psc.id IS NOT NULL), '[]') as series_ids,
+                        COALESCE(json_agg(DISTINCT ig.id) FILTER (WHERE ig.id IS NOT NULL), '[]') as grade_ids
+                     FROM colors c
+                     LEFT JOIN color_product_types cpt ON c.id = cpt.color_id
+                     LEFT JOIN product_types pt ON cpt.type_id = pt.id
+                     LEFT JOIN color_product_series cps ON c.id = cps.color_id
+                     LEFT JOIN product_series_categories psc ON cps.series_id = psc.id
+                     LEFT JOIN color_ink_grades cig ON c.id = cig.color_id
+                     LEFT JOIN ink_grades ig ON cig.grade_id = ig.id
+                     WHERE c.id = $1
+                     GROUP BY c.id`,
+                    [id]
+                )
+                
                 const user = request.user as any
                 await fastify.db.query(
                     `INSERT INTO audit_logs (user_id, action, entity_type, entity_id)
@@ -216,10 +290,11 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 return reply.send({
                     message: 'Color updated successfully',
-                    color: updateResult.rows[0]
+                    color: finalResult.rows[0]
                 })
 
             } catch (err: any) {
+                await client.query('ROLLBACK')
                 if (err.code === '23505') {
                     return reply.status(400).send({
                         error: 'Bad Request',
@@ -231,6 +306,8 @@ export default async function (fastifyRaw: FastifyInstance) {
                     error: 'Internal Server Error',
                     message: 'Failed to update color'
                 })
+            } finally {
+                client.release()
             }
         }
     })
