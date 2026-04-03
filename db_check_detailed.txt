@@ -1,0 +1,2 @@
+Table product_series_categories: [{"id":1,"name":"Ink Series"},{"id":2,"name":"High Density"},{"id":3,"name":"Special"},{"id":4,"name":"Water Based"},{"id":5,"name":"OPQ/JS"}]
+Table ink_grades: [{"id":1,"name":"LCS"},{"id":2,"name":"STD"},{"id":3,"name":"OPQ"},{"id":4,"name":"JS"}]

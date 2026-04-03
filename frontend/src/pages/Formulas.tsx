@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { apiRequest } from "../services/api";
-import { Plus, Beaker, Palette, X, AlertCircle, Edit, Trash2, Search, Eye } from "lucide-react";
+import { Plus, Beaker, Palette, X, AlertCircle, Edit, Trash2, Search, Eye, Share2, ImagePlus, Mail, MessageCircle } from "lucide-react";
 import { useUnitPreference, formatUnit, toDisplayValue, fromDisplayValue } from "../utils/units";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -18,6 +18,7 @@ interface Color {
   type_ids: number[];
   series_ids: number[];
   grade_ids: number[];
+  photo_url?: string;
 }
 
 interface SettingItem {
@@ -75,6 +76,93 @@ export default function Formulas() {
   const [productTypes, setProductTypes] = useState<SettingItem[]>([]);
   // const [seriesCategories, setSeriesCategories] = useState<SettingItem[]>([]);
   const [inkGrades, setInkGrades] = useState<SettingItem[]>([]);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [shareTarget, setShareTarget] = useState<{ color: Color; waUrl: string; mailUrl: string; jpegDataUrl: string } | null>(null);
+  const [currentShareText, setCurrentShareText] = useState("");
+
+  // Photo helpers — stored per color in localStorage
+  const getColorPhoto = (colorId: number): string => {
+    try { return localStorage.getItem(`color_photo_${colorId}`) || ''; } catch { return ''; }
+  };
+  const saveColorPhoto = (colorId: number, dataUrl: string) => {
+    try {
+      if (dataUrl) localStorage.setItem(`color_photo_${colorId}`, dataUrl);
+      else localStorage.removeItem(`color_photo_${colorId}`);
+    } catch {}
+  };
+  const convertToJpeg = (dataUrl: string): Promise<string> => new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/jpeg', 0.92));
+    };
+    img.src = dataUrl;
+  });
+
+  const generateProductText = (color: Color) => {
+    const adminPhone = "+91 91234 56789";
+    const salesPhone = "+91 99887 76655";
+    
+    return `🎨 PRODUCT: ${color.name}
+📦 CODE: ${color.business_code || '—'}
+🏷 TYPES: ${(color.product_types || []).join(", ") || '—'}
+📋 HSN: ${color.hsn_code || '—'}
+🖌 INK SERIES: ${(color.ink_grades || []).join(", ") || '—'}
+
+📞 Owner Contacts:
+👤 Admin: ${adminPhone}
+👤 Sales: ${salesPhone}
+`;
+  };
+
+  const handleShareColor = async (color: Color) => {
+    const photo = getColorPhoto(color.id);
+    const template = generateProductText(color);
+    
+    let jpegDataUrl = '';
+    if (photo) jpegDataUrl = await convertToJpeg(photo);
+
+    setCurrentShareText(template);
+    setShareTarget({ 
+      color, 
+      waUrl: `https://wa.me/?text=${encodeURIComponent(template)}`, 
+      mailUrl: `mailto:?subject=${encodeURIComponent('Product Info - ' + color.name)}&body=${encodeURIComponent(template)}`, 
+      jpegDataUrl 
+    });
+    setIsShareModalOpen(true);
+  };
+
+  const handleEmail = (color: Color, customizedText: string) => {
+    const mailtoLink = `mailto:?subject=${encodeURIComponent('Product Info - ' + color.name)}&body=${encodeURIComponent(customizedText)}`;
+    window.location.href = mailtoLink;
+  };
+
+  const shareViaSystem = async () => {
+    if (!shareTarget) return;
+    try {
+      const shareData: ShareData = {
+        title: shareTarget.color.name,
+        text: currentShareText,
+      };
+
+      if (shareTarget.jpegDataUrl && navigator.canShare) {
+        const res = await fetch(shareTarget.jpegDataUrl);
+        const blob = await res.blob();
+        const file = new File([blob], `${shareTarget.color.name.replace(/\s+/g, '_')}.jpg`, { type: 'image/jpeg' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          shareData.files = [file];
+        }
+      }
+
+      await navigator.share(shareData);
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') console.error('Share failed', err);
+    }
+  };
 
   // Forms
   const [colorForm, setColorForm] = useState({ 
@@ -86,7 +174,8 @@ export default function Formulas() {
     tags: "",
     type_ids: [] as number[],
     series_ids: [] as number[],
-    grade_ids: [] as number[]
+    grade_ids: [] as number[],
+    photo_dataUrl: ""
   });
   const [formulaForm, setFormulaForm] = useState({
     name: "",
@@ -170,6 +259,8 @@ export default function Formulas() {
         });
         setColors(prev => prev.map(c => c.id === updated.color.id ? updated.color : c));
         if (selectedColor?.id === updated.color.id) setSelectedColor(updated.color);
+        // Persist photo
+        if (colorForm.photo_dataUrl) saveColorPhoto(updated.color.id, colorForm.photo_dataUrl);
       } else {
         const newColor = await apiRequest<{ message: string; color: Color }>("/colors", {
           method: "POST",
@@ -180,6 +271,8 @@ export default function Formulas() {
         });
         setColors(prev => [newColor.color, ...prev]);
         setSelectedColor(newColor.color);
+        // Persist photo
+        if (colorForm.photo_dataUrl) saveColorPhoto(newColor.color.id, colorForm.photo_dataUrl);
       }
       setIsColorModalOpen(false);
       setEditingColor(null);
@@ -192,7 +285,8 @@ export default function Formulas() {
         tags: "",
         type_ids: [] as number[],
         series_ids: [] as number[],
-        grade_ids: [] as number[]
+        grade_ids: [] as number[],
+        photo_dataUrl: ""
       });
     } catch (err: any) {
       alert(err.message || "Failed to save color");
@@ -287,7 +381,8 @@ export default function Formulas() {
       tags: color.tags ? color.tags.join(", ") : "",
       type_ids: color.type_ids || [],
       series_ids: color.series_ids || [],
-      grade_ids: color.grade_ids || []
+      grade_ids: color.grade_ids || [],
+      photo_dataUrl: getColorPhoto(color.id)
     });
     setIsColorModalOpen(true);
   };
@@ -373,7 +468,8 @@ export default function Formulas() {
                   tags: "",
                   type_ids: [],
                   series_ids: [],
-                  grade_ids: []
+                  grade_ids: [],
+                  photo_dataUrl: ""
                 });
                 setIsColorModalOpen(true);
               }}
@@ -470,19 +566,29 @@ export default function Formulas() {
                     <p className="text-xs text-slate-500">{selectedColor.description || "No description provided."}</p>
                   </div>
                 </div>
-                {isManager && (
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={() => {
-                      setEditingFormula(null);
-                      setFormulaForm({ name: "", version: "1.0.0", batch_size_kg: toDisplayValue(100, unitPref), resources: [{ resource_id: 0, quantity_required: 0 }] });
-                      setIsFormulaModalOpen(true);
-                    }}
-                    className="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-2"
+                    onClick={() => handleShareColor(selectedColor)}
+                    className="px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 text-sm font-bold rounded-lg hover:bg-emerald-100 transition-colors flex items-center gap-1.5"
+                    title="Share product info"
                   >
-                    <Plus className="h-4 w-4" />
-                    Create Formula
+                    <Share2 className="h-4 w-4" />
+                    Share
                   </button>
-                )}
+                  {isManager && (
+                    <button
+                      onClick={() => {
+                        setEditingFormula(null);
+                        setFormulaForm({ name: "", version: "1.0.0", batch_size_kg: toDisplayValue(100, unitPref), resources: [{ resource_id: 0, quantity_required: 0 }] });
+                        setIsFormulaModalOpen(true);
+                      }}
+                      className="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Create Formula
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="overflow-y-auto flex-1 p-5 bg-slate-50/50">
@@ -593,6 +699,43 @@ export default function Formulas() {
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700">Description <span className="font-normal text-slate-400">(Optional)</span></label>
                 <textarea className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none resize-none" rows={2} placeholder="Additional details..." value={colorForm.description} onChange={(e) => setColorForm({ ...colorForm, description: e.target.value })} />
+              </div>
+              {/* Product Photo Upload */}
+              <div className="space-y-1.5 border-t pt-2">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <ImagePlus className="h-3.5 w-3.5 text-slate-400" />
+                  Product Photo <span className="font-normal text-slate-400">(PNG / JPEG)</span>
+                </label>
+                {colorForm.photo_dataUrl ? (
+                  <div className="relative group">
+                    <img src={colorForm.photo_dataUrl} alt="Product preview" className="w-full h-28 object-cover rounded-md border border-slate-200" />
+                    <button
+                      type="button"
+                      onClick={() => setColorForm({ ...colorForm, photo_dataUrl: '' })}
+                      className="absolute top-1 right-1 bg-white/90 hover:bg-red-50 text-red-500 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity border border-red-200"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="absolute bottom-1 left-1 bg-black/50 text-white text-[9px] px-1.5 py-0.5 rounded font-bold">Will export as JPEG</span>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-slate-200 rounded-md cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors">
+                    <ImagePlus className="h-5 w-5 text-slate-300 mb-1" />
+                    <span className="text-[10px] text-slate-400 font-medium">Click to upload PNG or JPEG</span>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (ev) => setColorForm({ ...colorForm, photo_dataUrl: ev.target?.result as string });
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                  </label>
+                )}
               </div>
               {/* Product Code + HSN Code */}
               <div className="grid grid-cols-2 gap-3">
@@ -766,6 +909,100 @@ export default function Formulas() {
             <div className="flex gap-3 p-5 border-t bg-slate-50 shrink-0">
               <button type="button" onClick={() => setIsFormulaModalOpen(false)} className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors">Cancel</button>
               <button type="submit" onClick={handleSaveFormula} className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 transition-colors shadow-sm">{editingFormula ? "Save Changes" : "Save Formula"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {/* Share Modal */}
+      {isShareModalOpen && shareTarget && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={() => setIsShareModalOpen(false)} aria-hidden="true" />
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl border relative z-10 overflow-hidden">
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-5 flex items-center gap-4">
+              <div className="h-12 w-12 rounded-xl border-2 border-white/20 shadow-lg shrink-0" style={{ backgroundColor: shareTarget.color.color_code || '#cbd5e1' }} />
+              {shareTarget.jpegDataUrl ? (
+                <img src={shareTarget.jpegDataUrl} alt={shareTarget.color.name} className="h-12 w-12 rounded-xl object-cover border-2 border-white/20 shadow-lg" />
+              ) : null}
+              <div>
+                <p className="font-bold text-white text-base">{shareTarget.color.name}</p>
+                <p className="text-slate-400 text-xs font-mono">{shareTarget.color.business_code || shareTarget.color.color_code}</p>
+              </div>
+              <button onClick={() => setIsShareModalOpen(false)} className="ml-auto text-slate-400 hover:bg-white/20 p-1 rounded-full transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Product Information</p>
+                <div className="flex gap-2">
+                  <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 italic">Auto-copies text</span>
+                </div>
+              </div>
+              
+              <textarea 
+                className="w-full bg-slate-50 rounded-xl p-3 text-xs text-slate-700 font-mono whitespace-pre-line border focus:ring-2 focus:ring-blue-500 outline-none resize-none min-h-[160px]"
+                value={currentShareText}
+                onChange={(e) => setCurrentShareText(e.target.value)}
+                placeholder="Message template..."
+              />
+
+              <div className="pt-2">
+                {typeof navigator.share !== "undefined" ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(currentShareText);
+                        shareViaSystem();
+                      }}
+                      className="flex items-center justify-center gap-2 px-3 py-4 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 transition-all shadow-lg active:scale-95 group font-bold text-sm"
+                    >
+                      <MessageCircle className="h-5 w-5" />
+                      WhatsApp
+                    </button>
+                    <button
+                      onClick={() => handleEmail(shareTarget.color, currentShareText)}
+                      className="flex items-center justify-center gap-2 px-3 py-4 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 transition-all shadow-lg active:scale-95 group font-bold text-sm"
+                    >
+                      <Mail className="h-5 w-5" />
+                      Email Info
+                    </button>
+                    <div className="col-span-2 text-center flex flex-col gap-1">
+                      <p className="text-[10px] text-slate-400 font-medium italic mt-1">WhatsApp shares Image + Info</p>
+                      <p className="text-[10px] text-slate-400 font-medium italic">Email shares formatted Text template</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3 font-bold text-center">
+                    <p className="text-xs text-slate-500 uppercase">Manual Share (Desktop)</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        onClick={() => {
+                          const a = document.createElement('a');
+                          a.href = shareTarget.jpegDataUrl;
+                          a.download = `${shareTarget.color.name.replace(/\s+/g, '_')}.jpg`;
+                          a.click();
+                        }}
+                        className="flex flex-col items-center justify-center p-3 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors shadow-sm"
+                      >
+                        <ImagePlus className="h-4 w-4 mb-1" />
+                        <span className="text-[10px]">1. Save Image</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(currentShareText);
+                          alert("Text copied! Now paste in WhatsApp.");
+                        }}
+                        className="flex flex-col items-center justify-center p-3 bg-white text-slate-900 border-2 border-slate-900 rounded-xl hover:bg-slate-50 transition-colors shadow-sm"
+                      >
+                        <span className="text-lg mb-1">📋</span>
+                        <span className="text-[10px]">2. Copy Text</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

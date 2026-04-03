@@ -27,7 +27,8 @@ export default async function (fastifyRaw: FastifyInstance) {
         formulaId: Type.Integer(),
         colorId: Type.Integer(),
         targetQty: Type.Number({ exclusiveMinimum: 0 }),
-        operatorId: Type.Integer()
+        operatorId: Type.Integer(),
+        inkSeries: Type.Optional(Type.String())
     })
 
     const UpdateStatusSchema = Type.Object({
@@ -884,7 +885,7 @@ export default async function (fastifyRaw: FastifyInstance) {
             body: PlanProductionRunSchema
         },
         handler: async (request, reply) => {
-            const { formulaId, colorId, targetQty, operatorId } = request.body
+            const { formulaId, colorId, targetQty, operatorId, inkSeries } = request.body
 
             try {
                 // 1. Validate the formula exists and belongs to the specified color
@@ -918,10 +919,10 @@ export default async function (fastifyRaw: FastifyInstance) {
                 // 3. Create the production run with status = 'planned'
                 const runResult = await fastify.db.query(
                     `INSERT INTO production_runs
-                       (formula_id, status, planned_quantity_kg, created_by)
-                     VALUES ($1, 'planned', $2, $3)
+                       (formula_id, status, planned_quantity_kg, created_by, ink_series)
+                     VALUES ($1, 'planned', $2, $3, $4)
                      RETURNING id, status, created_at`,
-                    [formulaId, targetQty, operatorId]
+                    [formulaId, targetQty, operatorId, inkSeries ?? null]
                 )
 
                 const runId = runResult.rows[0].id

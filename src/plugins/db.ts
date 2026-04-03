@@ -15,7 +15,7 @@ async function dbConnector(fastify: FastifyInstance) {
     const pool = new Pool({
         connectionString: process.env.DATABASE_URL,
         ssl: {
-            rejectUnauthorized: false // Neon requires SSL for secure connections
+            rejectUnauthorized: false
         }
     })
 

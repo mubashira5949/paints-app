@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { apiRequest } from "../services/api";
 import { getUnitPreference, setUnitPreference } from "../utils/units";
 import type { UnitPreference } from "../utils/units";
 import { getDateFormatPreference, setDateFormatPreference } from "../utils/dateFormatter";
@@ -35,12 +36,9 @@ export default function Settings() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "restart">("idle");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  // Product Type management
-  const PRODUCT_TYPE_KEY = "product_type_options";
-  const loadProductTypes = (): string[] => {
-    try { return JSON.parse(localStorage.getItem(PRODUCT_TYPE_KEY) || "[]"); } catch { return []; }
-  };
-  const [customProductTypes, setCustomProductTypes] = useState<string[]>(loadProductTypes);
+  // Product Type management (Shared Backend)
+  const [customProductTypes, setCustomProductTypes] = useState<{id: number, name: string}[]>([]);
+  const [isLoadingTypes, setIsLoadingTypes] = useState(false);
   const [newTypeInput, setNewTypeInput] = useState("");
 
   // Packaging sizes management
@@ -49,21 +47,47 @@ export default function Settings() {
     localStorage.getItem(PACKAGING_SIZES_KEY) || "0.5kg, 1kg, 5kg, 10kg, 20kg"
   );
 
-  const addProductType = () => {
-    const val = newTypeInput.trim();
-    if (!val) return;
-    const updated = Array.from(new Set([...customProductTypes, val]));
-    setCustomProductTypes(updated);
-    localStorage.setItem(PRODUCT_TYPE_KEY, JSON.stringify(updated));
-    setNewTypeInput("");
-    setHasUnsavedChanges(true);
+  const fetchProductTypes = async () => {
+    setIsLoadingTypes(true);
+    try {
+      const data = await apiRequest<{id: number, name: string}[]>("/settings/product-types");
+      setCustomProductTypes(data);
+    } catch (err) {
+      console.error("Failed to fetch product types", err);
+    } finally {
+      setIsLoadingTypes(false);
+    }
   };
 
-  const removeProductType = (series: string) => {
-    const updated = customProductTypes.filter(s => s !== series);
-    setCustomProductTypes(updated);
-    localStorage.setItem(PRODUCT_TYPE_KEY, JSON.stringify(updated));
-    setHasUnsavedChanges(true);
+  useEffect(() => {
+    fetchProductTypes();
+  }, []);
+
+  const addProductType = async () => {
+    const val = newTypeInput.trim();
+    if (!val) return;
+    try {
+      await apiRequest("/settings/product-types", {
+        method: "POST",
+        body: { name: val }
+      });
+      setNewTypeInput("");
+      fetchProductTypes();
+      setSaveStatus("success");
+    } catch (err: any) {
+      alert(err.message || "Failed to add product type");
+    }
+  };
+
+  const removeProductType = async (id: number) => {
+    if (!confirm("Are you sure you want to remove this product type? It might be linked to existing colors.")) return;
+    try {
+      await apiRequest(`/settings/product-types/${id}`, { method: "DELETE" });
+      fetchProductTypes();
+      setSaveStatus("success");
+    } catch (err: any) {
+      alert(err.message || "Failed to remove product type");
+    }
   };
 
   // Mark changes as unsaved when any input changes
@@ -302,19 +326,19 @@ export default function Settings() {
                     <Layers className="h-4 w-4 text-gray-400" />
                     <div>
                       <p className="font-medium text-sm">Product Type Options</p>
-                      <p className="text-xs text-gray-500 mt-0.5">Appear in the Color form dropdown</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Appear in the Color form as checkboxes</p>
                     </div>
                   </div>
                   <div className="space-y-2">
                     {/* Built-in (read-only) */}
+                    <div className="flex flex-wrap gap-1.5 mb-1 text-slate-500 italic text-xs">
+                      {isLoadingTypes ? "Loading product types..." : customProductTypes.length === 0 ? "No product types defined." : ""}
+                    </div>
                     <div className="flex flex-wrap gap-1.5 mb-1">
-                      {["Water Based Ink", "Oil Based Ink"].map(s => (
-                        <span key={s} className="flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium">{s} <span className="text-blue-300 text-[10px]">default</span></span>
-                      ))}
                       {customProductTypes.map(s => (
-                        <span key={s} className="flex items-center gap-1 text-xs bg-gray-100 text-gray-700 border border-gray-200 px-2 py-0.5 rounded-full font-medium">
-                          {s}
-                          <button onClick={() => removeProductType(s)} className="ml-0.5 text-red-400 hover:text-red-600 transition-colors" title="Remove">&times;</button>
+                        <span key={s.id} className="flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium">
+                          {s.name}
+                          <button onClick={() => removeProductType(s.id)} className="ml-0.5 text-blue-400 hover:text-red-600 transition-colors" title="Remove">&times;</button>
                         </span>
                       ))}
                     </div>
