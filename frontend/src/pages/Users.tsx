@@ -7,7 +7,6 @@ import {
   HardHat,
   BadgeDollarSign,
   Edit,
-  Trash2,
   X,
   CheckCircle2,
   XCircle,
@@ -139,13 +138,7 @@ export default function Users() {
     setIsResetModalOpen(true);
   };
 
-  const handleDeleteUser = async (userId: number) => {
-    if (!confirm("Are you sure you want to delete this user?")) return;
-    try {
-      await apiRequest(`/users/${userId}`, { method: "DELETE" });
-      await Promise.allSettled([fetchUsers(), fetchSummary()]);
-    } catch (err: any) { alert(err.message); }
-  };
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -406,9 +399,7 @@ export default function Users() {
                         >
                           {user.is_active ? <><UserX className="h-3.5 w-3.5" /> Disable</> : <><Power className="h-3.5 w-3.5" /> Enable</>}
                         </button>
-                        <button onClick={() => handleDeleteUser(user.id)} title="Delete" className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-100 transition-colors">
-                          <Trash2 className="h-3.5 w-3.5" /> Delete
-                        </button>
+
                       </div>
                     </td>
                   </tr>
