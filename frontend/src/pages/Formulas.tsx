@@ -1,21 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { apiRequest } from "../services/api";
-import { Plus, Beaker, Palette, X, AlertCircle, Edit, Trash2, Search, ChevronDown, Eye } from "lucide-react";
+import { Plus, Beaker, Palette, X, AlertCircle, Edit, Trash2, Search, Eye } from "lucide-react";
 import { useUnitPreference, formatUnit, toDisplayValue, fromDisplayValue } from "../utils/units";
 import { useAuth } from "../contexts/AuthContext";
-
-const PRODUCT_TYPE_STORAGE_KEY = "product_type_options";
-
-function getProductTypeOptions(): string[] {
-  try {
-    const stored = localStorage.getItem(PRODUCT_TYPE_STORAGE_KEY);
-    const custom: string[] = stored ? JSON.parse(stored) : [];
-    const all = ["Water Based Ink", "Oil Based Ink", ...custom];
-    return Array.from(new Set(all));
-  } catch {
-    return ["Water Based Ink", "Oil Based Ink"];
-  }
-}
 
 interface Color {
   id: number;
@@ -24,9 +11,23 @@ interface Color {
   description: string;
   business_code: string;
   hsn_code: string;
-  series: string;
-  ink_series: string;
   tags: string[];
+  product_types: string[];
+  product_series: string[];
+  ink_grades: string[];
+  type_ids: number[];
+  series_ids: number[];
+  grade_ids: number[];
+}
+
+interface SettingItem {
+  id: number;
+  name: string;
+}
+
+interface SettingItem {
+  id: number;
+  name: string;
 }
 
 interface Resource {
@@ -71,10 +72,22 @@ export default function Formulas() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [productTypeOptions, setProductTypeOptions] = useState<string[]>(getProductTypeOptions());
+  const [productTypes, setProductTypes] = useState<SettingItem[]>([]);
+  // const [seriesCategories, setSeriesCategories] = useState<SettingItem[]>([]);
+  const [inkGrades, setInkGrades] = useState<SettingItem[]>([]);
 
   // Forms
-  const [colorForm, setColorForm] = useState({ name: "", color_code: "#000000", description: "", business_code: "", hsn_code: "", series: "", ink_series: "", tags: "" });
+  const [colorForm, setColorForm] = useState({ 
+    name: "", 
+    color_code: "#000000", 
+    description: "", 
+    business_code: "", 
+    hsn_code: "", 
+    tags: "",
+    type_ids: [] as number[],
+    series_ids: [] as number[],
+    grade_ids: [] as number[]
+  });
   const [formulaForm, setFormulaForm] = useState({
     name: "",
     version: "1.0.0",
@@ -85,12 +98,16 @@ export default function Formulas() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [colorsData, resourcesData] = await Promise.all([
+      const [colorsData, resourcesData, typesData, gradesData] = await Promise.all([
         apiRequest<Color[]>("/colors"),
-        apiRequest<Resource[]>("/resources")
+        apiRequest<Resource[]>("/resources"),
+        apiRequest<SettingItem[]>("/settings/product-types"),
+        apiRequest<SettingItem[]>("/settings/ink-grades")
       ]);
       setColors(colorsData);
       setResources(resourcesData);
+      setProductTypes(typesData);
+      setInkGrades(gradesData);
       if (colorsData.length > 0 && !selectedColor) {
         setSelectedColor(colorsData[0]);
       }
@@ -123,10 +140,10 @@ export default function Formulas() {
     }
   }, [selectedColor]);
 
-  // Reload product type options whenever modal opens
+  // Reload data if needed
   useEffect(() => {
     if (isColorModalOpen) {
-      setProductTypeOptions(getProductTypeOptions());
+      apiRequest<SettingItem[]>("/settings/product-types").then(setProductTypes).catch(console.error);
     }
   }, [isColorModalOpen]);
 
@@ -135,8 +152,9 @@ export default function Formulas() {
     if (!q) return true;
     const nameMatch = c.name.toLowerCase().includes(q);
     const tagMatch = (c.tags || []).some(t => t.toLowerCase().includes(q));
-    const seriesMatch = (c.series || "").toLowerCase().includes(q);
-    return nameMatch || tagMatch || seriesMatch;
+    const seriesMatch = (c.product_series || []).some(s => s.toLowerCase().includes(q));
+    const typeMatch = (c.product_types || []).some(t => t.toLowerCase().includes(q));
+    return nameMatch || tagMatch || seriesMatch || typeMatch;
   });
 
   const handleSaveColor = async (e: React.FormEvent) => {
@@ -165,7 +183,17 @@ export default function Formulas() {
       }
       setIsColorModalOpen(false);
       setEditingColor(null);
-      setColorForm({ name: "", color_code: "#000000", description: "", business_code: "", hsn_code: "", series: "", ink_series: "", tags: "" });
+      setColorForm({ 
+        name: "", 
+        color_code: "#000000", 
+        description: "", 
+        business_code: "", 
+        hsn_code: "", 
+        tags: "",
+        type_ids: [] as number[],
+        series_ids: [] as number[],
+        grade_ids: [] as number[]
+      });
     } catch (err: any) {
       alert(err.message || "Failed to save color");
     }
@@ -256,9 +284,10 @@ export default function Formulas() {
       description: color.description || "",
       business_code: color.business_code || "",
       hsn_code: color.hsn_code || "",
-      series: color.series || "",
-      ink_series: color.ink_series || "",
-      tags: color.tags ? color.tags.join(", ") : ""
+      tags: color.tags ? color.tags.join(", ") : "",
+      type_ids: color.type_ids || [],
+      series_ids: color.series_ids || [],
+      grade_ids: color.grade_ids || []
     });
     setIsColorModalOpen(true);
   };
@@ -335,7 +364,17 @@ export default function Formulas() {
             <button
               onClick={() => {
                 setEditingColor(null);
-                setColorForm({ name: "", color_code: "#000000", description: "", business_code: "", hsn_code: "", series: "", ink_series: "", tags: "" });
+                setColorForm({ 
+                  name: "", 
+                  color_code: "#000000", 
+                  description: "", 
+                  business_code: "", 
+                  hsn_code: "", 
+                  tags: "",
+                  type_ids: [],
+                  series_ids: [],
+                  grade_ids: []
+                });
                 setIsColorModalOpen(true);
               }}
               className="p-1.5 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors"
@@ -578,44 +617,65 @@ export default function Formulas() {
                   />
                 </div>
               </div>
-              {/* Product Type (existing series) — Dropdown */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">Product Type</label>
-                <div className="relative">
-                  <select
-                    className={`w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none appearance-none pr-8 ${editingColor?.series ? 'bg-slate-50 text-slate-500 cursor-not-allowed' : 'bg-white'}`}
-                    value={colorForm.series}
-                    onChange={(e) => setColorForm({ ...colorForm, series: e.target.value })}
-                    disabled={!!editingColor?.series}
-                  >
-                    <option value="">— Select type —</option>
-                    {productTypeOptions.map(opt => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-                </div>
-                <p className="text-[10px] text-slate-400">Custom types can be added in Settings → Production.</p>
-              </div>
-              {/* New Ink Series — Dropdown */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">Ink Series</label>
-                <div className="relative">
-                  <select
-                    required
-                    className={`w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none appearance-none pr-8 ${editingColor?.ink_series ? 'bg-slate-50 text-slate-500 cursor-not-allowed' : 'bg-white'}`}
-                    value={colorForm.ink_series}
-                    onChange={(e) => setColorForm({ ...colorForm, ink_series: e.target.value })}
-                    disabled={!!editingColor?.ink_series}
-                  >
-                    <option value="" disabled>— Select series —</option>
-                    <option value="LCS">LCS</option>
-                    <option value="STD">STD</option>
-                    <option value="OPQ/JS">OPQ/JS</option>
-                  </select>
-                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+              {/* Product Type Selection — Checkboxes */}
+              <div className="space-y-2 border-t pt-2 mt-1">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-tighter">Product Types</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {productTypes.map(opt => (
+                    <label key={opt.id} className="flex items-center gap-2 cursor-pointer group">
+                      <input 
+                        type="checkbox" 
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        checked={colorForm.type_ids.includes(opt.id)}
+                        onChange={(e) => {
+                          const val = opt.id;
+                          const current = colorForm.type_ids;
+                          const updated = e.target.checked 
+                            ? [...current, val]
+                            : current.filter(t => t !== val);
+                          setColorForm({ ...colorForm, type_ids: updated });
+                        }}
+                      />
+                      <span className="text-xs font-medium text-slate-600 group-hover:text-slate-900 transition-colors uppercase">{opt.name}</span>
+                    </label>
+                  ))}
                 </div>
               </div>
+
+              {/* Ink Grades Categories — HIDDEN */}
+              {/* <div className="space-y-2 border-t pt-2 mt-1">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-tighter">Ink Grades</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {seriesCategories.map(...)}
+                </div>
+              </div> */}
+
+              {/* Ink Series Availability */}
+              <div className="space-y-2 border-t pt-2 mt-1">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-tighter">Ink Series</label>
+                <div className="flex flex-wrap items-center gap-4">
+                  {inkGrades.map(opt => (
+                    <label key={opt.id} className="flex items-center gap-2 cursor-pointer group">
+                      <input 
+                        type="checkbox" 
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        checked={colorForm.grade_ids.includes(opt.id) || (opt.name === 'OPQ/JS' && colorForm.grade_ids.includes(opt.id))}
+                        onChange={(e) => {
+                          const val = opt.id;
+                          const current = colorForm.grade_ids;
+                          const updated = e.target.checked 
+                            ? [...current, val]
+                            : current.filter(t => t !== val);
+                          setColorForm({ ...colorForm, grade_ids: updated });
+                        }}
+                      />
+                      <span className="text-xs font-medium text-slate-600 group-hover:text-slate-900 transition-colors uppercase">{opt.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+
               {/* Product Tags */}
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700">Product Tags <span className="font-normal text-slate-400">(comma separated)</span></label>
