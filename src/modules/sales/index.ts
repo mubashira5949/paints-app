@@ -166,4 +166,38 @@ export default async function (fastifyRaw: FastifyInstance) {
             }
         }
     })
+
+    /**
+     * GET /sales/orders/demand
+     * Aggregates pending order quantities for production planning.
+     */
+    fastify.get('/orders/demand', {
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'operator', 'sales'])],
+        handler: async (request, reply) => {
+            let client
+            try {
+                client = await fastify.db.connect()
+                const result = await client.query(`
+                    SELECT 
+                        i.color_id,
+                        c.name as color_name,
+                        c.business_code,
+                        SUM(i.quantity * i.pack_size_kg) as total_qty_kg,
+                        COUNT(DISTINCT o.id) as order_count
+                    FROM client_orders o
+                    JOIN client_order_items i ON o.id = i.order_id
+                    JOIN colors c ON i.color_id = c.id
+                    WHERE o.status = 'pending'
+                    GROUP BY i.color_id, c.name, c.business_code
+                    ORDER BY total_qty_kg DESC
+                `)
+                return reply.send(result.rows)
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to retrieve order demand' })
+            } finally {
+                if (client) client.release()
+            }
+        }
+    })
 }

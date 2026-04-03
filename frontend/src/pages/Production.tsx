@@ -23,6 +23,8 @@ import {
   Box,
   BookOpen,
   User,
+  ShoppingBag,
+  ArrowRight
 } from "lucide-react";
 import { useUnitPreference, formatUnit, toDisplayValue, fromDisplayValue } from "../utils/units";
 
@@ -80,6 +82,14 @@ interface ActiveRun {
   started_at: string | null;
   operator: string | null;
   packaging?: { pack_size_kg: number; quantity_units: number }[];
+}
+
+interface ProductDemand {
+  color_id: number;
+  color_name: string;
+  business_code: string;
+  total_qty_kg: number;
+  order_count: number;
 }
 
 const ProgressIndicator = ({ 
@@ -142,6 +152,9 @@ export default function Production() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [showAllActive, setShowAllActive] = useState(false);
+  const [demand, setDemand] = useState<ProductDemand[]>([]);
+  const [isDemandLoading, setIsDemandLoading] = useState(true);
+  const [showAllDemand, setShowAllDemand] = useState(false);
 
   // Sorting State for History
   const [sortKey, setSortKey] = useState<"target" | "actual" | null>(null);
@@ -228,10 +241,23 @@ export default function Production() {
     }
   };
 
+  const fetchDemand = async () => {
+    setIsDemandLoading(true);
+    try {
+      const data = await apiRequest<ProductDemand[]>("/sales/orders/demand");
+      setDemand(data);
+    } catch (err) {
+      console.error("Failed to fetch demand", err);
+    } finally {
+      setIsDemandLoading(false);
+    }
+  };
+
   const fetchRuns = () => {
     fetchActiveRuns();
     fetchMetrics();
     fetchHistory();
+    fetchDemand();
   };
 
   // ── Update a run's status via PATCH ──
@@ -321,7 +347,7 @@ export default function Production() {
   }, []);
 
   useEffect(() => {
-    Promise.all([fetchColors(), fetchActiveRuns()]);
+    Promise.all([fetchColors(), fetchActiveRuns(), fetchDemand()]);
   }, []);
 
   useEffect(() => {
@@ -535,7 +561,6 @@ export default function Production() {
             />
           </div>
         </div>
-      </div>
 
       <div className="grid gap-8 md:grid-cols-3 md:items-start pt-2">
         <div className="md:col-span-1 space-y-6 md:sticky md:top-6">
@@ -558,6 +583,80 @@ export default function Production() {
         </div>
 
         <div className="md:col-span-2 space-y-10">
+          {/* Demand Overview */}
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-8">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-emerald-50/30">
+              <div className="flex items-center gap-3">
+                <ShoppingBag className="h-5 w-5 text-emerald-600" />
+                <h2 className="text-lg font-bold text-slate-800">Product Demand Overview</h2>
+                <span className="bg-emerald-100 text-emerald-700 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-emerald-200">
+                  {demand.length} Products Requested
+                </span>
+              </div>
+              {demand.length > 3 && (
+                <button 
+                  onClick={() => setShowAllDemand(!showAllDemand)}
+                  className="text-xs text-emerald-700 hover:text-emerald-900 font-bold tracking-wider uppercase bg-emerald-100 px-3 py-1 rounded-lg border border-emerald-200 transition-all hover:shadow-sm"
+                >
+                  {showAllDemand ? 'Show Less' : 'Show All Demand'}
+                </button>
+              )}
+            </div>
+            <div className="p-5">
+              {isDemandLoading ? (
+                <div className="p-8 text-center text-slate-400 flex flex-col items-center gap-2">
+                  <Loader2 className="h-6 w-6 animate-spin text-emerald-500" />
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Calculating demand...</p>
+                </div>
+              ) : demand.length === 0 ? (
+                <div className="p-12 text-center text-slate-400 border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50/30">
+                   <PackageCheck className="h-10 w-10 mx-auto mb-3 text-slate-200" />
+                   <p className="text-sm font-bold text-slate-600 uppercase tracking-wide">No Pending Client Orders</p>
+                   <p className="text-xs text-slate-400 mt-1">All orders are currently fulfilled or none are recorded.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {(showAllDemand ? demand : demand.slice(0, 4)).map((item) => (
+                    <div key={item.color_id} className="relative group bg-white p-4 rounded-xl border border-slate-100 hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-50/50 transition-all duration-300">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div 
+                            className="h-10 w-10 rounded-lg shadow-inner border" 
+                            style={{ backgroundColor: colors.find(c => c.id === item.color_id)?.color_code || '#cbd5e1' }}
+                          />
+                          <div>
+                            <h4 className="font-black text-slate-900 text-sm leading-tight">{item.color_name}</h4>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{item.business_code}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-0.5">{item.order_count} Active Order{item.order_count !== 1 ? 's' : ''}</div>
+                          <div className="text-xl font-black text-slate-900">{formatUnit(item.total_qty_kg, unitPref)}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between pt-3 border-t border-slate-50">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Needed</span>
+                        <button 
+                          onClick={() => {
+                            setSelectedColor(item.color_id);
+                            setIsModalOpen(true);
+                          }}
+                          className="flex items-center gap-1.5 text-[10px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 transition-colors"
+                        >
+                          Plan Batch <ArrowRight className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {demand.length > 0 && !showAllDemand && (
+                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-4 text-center italic">
+                  Showing top demand products based on pending orders
+                </p>
+              )}
+            </div>
+          </div>
           <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center gap-3">
