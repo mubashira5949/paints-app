@@ -130,7 +130,7 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 await client.query('COMMIT')
 
-                const fetchResult = await client.query(
+                const fetchResult = await fastify.db.query(
                     `SELECT 
                         c.id, c.name, c.color_code, c.business_code, c.hsn_code, c.tags, c.description, c.min_threshold_kg, c.created_at, c.updated_at,
                         COALESCE(json_agg(DISTINCT pt.name) FILTER (WHERE pt.name IS NOT NULL), '[]') as product_types,
