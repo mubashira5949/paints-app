@@ -561,6 +561,7 @@ export default function Production() {
             />
           </div>
         </div>
+      </div>
 
       <div className="grid gap-8 md:grid-cols-3 md:items-start pt-2">
         <div className="md:col-span-1 space-y-6 md:sticky md:top-6">
