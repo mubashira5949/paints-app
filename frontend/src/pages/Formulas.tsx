@@ -248,6 +248,7 @@ export default function Formulas() {
 
   const handleSaveColor = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isManager) return;
     try {
       if (editingColor) {
         const updated = await apiRequest<{ message: string; color: Color }>(`/colors/${editingColor.id}`, {
@@ -310,6 +311,7 @@ export default function Formulas() {
 
   const handleSaveFormula = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isManager) return;
     if (!selectedColor) return;
 
     const validResources = formulaForm.resources.filter(r => r.resource_id > 0 && r.quantity_required > 0);
@@ -456,28 +458,30 @@ export default function Formulas() {
               <Palette className="h-4 w-4 text-blue-500" />
               Colors
             </h2>
-            <button
-              onClick={() => {
-                setEditingColor(null);
-                setColorForm({ 
-                  name: "", 
-                  color_code: "#000000", 
-                  description: "", 
-                  business_code: "", 
-                  hsn_code: "", 
-                  tags: "",
-                  type_ids: [],
-                  series_ids: [],
-                  grade_ids: [],
-                  photo_dataUrl: ""
-                });
-                setIsColorModalOpen(true);
-              }}
-              className="p-1.5 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors"
-              title="Add New Color"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
+            {isManager && (
+              <button
+                onClick={() => {
+                  setEditingColor(null);
+                  setColorForm({ 
+                    name: "", 
+                    color_code: "#000000", 
+                    description: "", 
+                    business_code: "", 
+                    hsn_code: "", 
+                    tags: "",
+                    type_ids: [],
+                    series_ids: [],
+                    grade_ids: [],
+                    photo_dataUrl: ""
+                  });
+                  setIsColorModalOpen(true);
+                }}
+                className="p-1.5 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors"
+                title="Add New Color"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            )}
           </div>
 
           {/* Search bar */}
@@ -521,9 +525,11 @@ export default function Formulas() {
                     <div className="flex items-center justify-between">
                       <p className="text-[9px] text-slate-500 font-mono uppercase truncate">{color.business_code || 'No Code'}</p>
                       <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={(e) => openEditColor(e, color)} className="p-0.5 hover:bg-slate-200 rounded text-slate-500 hover:text-blue-600 transition-colors">
-                          <Edit className="h-3 w-3" />
-                        </button>
+                        {isManager && (
+                          <button onClick={(e) => openEditColor(e, color)} className="p-0.5 hover:bg-slate-200 rounded text-slate-500 hover:text-blue-600 transition-colors">
+                            <Edit className="h-3 w-3" />
+                          </button>
+                        )}
                         {isManager && (
                           <button onClick={(e) => handleDeleteColor(e, color.id)} className="p-0.5 hover:bg-slate-200 rounded text-slate-500 hover:text-red-600 transition-colors">
                             <Trash2 className="h-3 w-3" />
