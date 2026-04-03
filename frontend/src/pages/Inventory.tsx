@@ -17,15 +17,20 @@ interface InventoryItem {
   color: string;
   color_code: string;
   business_code: string;
-  series: string;
-  ink_series: string | null;
+  product_series: string[];
+  product_types: string[];
+  ink_grades: string[];
+  type_ids: number[];
+  series_ids: number[];
+  grade_ids: number[];
   hsn_code: string | null;
+  description: string | null;
   tags: string[] | null;
   min_threshold_kg: number;
   packDistribution: { size: string, units: number }[];
   units: number;
   mass: number;
-  status: 'healthy' | 'low' | 'critical';
+  status: 'healthy' | 'low';
 }
 
 interface InventorySummary {
@@ -47,11 +52,16 @@ export default function Inventory() {
 
   // Filter States
   const [searchTerm, setSearchTerm] = useState("");
+  const [rawMaterialSearch, setRawMaterialSearch] = useState("");
   const [filters, setFilters] = useState({
     status: "all",
     packSize: "all",
-    series: "all"
+    series: "all",
+    productType: "all"
   });
+
+  const [productTypeOptions, setProductTypeOptions] = useState<{id: number, name: string}[]>([]);
+  const [seriesOptions, setSeriesOptions] = useState<{id: number, name: string}[]>([]);
 
   const toggleRow = (id: number) => {
     setExpandedRowId(expandedRowId === id ? null : id);
@@ -84,9 +94,18 @@ export default function Inventory() {
       if (filters.status !== "all") params.append("status", filters.status);
       if (filters.series !== "all") params.append("series", filters.series);
       if (filters.packSize !== "all") params.append("packSize", filters.packSize);
+      if (filters.productType !== "all") params.append("productType", filters.productType);
 
       const response = await apiRequest<InventoryItem[]>(`/api/inventory?${params.toString()}`);
       setInventory(response);
+
+      // Fetch dynamic types for filter if not already fetched
+      if (productTypeOptions.length === 0) {
+        apiRequest<{id: number, name: string}[]>("/settings/product-types").then(setProductTypeOptions).catch(console.error);
+        // Load Ink Series options (LCS, STD, OPQ/JS - from ink_grades table)
+        apiRequest<{id: number, name: string}[]>("/settings/ink-grades").then(setSeriesOptions).catch(console.error);
+        // apiRequest<{id: number, name: string}[]>("/settings/product-series").then(setSeriesOptions).catch(console.error);
+      }
     } catch (err: any) {
       setError("Unable to load inventory. Please check server connection.");
     } finally {
@@ -106,8 +125,11 @@ export default function Inventory() {
     fetchAlerts();
   }, [searchTerm, filters]);
 
-  const activeSeries = Array.from(new Set(inventory.map(i => i.series).filter(Boolean)));
   const allPackSizes = Array.from(new Set(inventory.flatMap(i => i.packDistribution || []).map(p => parseFloat(p.size)))).sort((a, b) => a - b);
+
+  const filteredAlerts = rawMaterialSearch
+    ? alerts.filter(a => a.name.toLowerCase().includes(rawMaterialSearch.toLowerCase()))
+    : alerts;
 
   return (
     <div className="space-y-6">
@@ -175,16 +197,100 @@ export default function Inventory() {
         </div>
       </div>
 
+      {/* ── Search & Filter bar (above table) ── */}
+      <div className="rounded-xl border bg-white p-5 shadow-sm">
+        <div className="flex flex-col md:flex-row gap-4 items-end">
+          <div className="flex-1 w-full">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">Search Color</label>
+            <div className="relative">
+              <Search className="absolute left-4 top-3 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by name or code..."
+                className="w-full pl-11 pr-4 py-3 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="w-full md:w-36">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">Status</label>
+            <div className="relative">
+              <select
+                className="w-full pl-4 pr-10 py-3 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none transition-all"
+                value={filters.status}
+                onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+              >
+                <option value="all">All Status</option>
+                <option value="healthy">Healthy</option>
+                <option value="low">Low</option>
+                <option value="critical">Critical</option>
+              </select>
+              <ChevronDown className="absolute right-4 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
+            </div>
+          </div>
+          <div className="w-full md:w-40">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">Ink Series</label>
+            <div className="relative">
+              <select
+                className="w-full pl-4 pr-10 py-3 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none transition-all"
+                value={filters.series}
+                onChange={(e) => setFilters(prev => ({ ...prev, series: e.target.value }))}
+              >
+                <option value="all">All Series</option>
+                {seriesOptions.map(opt => (
+                  <option key={opt.id} value={opt.name}>{opt.name}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-4 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
+            </div>
+          </div>
+          <div className="w-full md:w-40">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">Product Type</label>
+            <div className="relative">
+              <select
+                className="w-full pl-4 pr-10 py-3 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none transition-all"
+                value={filters.productType}
+                onChange={(e) => setFilters(prev => ({ ...prev, productType: e.target.value }))}
+              >
+                <option value="all">All Types</option>
+                {productTypeOptions.map(pt => (
+                  <option key={pt.id} value={pt.name}>{pt.name}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-4 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
+            </div>
+          </div>
+
+          <div className="w-full md:w-40">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">Pack Size</label>
+            <div className="relative">
+              <select
+                className="w-full pl-4 pr-10 py-3 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none transition-all"
+                value={filters.packSize}
+                onChange={(e) => setFilters(prev => ({ ...prev, packSize: e.target.value }))}
+              >
+                <option value="all">All Sizes</option>
+                {allPackSizes.map(size => (
+                  <option key={size} value={size.toString()}>{size}{unitLabel(unitPref)}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-4 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
         <div className="p-5 border-b bg-slate-50/50 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-bold text-slate-900 uppercase tracking-tight">Inventory Table</h2>
               <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
-                {showAllInventory ? `Showing all ${inventory.length}` : `Showing ${Math.min(10, inventory.length)} of ${inventory.length}`}
+                {showAllInventory ? `Showing all ${inventory.length}` : `Showing ${Math.min(5, inventory.length)} of ${inventory.length}`}
               </span>
             </div>
-            {inventory.length > 10 && (
+            {inventory.length > 5 && (
               <button 
                 onClick={() => setShowAllInventory(!showAllInventory)}
                 className="text-xs text-blue-600 hover:text-blue-700 font-bold uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded border border-blue-100"
@@ -237,7 +343,7 @@ export default function Inventory() {
                   </td>
                 </tr>
               ) : (
-                (showAllInventory ? inventory : inventory.slice(0, 10)).map((item) => (
+              (showAllInventory ? inventory : inventory.slice(0, 5)).map((item) => (
                   <React.Fragment key={item.id}>
                     <tr
                       onClick={() => toggleRow(item.id)}
@@ -252,7 +358,7 @@ export default function Inventory() {
                               textShadow: '0px 1px 2px rgba(0,0,0,0.5)'
                             }}
                           >
-                            {item.status === 'critical' && "!"}
+                            {item.status === 'low' && "!"}
                           </div>
                           <div className="flex flex-col">
                              <span className="font-extrabold text-[15px] text-slate-900">
@@ -260,9 +366,9 @@ export default function Inventory() {
                             </span>
                             <div className="flex flex-wrap gap-1.5 text-[11px] text-slate-500 font-medium mt-0.5">
                               {item.business_code && <span>Code: {item.business_code}</span>}
-                              {item.business_code && item.series && <span>•</span>}
-                              {item.series && <span>Type: {item.series}</span>}
-                              {item.ink_series && <><span>•</span><span>Series: {item.ink_series}</span></>}
+                              {item.business_code && item.ink_grades.length > 0 && <span>•</span>}
+                              {item.ink_grades.length > 0 && <span>Series: {item.ink_grades.join(", ")}</span>}
+                              {item.product_types.length > 0 && <><span>•</span><span>Types: {item.product_types.join(", ")}</span></>}
                               {item.hsn_code && <><span>•</span><span>HSN: {item.hsn_code}</span></>}
                             </div>
                             {item.tags && item.tags.length > 0 && (
@@ -313,10 +419,10 @@ export default function Inventory() {
                             <span>Healthy</span>
                           </div>
                         )}
-                        {(item.status === 'low' || item.status === 'critical') && (
-                          <div className={`flex items-center justify-center gap-2 ${item.status === 'critical' ? 'text-red-600' : 'text-amber-600'} font-bold text-xs uppercase tracking-wide`}>
-                            {item.status === 'critical' ? <AlertCircle className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
-                            <span>{item.status === 'critical' ? 'Critical' : 'Low Stock'}</span>
+                        {item.status === 'low' && (
+                          <div className="flex items-center justify-center gap-2 text-amber-600 font-bold text-xs uppercase tracking-wide">
+                            <AlertTriangle className="h-5 w-5" />
+                            <span>Low Stock</span>
                           </div>
                         )}
                       </td>
@@ -353,14 +459,25 @@ export default function Inventory() {
                                  </div>
                                  <div className="flex justify-between py-1 border-b border-border/50">
                                    <span className="text-muted-foreground font-medium">Product Type</span>
-                                   <span className="font-semibold">{item.series || '—'}</span>
+                                   <span className="font-semibold">{item.product_types.length > 0 ? item.product_types.join(", ") : '—'}</span>
                                  </div>
                                  <div className="flex justify-between py-1 border-b border-border/50">
                                    <span className="text-muted-foreground font-medium">Ink Series</span>
-                                   <span className="font-semibold">{item.ink_series || '—'}</span>
+                                   <span className="font-semibold">{item.ink_grades.length > 0 ? item.ink_grades.join(", ") : '—'}</span>
+                                 </div>
+                                 {/* Ink Grade Hidden */}
+                                 {/* <div className="flex justify-between py-1 border-b border-border/50">
+                                   <span className="text-muted-foreground font-medium">Ink Grade</span>
+                                   <span className="font-semibold">{item.ink_grades.length > 0 ? item.ink_grades.join(", ") : '—'}</span>
+                                 </div> */}
+                                 <div className="py-1">
+                                   <span className="text-muted-foreground font-medium text-xs block mb-1">Product Description</span>
+                                   <p className="text-xs text-slate-600 italic">
+                                     {item.description || 'No description available.'}
+                                   </p>
                                  </div>
                                  {item.tags && item.tags.length > 0 && (
-                                   <div className="pt-1">
+                                   <div className="pt-2">
                                      <span className="text-muted-foreground font-medium text-xs block mb-1.5">Product Tags</span>
                                      <div className="flex flex-wrap gap-1.5">
                                        {item.tags.map((tag, i) => (
@@ -411,90 +528,43 @@ export default function Inventory() {
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-6 items-end bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-        <div className="flex-1 w-full">
-          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">Search Color</label>
-          <div className="relative">
-            <Search className="absolute left-4 top-3 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by name or code..."
-              className="w-full pl-11 pr-4 py-3 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-        </div>
-        <div className="w-full md:w-32">
-          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">Status</label>
-          <div className="relative">
-            <select
-              className="w-full pl-4 pr-10 py-3 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none transition-all"
-              value={filters.status}
-              onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-            >
-              <option value="all">All</option>
-              <option value="healthy">Healthy</option>
-              <option value="low">Low</option>
-              <option value="critical">Critical</option>
-            </select>
-            <ChevronDown className="absolute right-4 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
-          </div>
-        </div>
-        <div className="w-full md:w-40">
-          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">Pack Size</label>
-          <div className="relative">
-            <select
-              className="w-full pl-4 pr-10 py-3 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none transition-all"
-              value={filters.packSize}
-              onChange={(e) => setFilters(prev => ({ ...prev, packSize: e.target.value }))}
-            >
-              <option value="all">All Sizes</option>
-              {allPackSizes.map(size => (
-                <option key={size} value={size.toString()}>{size}{unitLabel(unitPref)}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-4 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
-          </div>
-        </div>
-        <div className="w-full md:w-32">
-          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">Product Type</label>
-          <div className="relative">
-            <select
-              className="w-full pl-4 pr-10 py-3 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none transition-all"
-              value={filters.series}
-              onChange={(e) => setFilters(prev => ({ ...prev, series: e.target.value }))}
-            >
-              <option value="all">All</option>
-              {activeSeries.map(series => (
-                <option key={series} value={series}>{series}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-4 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
-          </div>
-        </div>
-      </div>
+      {/* ── Old search/filter bar removed (moved above) ── */}
 
       {/* Raw Material alerts moved to bottom to follow "Ideal Layout" focus */}
       {alerts.length > 0 && (
         <div className="rounded-xl border bg-white p-0 overflow-hidden border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+        <div className="p-4 border-b bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-amber-500" />
                 <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Secondary Alerts: Raw Materials</h2>
               </div>
               <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
-                {showAllAlerts ? `Showing all ${alerts.length}` : `Showing ${Math.min(5, alerts.length)} of ${alerts.length}`}
+                {showAllAlerts ? `Showing all ${filteredAlerts.length}` : `Showing ${Math.min(5, filteredAlerts.length)} of ${filteredAlerts.length}`}
               </span>
             </div>
-            {alerts.length > 5 && (
-              <button 
-                onClick={() => setShowAllAlerts(!showAllAlerts)}
-                className="text-xs text-amber-600 hover:text-amber-700 font-bold uppercase tracking-wider bg-amber-50 px-2 py-0.5 rounded border border-amber-100"
-              >
-                {showAllAlerts ? 'View Less' : 'View All'}
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {/* Raw Material Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-2 h-3.5 w-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search raw material..."
+                  value={rawMaterialSearch}
+                  onChange={(e) => setRawMaterialSearch(e.target.value)}
+                  className="pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-400 transition-all bg-white w-48"
+                />
+              </div>
+              {filteredAlerts.length > 5 && (
+                <button 
+                  onClick={() => setShowAllAlerts(!showAllAlerts)}
+                  className="text-xs text-amber-600 hover:text-amber-700 font-bold uppercase tracking-wider bg-amber-50 px-2 py-0.5 rounded border border-amber-100 whitespace-nowrap"
+                >
+                  {showAllAlerts ? 'View Less' : 'View All'}
+                </button>
+              )}
+            </div>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -506,7 +576,7 @@ export default function Inventory() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {(showAllAlerts ? alerts : alerts.slice(0, 5)).map(alert => (
+                {(showAllAlerts ? filteredAlerts : filteredAlerts.slice(0, 5)).map(alert => (
                   <tr key={alert.id} className="hover:bg-amber-50/50 transition-colors">
                     <td className="p-4 px-6 font-extrabold text-slate-900">{alert.name}</td>
                     <td className="p-4 px-6">

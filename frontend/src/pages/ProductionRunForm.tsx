@@ -16,6 +16,10 @@ interface Color {
   id: number;
   name: string;
   business_code: string;
+  product_type?: string;
+  available_lcs?: boolean;
+  available_std?: boolean;
+  available_opq_js?: boolean;
 }
 
 interface Formula {
@@ -49,6 +53,7 @@ export default function ProductionRunForm() {
 
   // Form values
   const [selectedColor, setSelectedColor] = useState<number | "">("");
+  const [selectedInkSeries, setSelectedInkSeries] = useState<string>("");
   const [selectedFormula, setSelectedFormula] = useState<number | "">("");
   const [targetQty, setTargetQty] = useState<string>("");
   const [selectedOperator, setSelectedOperator] = useState<number | "">("");
@@ -132,6 +137,7 @@ export default function ProductionRunForm() {
           colorId: Number(selectedColor),
           targetQty: Number(targetQty),
           operatorId: Number(selectedOperator),
+          inkSeries: selectedInkSeries || null,
         },
       });
 
@@ -203,6 +209,7 @@ export default function ProductionRunForm() {
             onClick={() => {
               setSuccessRunId(null);
               setSelectedColor("");
+              setSelectedInkSeries("");
               setSelectedFormula("");
               setTargetQty("");
               setSelectedOperator("");
@@ -261,7 +268,9 @@ export default function ProductionRunForm() {
             <select
               value={selectedColor}
               onChange={(e) => {
-                setSelectedColor(e.target.value ? Number(e.target.value) : "");
+                const colorId = e.target.value ? Number(e.target.value) : "";
+                setSelectedColor(colorId);
+                setSelectedInkSeries("");
                 setSelectedFormula("");
               }}
               required
@@ -270,7 +279,7 @@ export default function ProductionRunForm() {
               <option value="">— Select Color —</option>
               {colors.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name} ({c.business_code})
+                  {c.name} ({c.business_code}) {c.product_type ? `[${c.product_type}]` : ""}
                 </option>
               ))}
             </select>
@@ -312,6 +321,37 @@ export default function ProductionRunForm() {
               <p className="text-xs text-amber-600">
                 No formulas found for this color.
               </p>
+            )}
+          </div>
+
+          {/* Ink Series Selection */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-slate-700">
+              Ink Series (Grade) <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={selectedInkSeries}
+              onChange={(e) => setSelectedInkSeries(e.target.value)}
+              disabled={!selectedColor}
+              required
+              className="w-full p-2.5 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm transition-shadow disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <option value="">— Select Series —</option>
+              {selectedColor &&
+                colors.find((c) => c.id === selectedColor)?.available_lcs && (
+                  <option value="LCS">LCS (Low Crocking Series)</option>
+                )}
+              {selectedColor &&
+                colors.find((c) => c.id === selectedColor)?.available_std && (
+                  <option value="STD">STD (Standard Series)</option>
+                )}
+              {selectedColor &&
+                colors.find((c) => c.id === selectedColor)?.available_opq_js && (
+                  <option value="JS">JS / OPQ (Opacity Series)</option>
+                )}
+            </select>
+            {!selectedColor && (
+              <p className="text-xs text-slate-400">Select a color to see available series.</p>
             )}
           </div>
         </div>
@@ -380,6 +420,7 @@ export default function ProductionRunForm() {
           disabled={
             isLoading ||
             !selectedColor ||
+            !selectedInkSeries ||
             !selectedFormula ||
             !targetQty ||
             !selectedOperator

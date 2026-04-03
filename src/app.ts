@@ -151,11 +151,17 @@ import salesModule from './modules/sales'
 fastify.register(salesModule, { prefix: '/sales' })
 
 import clientsModule from './modules/clients'
+import settingsModule from './modules/settings'
 
 /**
  * Register clients module with a '/clients' prefix.
  */
 fastify.register(clientsModule, { prefix: '/clients' })
+
+/**
+ * Register settings module with a '/settings' prefix.
+ */
+fastify.register(settingsModule, { prefix: '/settings' })
 
 /**
  * Root endpoint - returns basic API information.
@@ -258,6 +264,22 @@ const start = async () => {
 
             -- 7. Track who last updated a client
             ALTER TABLE clients ADD COLUMN IF NOT EXISTS updated_by INTEGER REFERENCES users(id);
+
+            -- 10. Dynamic Product Types
+            CREATE TABLE IF NOT EXISTS product_types (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(50) UNIQUE NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            -- Seed defaults if empty
+            INSERT INTO product_types (name) 
+            SELECT 'Water Based Ink' WHERE NOT EXISTS (SELECT 1 FROM product_types WHERE name = 'Water Based Ink');
+            INSERT INTO product_types (name) 
+            SELECT 'Oil Based Ink' WHERE NOT EXISTS (SELECT 1 FROM product_types WHERE name = 'Oil Based Ink');
+
+            -- 11. Add ink_series to production_runs table
+            ALTER TABLE production_runs ADD COLUMN IF NOT EXISTS ink_series VARCHAR(20);
         `)
 
         await fastify.listen({ port, host: '0.0.0.0' })

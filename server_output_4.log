@@ -1,0 +1,369 @@
+
+> paints-app@1.0.0 dev
+> tsx watch src/app.ts
+
+[dotenv@17.3.1] injecting env (7) from .env -- tip: ⚙️  override existing env vars with { override: true }
+(node:3030) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[08:45:58.156] INFO (3030): JWT: loaded EC keypair from environment variables
+[08:46:15.994] INFO (3030): Server listening at http://10.255.255.254:3000
+[08:46:15.994] INFO (3030): Server listening at http://127.0.0.1:3000
+[08:46:15.994] INFO (3030): Server listening at http://172.27.235.88:3000
+[08:46:24.762] INFO (3030): Database connected successfully
+[08:47:43.919] INFO (3030): incoming request
+    reqId: "req-1"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "localhost:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 37530
+    }
+[08:47:43.925] INFO (3030): request completed
+    reqId: "req-1"
+    res: {
+      "statusCode": 400
+    }
+    responseTime: 5.302519999444485
+[08:47:44.565] INFO (3030): incoming request
+    reqId: "req-2"
+    req: {
+      "method": "GET",
+      "url": "/settings/product-series",
+      "host": "localhost:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 37544
+    }
+[08:47:44.565] ERROR (3030): No Authorization was found in request.headers
+    err: {
+      "type": "FastifyError",
+      "message": "No Authorization was found in request.headers",
+      "stack":
+          FastifyError: No Authorization was found in request.headers
+              at lookupToken (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:278:13)
+              at _Request.requestVerify [as jwtVerify] (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:487:15)
+              at useGlobalOptions (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:455:31)
+              at new Promise (<anonymous>)
+              at _Request.requestVerify [as jwtVerify] (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:454:14)
+              at Object.authenticate (/home/mubashira/paints-app/src/plugins/jwt.ts:104:27)
+              at hookIterator (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:408:10)
+              at next (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:242:18)
+              at hookRunner (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:264:5)
+              at validationCompleted (/home/mubashira/paints-app/node_modules/fastify/lib/handle-request.js:117:5)
+      "code": "FST_JWT_NO_AUTHORIZATION_IN_HEADER",
+      "name": "FastifyError",
+      "statusCode": 401
+    }
+[08:47:44.568] INFO (3030): request completed
+    reqId: "req-2"
+    res: {
+      "statusCode": 401
+    }
+    responseTime: 3.149455999955535
+[08:49:13.801] INFO (3030): incoming request
+    reqId: "req-3"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "localhost:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 52612
+    }
+[08:49:13.803] INFO (3030): request completed
+    reqId: "req-3"
+    res: {
+      "statusCode": 400
+    }
+    responseTime: 1.4260000009089708
+[08:49:13.808] INFO (3030): incoming request
+    reqId: "req-4"
+    req: {
+      "method": "GET",
+      "url": "/settings/product-series",
+      "host": "localhost:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 52626
+    }
+[08:49:13.809] ERROR (3030): Authorization token is invalid: The token is malformed.
+    err: {
+      "type": "FastifyError",
+      "message": "Authorization token is invalid: The token is malformed.",
+      "stack":
+          FastifyError: Authorization token is invalid: The token is malformed.
+              at decode (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:236:15)
+              at _Request.requestVerify [as jwtVerify] (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:492:26)
+              at useGlobalOptions (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:455:31)
+              at new Promise (<anonymous>)
+              at _Request.requestVerify [as jwtVerify] (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:454:14)
+              at Object.authenticate (/home/mubashira/paints-app/src/plugins/jwt.ts:104:27)
+              at hookIterator (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:408:10)
+              at next (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:242:18)
+              at hookRunner (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:264:5)
+              at validationCompleted (/home/mubashira/paints-app/node_modules/fastify/lib/handle-request.js:117:5)
+      "code": "FST_JWT_AUTHORIZATION_TOKEN_INVALID",
+      "name": "FastifyError",
+      "statusCode": 401
+    }
+[08:49:13.809] INFO (3030): request completed
+    reqId: "req-4"
+    res: {
+      "statusCode": 401
+    }
+    responseTime: 1.1263489983975887
+[08:49:24.190] INFO (3030): incoming request
+    reqId: "req-5"
+    req: {
+      "method": "GET",
+      "url": "/settings/product-types",
+      "host": "localhost:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 51898
+    }
+[08:49:24.190] ERROR (3030): No Authorization was found in request.headers
+    err: {
+      "type": "FastifyError",
+      "message": "No Authorization was found in request.headers",
+      "stack":
+          FastifyError: No Authorization was found in request.headers
+              at lookupToken (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:278:13)
+              at _Request.requestVerify [as jwtVerify] (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:487:15)
+              at useGlobalOptions (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:455:31)
+              at new Promise (<anonymous>)
+              at _Request.requestVerify [as jwtVerify] (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:454:14)
+              at Object.authenticate (/home/mubashira/paints-app/src/plugins/jwt.ts:104:27)
+              at hookIterator (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:408:10)
+              at next (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:242:18)
+              at hookRunner (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:264:5)
+              at validationCompleted (/home/mubashira/paints-app/node_modules/fastify/lib/handle-request.js:117:5)
+      "code": "FST_JWT_NO_AUTHORIZATION_IN_HEADER",
+      "name": "FastifyError",
+      "statusCode": 401
+    }
+[08:49:24.191] INFO (3030): request completed
+    reqId: "req-5"
+    res: {
+      "statusCode": 401
+    }
+    responseTime: 1.2588470000773668
+[08:49:49.514] INFO (3030): incoming request
+    reqId: "req-6"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "localhost:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 45540
+    }
+[08:49:49.515] INFO (3030): request completed
+    reqId: "req-6"
+    res: {
+      "statusCode": 400
+    }
+    responseTime: 0.6820170003920794
+[08:49:49.520] INFO (3030): incoming request
+    reqId: "req-7"
+    req: {
+      "method": "GET",
+      "url": "/settings/product-series",
+      "host": "localhost:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 45552
+    }
+[08:49:49.520] ERROR (3030): Authorization token is invalid: The token is malformed.
+    err: {
+      "type": "FastifyError",
+      "message": "Authorization token is invalid: The token is malformed.",
+      "stack":
+          FastifyError: Authorization token is invalid: The token is malformed.
+              at decode (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:236:15)
+              at _Request.requestVerify [as jwtVerify] (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:492:26)
+              at useGlobalOptions (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:455:31)
+              at new Promise (<anonymous>)
+              at _Request.requestVerify [as jwtVerify] (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:454:14)
+              at Object.authenticate (/home/mubashira/paints-app/src/plugins/jwt.ts:104:27)
+              at hookIterator (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:408:10)
+              at next (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:242:18)
+              at hookRunner (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:264:5)
+              at validationCompleted (/home/mubashira/paints-app/node_modules/fastify/lib/handle-request.js:117:5)
+      "code": "FST_JWT_AUTHORIZATION_TOKEN_INVALID",
+      "name": "FastifyError",
+      "statusCode": 401
+    }
+[08:49:49.521] INFO (3030): request completed
+    reqId: "req-7"
+    res: {
+      "statusCode": 401
+    }
+    responseTime: 0.7519519999623299
+[08:50:23.204] INFO (3030): incoming request
+    reqId: "req-8"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 59284
+    }
+[08:50:23.205] INFO (3030): request completed
+    reqId: "req-8"
+    res: {
+      "statusCode": 400
+    }
+    responseTime: 0.7331499997526407
+[08:50:23.209] INFO (3030): incoming request
+    reqId: "req-9"
+    req: {
+      "method": "GET",
+      "url": "/settings/product-series",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 59300
+    }
+[08:50:23.209] ERROR (3030): Authorization token is invalid: The token is malformed.
+    err: {
+      "type": "FastifyError",
+      "message": "Authorization token is invalid: The token is malformed.",
+      "stack":
+          FastifyError: Authorization token is invalid: The token is malformed.
+              at decode (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:236:15)
+              at _Request.requestVerify [as jwtVerify] (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:492:26)
+              at useGlobalOptions (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:455:31)
+              at new Promise (<anonymous>)
+              at _Request.requestVerify [as jwtVerify] (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:454:14)
+              at Object.authenticate (/home/mubashira/paints-app/src/plugins/jwt.ts:104:27)
+              at hookIterator (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:408:10)
+              at next (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:242:18)
+              at hookRunner (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:264:5)
+              at validationCompleted (/home/mubashira/paints-app/node_modules/fastify/lib/handle-request.js:117:5)
+      "code": "FST_JWT_AUTHORIZATION_TOKEN_INVALID",
+      "name": "FastifyError",
+      "statusCode": 401
+    }
+[08:50:23.210] INFO (3030): request completed
+    reqId: "req-9"
+    res: {
+      "statusCode": 401
+    }
+    responseTime: 0.9733250010758638
+[08:51:42.718] INFO (3030): incoming request
+    reqId: "req-a"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "localhost:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 41824
+    }
+[08:51:42.720] ERROR (3030): Body is not valid JSON but content-type is set to 'application/json'
+    err: {
+      "type": "FastifyError",
+      "message": "Body is not valid JSON but content-type is set to 'application/json'",
+      "stack":
+          FastifyError: Body is not valid JSON but content-type is set to 'application/json'
+              at Parser.defaultJsonParser [as fn] (/home/mubashira/paints-app/node_modules/fastify/lib/content-type-parser.js:319:12)
+              at IncomingMessage.onEnd (/home/mubashira/paints-app/node_modules/fastify/lib/content-type-parser.js:299:27)
+              at IncomingMessage.emit (node:events:508:28)
+              at endReadableNT (node:internal/streams/readable:1701:12)
+              at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+      "code": "FST_ERR_CTP_INVALID_JSON_BODY",
+      "name": "FastifyError",
+      "statusCode": 400
+    }
+[08:51:42.722] INFO (3030): request completed
+    reqId: "req-a"
+    res: {
+      "statusCode": 400
+    }
+    responseTime: 4.261497000232339
+[08:51:42.729] INFO (3030): incoming request
+    reqId: "req-b"
+    req: {
+      "method": "GET",
+      "url": "/settings/product-types",
+      "host": "localhost:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 41836
+    }
+[08:51:42.729] ERROR (3030): No Authorization was found in request.headers
+    err: {
+      "type": "FastifyError",
+      "message": "No Authorization was found in request.headers",
+      "stack":
+          FastifyError: No Authorization was found in request.headers
+              at lookupToken (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:278:13)
+              at _Request.requestVerify [as jwtVerify] (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:487:15)
+              at useGlobalOptions (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:455:31)
+              at new Promise (<anonymous>)
+              at _Request.requestVerify [as jwtVerify] (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:454:14)
+              at Object.authenticate (/home/mubashira/paints-app/src/plugins/jwt.ts:104:27)
+              at hookIterator (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:408:10)
+              at next (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:242:18)
+              at hookRunner (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:264:5)
+              at validationCompleted (/home/mubashira/paints-app/node_modules/fastify/lib/handle-request.js:117:5)
+      "code": "FST_JWT_NO_AUTHORIZATION_IN_HEADER",
+      "name": "FastifyError",
+      "statusCode": 401
+    }
+[08:51:42.730] INFO (3030): request completed
+    reqId: "req-b"
+    res: {
+      "statusCode": 401
+    }
+    responseTime: 0.6056740004569292
+[08:52:25.270] INFO (3030): incoming request
+    reqId: "req-c"
+    req: {
+      "method": "POST",
+      "url": "/auth/login",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 38830
+    }
+[08:52:25.271] INFO (3030): request completed
+    reqId: "req-c"
+    res: {
+      "statusCode": 400
+    }
+    responseTime: 0.9441519994288683
+[08:52:25.278] INFO (3030): incoming request
+    reqId: "req-d"
+    req: {
+      "method": "GET",
+      "url": "/settings/product-series",
+      "host": "127.0.0.1:3000",
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 38844
+    }
+[08:52:25.279] ERROR (3030): Authorization token is invalid: The token is malformed.
+    err: {
+      "type": "FastifyError",
+      "message": "Authorization token is invalid: The token is malformed.",
+      "stack":
+          FastifyError: Authorization token is invalid: The token is malformed.
+              at decode (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:236:15)
+              at _Request.requestVerify [as jwtVerify] (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:492:26)
+              at useGlobalOptions (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:455:31)
+              at new Promise (<anonymous>)
+              at _Request.requestVerify [as jwtVerify] (/home/mubashira/paints-app/node_modules/@fastify/jwt/jwt.js:454:14)
+              at Object.authenticate (/home/mubashira/paints-app/src/plugins/jwt.ts:104:27)
+              at hookIterator (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:408:10)
+              at next (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:242:18)
+              at hookRunner (/home/mubashira/paints-app/node_modules/fastify/lib/hooks.js:264:5)
+              at validationCompleted (/home/mubashira/paints-app/node_modules/fastify/lib/handle-request.js:117:5)
+      "code": "FST_JWT_AUTHORIZATION_TOKEN_INVALID",
+      "name": "FastifyError",
+      "statusCode": 401
+    }
+[08:52:25.279] INFO (3030): request completed
+    reqId: "req-d"
+    res: {
+      "statusCode": 401
+    }
+    responseTime: 1.0684319995343685
