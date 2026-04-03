@@ -125,7 +125,7 @@ const ProgressIndicator = ({
         <div 
           className={`h-full ${colorMap[color]} transition-all duration-700 ease-in-out`}
           style={{ width: `${displayPercentage}%` }}
-        />
+        ></div>
       </div>
       {percentage > 100 && (
         <p className="text-[9px] text-orange-600 font-bold flex items-center gap-1">
@@ -562,6 +562,7 @@ export default function Production() {
           </div>
         </div>
       </div>
+
 
       <div className="grid gap-8 md:grid-cols-3 md:items-start pt-2">
         <div className="md:col-span-1 space-y-6 md:sticky md:top-6">
@@ -1118,7 +1119,7 @@ export default function Production() {
                                     step === 2 ? "Started" : 
                                     step === 3 ? "Produced" : "Packaged"
                                   }
-                                />
+                                ></div>
                               ))}
                             </div>
                           </td>
@@ -1220,7 +1221,7 @@ export default function Production() {
             className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" 
             onClick={() => setIsModalOpen(false)}
             aria-hidden="true"
-          />
+          ></div>
           <div className="bg-card w-full max-w-2xl rounded-xl shadow-2xl border overflow-hidden relative z-10 scale-in-center">
             <div className="flex items-center justify-between p-6 border-b">
               <h3 className="text-xl font-bold">New Production Run</h3>
@@ -1388,7 +1389,7 @@ export default function Production() {
             className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" 
             onClick={() => setIsEditModalOpen(false)}
             aria-hidden="true"
-          />
+          ></div>
           <div className="bg-card w-full max-w-md rounded-xl shadow-2xl border overflow-hidden relative z-10 scale-in-center">
             <div className="flex items-center justify-between p-6 border-b">
               <h3 className="text-xl font-bold">Edit Run: {editingRun.batchId}</h3>
@@ -1441,7 +1442,7 @@ export default function Production() {
             className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" 
             onClick={() => setIsCompletionModalOpen(false)}
             aria-hidden="true"
-          />
+          ></div>
           <div className="bg-card w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden relative z-10 scale-in-center">
             <div className="bg-gradient-to-r from-emerald-600 to-teal-700 p-6 flex items-center justify-between text-white">
               <div className="flex items-center gap-3">
