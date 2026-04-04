@@ -185,8 +185,7 @@ export default function Production() {
   // Completion Modal State
   const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
   const [completingRun, setCompletingRun] = useState<ActiveRun | null>(null);
-  const [actualYield, setActualYield] = useState<number>(0);
-  const [wasteKg, setWasteKg] = useState<number>(0);
+  const [actualYield, setActualYield] = useState<number | string>(0);
   const [isCompleting, setIsCompleting] = useState(false);
 
 
@@ -276,15 +275,19 @@ export default function Production() {
     }
   };
 
-  const handleConfirmCompletion = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleConfirmCompletion = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!completingRun) return;
 
     setIsCompleting(true);
     try {
+      const parsedYield = Number(actualYield) || 0;
+      const targetQtyDisplay = toDisplayValue(completingRun.targetQty, unitPref);
+      const computedWaste = Math.max(0, targetQtyDisplay - parsedYield);
+
       await updateStatus(completingRun.id, "completed", {
-        actual_quantity_kg: fromDisplayValue(actualYield, unitPref),
-        waste_kg: fromDisplayValue(wasteKg, unitPref)
+        actual_quantity_kg: fromDisplayValue(parsedYield, unitPref),
+        waste_kg: fromDisplayValue(computedWaste, unitPref)
       });
       setIsCompletionModalOpen(false);
       setCompletingRun(null);
@@ -854,7 +857,6 @@ export default function Production() {
                                       onClick={() => {
                                         setCompletingRun(run);
                                         setActualYield(toDisplayValue(run.targetQty, unitPref));
-                                        setWasteKg(0);
                                         setIsCompletionModalOpen(true);
                                       }}
                                       className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all shadow-sm active:scale-95"
@@ -1463,7 +1465,7 @@ export default function Production() {
               </button>
             </div>
             
-            <form onSubmit={handleConfirmCompletion} className="p-8 space-y-8">
+            <form onSubmit={(e) => e.preventDefault()} className="p-8 space-y-8">
               <div className="grid grid-cols-2 gap-8">
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
@@ -1478,7 +1480,7 @@ export default function Production() {
                       autoFocus
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-2xl font-black text-slate-800 focus:ring-4 focus:ring-emerald-500/20 focus:bg-white focus:border-emerald-500 outline-none transition-all pr-12"
                       value={actualYield}
-                      onChange={(e) => setActualYield(Number(e.target.value))}
+                      onChange={(e) => setActualYield(e.target.value === '' ? '' : Number(e.target.value))}
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{unitPref}</span>
                   </div>
@@ -1494,10 +1496,9 @@ export default function Production() {
                     <input
                       type="number"
                       step="0.01"
-                      required
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-2xl font-black text-orange-600 focus:ring-4 focus:ring-orange-500/10 focus:bg-white focus:border-orange-500 outline-none transition-all pr-12"
-                      value={wasteKg}
-                      onChange={(e) => setWasteKg(Number(e.target.value))}
+                      readOnly
+                      className="w-full rounded-xl border border-slate-200 bg-slate-100 px-4 py-4 text-2xl font-black text-slate-500 cursor-not-allowed outline-none transition-all pr-12"
+                      value={Math.max(0, toDisplayValue(completingRun.targetQty, unitPref) - (Number(actualYield) || 0)).toFixed(2)}
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{unitPref}</span>
                   </div>
@@ -1527,8 +1528,9 @@ export default function Production() {
                   Cancel
                 </button>
                 <button
-                  type="submit"
-                  disabled={isCompleting || actualYield < 0}
+                  type="button"
+                  onClick={() => handleConfirmCompletion()}
+                  disabled={isCompleting || actualYield === '' || Number(actualYield) < 0}
                   className="px-8 py-3 text-xs font-bold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2 transition-all shadow-lg shadow-emerald-200 active:scale-95 uppercase tracking-widest"
                 >
                   {isCompleting ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <CheckCircle2 className="w-4 h-4" />}
