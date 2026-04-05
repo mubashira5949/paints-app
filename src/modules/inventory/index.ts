@@ -36,7 +36,6 @@ export default async function (fastifyRaw: FastifyInstance) {
                             c.name AS color_name,
                             c.color_code,
                             c.business_code,
-                            c.series,
                             c.hsn_code,
                             c.tags,
                             c.min_threshold_kg,
@@ -50,7 +49,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                             ) FILTER (WHERE fs.quantity_units > 0) AS packs
                         FROM colors c
                         LEFT JOIN finished_stock fs ON c.id = fs.color_id
-                        GROUP BY c.id, c.name, c.color_code, c.business_code, c.series, c.hsn_code, c.tags, c.min_threshold_kg
+                        GROUP BY c.id, c.name, c.color_code, c.business_code, c.hsn_code, c.tags, c.min_threshold_kg
                     ),
                     last_production AS (
                         SELECT DISTINCT ON (color_id)
