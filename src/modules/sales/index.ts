@@ -183,6 +183,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                         c.name as color_name,
                         c.business_code,
                         SUM(i.quantity * i.pack_size_kg) as total_qty_kg,
+
                         COUNT(DISTINCT o.id) as order_count,
                         ARRAY_AGG(DISTINCT cl.name) as client_names
                     FROM client_orders o

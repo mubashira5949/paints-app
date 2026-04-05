@@ -160,7 +160,7 @@ export default function Production() {
   const [showAllDemand, setShowAllDemand] = useState(false);
 
   // Sorting State for History
-  const [sortKey, setSortKey] = useState<"target" | "actual" | null>(null);
+  const [sortKey, setSortKey] = useState<"target" | "actual" | "waste" | null>(null);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   // Filters State
@@ -300,7 +300,6 @@ export default function Production() {
       const parsedYield = Number(actualYield) || 0;
       const targetQtyDisplay = toDisplayValue(completingRun.targetQty, unitPref);
       const computedWaste = Math.max(0, targetQtyDisplay - parsedYield);
-
       await updateStatus(completingRun.id, "completed", {
         actual_quantity_kg: fromDisplayValue(parsedYield, unitPref),
         waste_kg: fromDisplayValue(computedWaste, unitPref),
@@ -627,7 +626,6 @@ export default function Production() {
         </div>
       </div>
 
-
       <div className="grid gap-8 md:grid-cols-3 md:items-start pt-2">
         <div className="md:col-span-1 space-y-6 md:sticky md:top-6">
           <div
@@ -692,7 +690,6 @@ export default function Production() {
                           />
                           <div>
                             <h4 className="font-black text-slate-900 text-sm leading-tight">{item.color_name}</h4>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{item.business_code}</p>
                           </div>
                         </div>
                         <div className="text-right">
