@@ -26,6 +26,11 @@ interface ClientOrder {
   created_at: string;
   logged_by: string;
   items: OrderItem[];
+  shipping_status: string | null;
+  payment_method: string | null;
+  payment_status: string | null;
+  return_status: string | null;
+  refund_status: string | null;
 }
 
 interface ShippingAddress {
@@ -71,11 +76,13 @@ export default function Orders() {
   const [selectedColorId, setSelectedColorId] = useState<number | "">("");
   const [selectedPackSize, setSelectedPackSize] = useState<number | "">("");
   const [quantity, setQuantity] = useState<number>(1);
+  const [colors, setColors] = useState<{id: number, name: string, business_code: string}[]>([]);
 
   useEffect(() => {
     fetchOrders();
     fetchClients();
     fetchInventory();
+    fetchColors();
   }, []);
 
   const fetchOrders = async () => {
@@ -108,8 +115,23 @@ export default function Orders() {
     }
   };
 
+  const fetchColors = async () => {
+    try {
+      const res = await apiRequest<{id: number, name: string, business_code: string}[]>("/colors");
+      setColors(res);
+    } catch (err) {
+      console.error("Failed to fetch colors", err);
+    }
+  };
+
   const selectedClient = clients.find(c => c.id === Number(selectedClientId));
   const selectedProduct = inventory.find(i => i.color_id === Number(selectedColorId));
+  
+  const defaultPackSizesStr = localStorage.getItem("default_packaging_sizes") || "0.5kg, 1kg, 5kg, 10kg, 20kg";
+  const defaultPackSizes = defaultPackSizesStr
+    .split(",")
+    .map(s => parseFloat(s.replace(/kg/g, "").trim()))
+    .filter(n => !isNaN(n));
 
   const resetModal = () => {
     setSelectedClientId(""); setSelectedShippingId(""); setNotes("");
@@ -140,6 +162,18 @@ export default function Orders() {
     }
   };
 
+  const updateOrderStatus = async (orderId: number, updates: any) => {
+    try {
+      await apiRequest(`/sales/orders/${orderId}/status`, {
+        method: "PUT",
+        body: updates
+      });
+      fetchOrders();
+    } catch (err: any) {
+      alert(err.message || "Failed to update status");
+    }
+  };
+
   const handleAddItem = () => {
     if (!selectedColorId || !selectedPackSize || quantity <= 0) return;
     const existingIndex = newOrderItems.findIndex(i => i.colorId === Number(selectedColorId) && i.packSizeKg === Number(selectedPackSize));
@@ -150,7 +184,29 @@ export default function Orders() {
     } else {
       setNewOrderItems([...newOrderItems, { colorId: Number(selectedColorId), packSizeKg: Number(selectedPackSize), quantity }]);
     }
-    setSelectedColorId(""); setSelectedPackSize(""); setQuantity(1);
+    // UX: Do not reset selectedColorId so the user can easily add another pack size for the same color
+    setSelectedPackSize(""); 
+    setQuantity(1);
+  };
+
+  const isOrderInStock = (order: ClientOrder) => {
+    for (const item of order.items) {
+      const invItem = inventory.find(i => i.color_id === item.color_id);
+      if (!invItem) return false;
+      const invPack = invItem.packs?.find(p => p.pack_size_kg === item.pack_size_kg);
+      if (!invPack || invPack.quantity_units < item.quantity) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const getStockAvailability = (cId: number | "", pSize: number | "") => {
+    if (!cId || !pSize) return null;
+    const invItem = inventory.find(i => i.color_id === Number(cId));
+    if (!invItem) return 0;
+    const invPack = invItem.packs?.find(p => p.pack_size_kg === Number(pSize));
+    return invPack ? invPack.quantity_units : 0;
   };
 
   const filtered = orders.filter(o =>
@@ -223,11 +279,12 @@ export default function Orders() {
                     </div>
                   </div>
                   <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest border shrink-0 ${
-                    o.status === 'pending' ? 'bg-orange-50 text-orange-700 border-orange-100' :
+                    ['pending'].includes(o.status) ? 'bg-red-50 text-red-700 border-red-100' :
+                    ['in_progress'].includes(o.status) || (!['fulfilled'].includes(o.status) && (o.shipping_status === 'packed' || o.shipping_status === 'shipped' || o.return_status)) ? 'bg-amber-50 text-amber-700 border-amber-100' :
                     o.status === 'fulfilled' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
                     'bg-slate-100 text-slate-600 border-slate-200'
                   }`}>
-                    {o.status}
+                    {o.status === 'fulfilled' ? 'Completed' : o.status === 'pending' ? 'Remaining' : 'In-Progress'}
                   </span>
                 </div>
 
@@ -264,9 +321,69 @@ export default function Orders() {
                   </div>
                 </div>
 
-                <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/80 text-[10px] font-bold text-slate-400 flex items-center justify-between uppercase tracking-widest">
-                  <span>By: {o.logged_by || 'System'}</span>
-                  <span>{o.items.length} item{o.items.length !== 1 ? 's' : ''}</span>
+                <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex gap-2 text-[10px] uppercase font-bold tracking-widest text-slate-500">
+                      {o.shipping_status && <span>Ship: {o.shipping_status.replace(/_/g, ' ')}</span>}
+                      {o.return_status && <span className="text-red-500 bg-red-100/50 px-1 rounded">Ret: {o.return_status.replace(/_/g, ' ')}</span>}
+                      {o.refund_status && <span className="text-amber-600">Ref: {o.refund_status.replace(/_/g, ' ')}</span>}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {/* Shipping Flow */}
+                      {(!o.shipping_status || o.shipping_status === 'pending') && (
+                        isOrderInStock(o) ? (
+                          <button onClick={() => updateOrderStatus(o.id, { shipping_status: 'packed', status: 'in_progress' })} className="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm">
+                            Pack Order
+                          </button>
+                        ) : (
+                          <div className="flex gap-2 items-center">
+                            <span className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-md text-[10px] uppercase font-black tracking-wider shadow-sm cursor-not-allowed border border-slate-200">
+                              Out of Stock
+                            </span>
+                            <a href="/production" className="px-3 py-1.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm inline-flex items-center">
+                              Create Colour (Production)
+                            </a>
+                          </div>
+                        )
+                      )}
+                      {o.shipping_status === 'packed' && (
+                        <button onClick={() => updateOrderStatus(o.id, { shipping_status: 'shipped' })} className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm">
+                          Ship Order (Left to ship)
+                        </button>
+                      )}
+                      {o.shipping_status === 'shipped' && (
+                        <button onClick={() => updateOrderStatus(o.id, { shipping_status: 'delivered' })} className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm">
+                          Mark Delivered
+                        </button>
+                      )}
+
+                      {/* Returns Flow */}
+                      {(o.shipping_status === 'delivered' && !o.return_status && o.refund_status !== 'refund_successfully') && (
+                        <button onClick={() => updateOrderStatus(o.id, { return_status: 'pick_up_order', status: 'in_progress' })} className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm">
+                          Initiate Return
+                        </button>
+                      )}
+                      {o.return_status === 'pick_up_order' && (
+                        <button onClick={() => updateOrderStatus(o.id, { return_status: 'on_the_way' })} className="px-3 py-1.5 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm">
+                          Pick Up (On the way)
+                        </button>
+                      )}
+                      {o.return_status === 'on_the_way' && (
+                        <button onClick={() => updateOrderStatus(o.id, { return_status: 'delivered_to_warehouse', refund_status: 'initiated' })} className="px-3 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm">
+                          Deliver to Warehouse
+                        </button>
+                      )}
+                      {o.refund_status === 'initiated' && (
+                        <button onClick={() => updateOrderStatus(o.id, { refund_status: 'refund_successfully' })} className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm">
+                          Complete Refund
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-[9px] font-bold text-slate-300 uppercase tracking-widest text-right">
+                    Has {o.items.length} item{o.items.length !== 1 ? 's' : ''}
+                  </div>
                 </div>
               </div>
             ))
@@ -370,8 +487,8 @@ export default function Orders() {
                         className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
                       >
                         <option value="">-- Select Product --</option>
-                        {inventory.map(i => (
-                          <option key={i.color_id} value={i.color_id}>{i.color_name} ({i.business_code})</option>
+                        {colors.map(c => (
+                          <option key={c.id} value={c.id}>{c.name} ({c.business_code})</option>
                         ))}
                       </select>
                     </div>
@@ -384,16 +501,9 @@ export default function Orders() {
                         className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none disabled:opacity-50"
                       >
                         <option value="">-- Size --</option>
-                        {(selectedProduct?.packs || []).map(p => (
-                          <option key={p.pack_size_kg} value={p.pack_size_kg}>{p.pack_size_kg}kg</option>
+                        {defaultPackSizes.map(size => (
+                          <option key={size} value={size}>{size}kg</option>
                         ))}
-                        {(!selectedProduct?.packs || selectedProduct.packs.length === 0) && selectedColorId && (
-                          <>
-                            <option value="1">1kg</option>
-                            <option value="5">5kg</option>
-                            <option value="20">20kg</option>
-                          </>
-                        )}
                       </select>
                     </div>
                     <div className="w-full md:w-24">
@@ -404,6 +514,12 @@ export default function Orders() {
                         className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
                       />
                     </div>
+                    <div className="w-full md:w-32">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Total kg</label>
+                      <div className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-indigo-50/50 text-indigo-700 text-sm font-black flex items-center h-[38px]">
+                        {selectedPackSize && quantity > 0 ? `${Number(selectedPackSize) * quantity}kg` : "0kg"}
+                      </div>
+                    </div>
                     <button
                       type="button" onClick={handleAddItem}
                       disabled={!selectedColorId || !selectedPackSize || quantity <= 0}
@@ -412,6 +528,28 @@ export default function Orders() {
                       Add
                     </button>
                   </div>
+                  {/* Realtime Stock Checker */}
+                  {selectedColorId && selectedPackSize && (
+                    <div className="mt-4 pt-3 border-t border-blue-100 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-500 uppercase tracking-widest text-[10px]">Current Stock:</span>
+                        <span className="font-black text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-sm">
+                          {getStockAvailability(selectedColorId, selectedPackSize)} Units
+                        </span>
+                      </div>
+                      <div>
+                        {getStockAvailability(selectedColorId, selectedPackSize)! >= quantity ? (
+                          <span className="text-emerald-600 font-bold flex items-center gap-1.5 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-100">
+                            Available in Finished Stock (Ready to Pack)
+                          </span>
+                        ) : (
+                          <span className="text-orange-600 font-bold flex items-center gap-1.5 bg-orange-50 px-2.5 py-1 rounded-md border border-orange-100">
+                            Deficit of {quantity - getStockAvailability(selectedColorId, selectedPackSize)!} units (Will queue Production Demand)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Added items */}
@@ -423,18 +561,27 @@ export default function Orders() {
                           <th className="px-4 py-2">Product</th>
                           <th className="px-4 py-2">Size</th>
                           <th className="px-4 py-2 text-center">Qty</th>
+                          <th className="px-4 py-2 text-center text-indigo-600">Total Target</th>
                           <th className="px-4 py-2" />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
                         {newOrderItems.map((item, idx) => {
-                          const color = inventory.find(i => i.color_id === item.colorId);
+                          const color = colors.find(c => c.id === item.colorId);
+                          const avail = getStockAvailability(item.colorId, item.packSizeKg) || 0;
+                          const inStock = avail >= item.quantity;
                           return (
                             <tr key={idx} className="hover:bg-slate-50/50">
-                              <td className="px-4 py-3 font-bold text-slate-800">{color?.color_name}</td>
+                              <td className="px-4 py-3 font-bold text-slate-800">
+                                {color?.name}
+                                {!inStock && <span className="ml-2 mt-1 inline-block text-[8px] font-black uppercase tracking-widest bg-orange-100 text-orange-700 px-1.5 py-0.5 border border-orange-200 rounded">Needs Prod</span>}
+                              </td>
                               <td className="px-4 py-3 font-medium text-slate-600">{item.packSizeKg}kg</td>
                               <td className="px-4 py-3 text-center text-blue-700 font-black">
                                 <span className="bg-blue-50 px-2 py-0.5 rounded">{item.quantity}</span>
+                              </td>
+                              <td className="px-4 py-3 text-center font-black text-indigo-700">
+                                {item.packSizeKg * item.quantity}kg
                               </td>
                               <td className="px-4 py-3 text-right">
                                 <button type="button" onClick={() => setNewOrderItems(newOrderItems.filter((_, i) => i !== idx))}

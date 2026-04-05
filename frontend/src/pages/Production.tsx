@@ -93,6 +93,7 @@ interface ProductDemand {
   total_qty_kg: number;
   order_count: number;
   client_names?: string[];
+  required_packs?: { pack_size_kg: number, quantity: number }[];
 }
 
 const ProgressIndicator = ({ 
@@ -698,6 +699,15 @@ export default function Production() {
                           {item.client_names && item.client_names.length > 0 && (
                             <div className="text-[9px] font-bold text-slate-500 mt-1">
                               For: {item.client_names.join(", ")}
+                            </div>
+                          )}
+                          {item.required_packs && item.required_packs.length > 0 && (
+                            <div className="text-[10px] font-bold text-indigo-600 mt-2 flex flex-wrap gap-1 justify-end">
+                              {item.required_packs.map((p, idx) => (
+                                <span key={idx} className="bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded shadow-sm">
+                                  {p.quantity}x {p.pack_size_kg}kg
+                                </span>
+                              ))}
                             </div>
                           )}
                         </div>
