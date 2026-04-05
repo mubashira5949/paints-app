@@ -284,6 +284,9 @@ const start = async () => {
 
                         -- 11. Add ink_series to production_runs table
                         ALTER TABLE production_runs ADD COLUMN IF NOT EXISTS ink_series VARCHAR(20);
+
+                        -- 12. Add loss_reason to production_runs for yield documentation
+                        ALTER TABLE production_runs ADD COLUMN IF NOT EXISTS loss_reason TEXT;
                     `)
                     return;
                 } catch (err) {

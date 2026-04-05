@@ -28,7 +28,13 @@ export default async function (fastifyRaw: FastifyInstance) {
         colorId: Type.Integer(),
         targetQty: Type.Number({ exclusiveMinimum: 0 }),
         operatorId: Type.Integer(),
-        inkSeries: Type.Optional(Type.String())
+        inkSeries: Type.Optional(Type.String()),
+        actualResources: Type.Optional(Type.Array(
+            Type.Object({
+                resourceId: Type.Integer(),
+                quantity: Type.Number({ exclusiveMinimum: 0 })
+            })
+        ))
     })
 
     const UpdateStatusSchema = Type.Object({
@@ -40,7 +46,8 @@ export default async function (fastifyRaw: FastifyInstance) {
             Type.Literal('packaging')
         ]),
         actual_quantity_kg: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
-        waste_kg: Type.Optional(Type.Number({ minimum: 0 }))
+        waste_kg: Type.Optional(Type.Number({ minimum: 0 })),
+        loss_reason: Type.Optional(Type.String())
     })
 
     const RunIdParamSchema = Type.Object({
@@ -50,7 +57,13 @@ export default async function (fastifyRaw: FastifyInstance) {
     const EditRunSchema = Type.Object({
         formulaId: Type.Optional(Type.Integer()),
         targetQty: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
-        operatorId: Type.Optional(Type.Integer())
+        operatorId: Type.Optional(Type.Integer()),
+        actualResources: Type.Optional(Type.Array(
+            Type.Object({
+                resourceId: Type.Integer(),
+                quantity: Type.Number({ exclusiveMinimum: 0 })
+            })
+        ))
     })
 
     const PackagingDetailsSchema = Type.Object({
@@ -90,8 +103,11 @@ export default async function (fastifyRaw: FastifyInstance) {
             try {
                 // 1. Active Runs — anything not completed or packaging
                 const activeRunsRes = await fastify.db.query(
-                    `SELECT COUNT(*) AS count FROM production_runs
-                     WHERE status NOT IN ('completed', 'packaging')`
+                    `SELECT COUNT(*) AS count FROM production_runs pr
+                     WHERE pr.status IN ('planned', 'running', 'paused')
+                        OR (pr.status IN ('completed', 'packaging') 
+                            AND (SELECT COALESCE(SUM(quantity_kg), 0) FROM finished_stock_transactions WHERE reference_id = pr.id AND transaction_type = 'production_entry') < (COALESCE(pr.actual_quantity_kg, pr.planned_quantity_kg) - 0.1)
+                        )`
                 )
                 const activeRuns = parseInt(activeRunsRes.rows[0].count, 10)
 
@@ -156,6 +172,8 @@ export default async function (fastifyRaw: FastifyInstance) {
                         pr.status,
                         pr.planned_quantity_kg,
                         pr.actual_quantity_kg,
+                        pr.waste_kg as "wasteQty",
+                        pr.loss_reason as "lossReason",
                         (COALESCE(pr.actual_quantity_kg, pr.planned_quantity_kg)
                          - pr.planned_quantity_kg) AS variance,
                         pr.started_at,
@@ -241,6 +259,8 @@ export default async function (fastifyRaw: FastifyInstance) {
                         pr.status,
                         pr.planned_quantity_kg,
                         pr.actual_quantity_kg,
+                        pr.waste_kg,
+                        pr.loss_reason,
                         (COALESCE(pr.actual_quantity_kg, pr.planned_quantity_kg)
                          - pr.planned_quantity_kg) AS variance,
                         pr.started_at,
@@ -425,7 +445,14 @@ export default async function (fastifyRaw: FastifyInstance) {
                     JOIN formulas r ON pr.formula_id = r.id
                     JOIN colors c ON r.color_id = c.id
                     LEFT JOIN users u ON pr.created_by = u.id
-                    WHERE pr.status NOT IN ('completed')
+                    WHERE pr.status IN ('planned', 'running', 'paused', 'completed', 'packaging')
+                    AND (
+                        pr.status IN ('planned', 'running', 'paused')
+                        OR (
+                            pr.status IN ('completed', 'packaging')
+                            AND (SELECT COALESCE(SUM(quantity_kg), 0) FROM finished_stock_transactions WHERE reference_id = pr.id AND transaction_type = 'production_entry') < (COALESCE(pr.actual_quantity_kg, pr.planned_quantity_kg) - 0.1)
+                        )
+                    )
                     ORDER BY pr.created_at DESC
                 `)
                 return reply.send(result.rows)
@@ -451,7 +478,7 @@ export default async function (fastifyRaw: FastifyInstance) {
         },
         handler: async (request, reply) => {
             const { id } = request.params
-            const { status, actual_quantity_kg, waste_kg } = request.body
+            const { status, actual_quantity_kg, waste_kg, loss_reason } = request.body
 
             try {
                 // Fetch current status
@@ -507,6 +534,10 @@ export default async function (fastifyRaw: FastifyInstance) {
                             extraFields += `, waste_kg = $${paramIdx++}`
                             queryParams.push(waste_kg)
                         }
+                        if (loss_reason !== undefined) {
+                            extraFields += `, loss_reason = $${paramIdx++}`
+                            queryParams.push(loss_reason)
+                        }
                     }
 
                     await client.query(
@@ -514,15 +545,15 @@ export default async function (fastifyRaw: FastifyInstance) {
                         queryParams
                     )
 
-                    // If transitioning to completed, populate actuals if they don't exist
+                    // Transitioning to 'completed': finalize actuals & deduct stock
                     if (status === 'completed') {
-                        const actualsCheck = await client.query(
+                        // 1. Ensure actuals exist (auto-populate if nothing provided during planning/running)
+                        const currentActuals = await client.query(
                             'SELECT id FROM production_resource_actuals WHERE production_run_id = $1',
                             [id]
                         )
 
-                        if (actualsCheck.rows.length === 0) {
-                            // Fetch run details to get formula and quantity
+                        if (currentActuals.rows.length === 0) {
                             const runDetails = await client.query(
                                 `SELECT pr.formula_id, pr.planned_quantity_kg, pr.actual_quantity_kg, r.batch_size_kg 
                                  FROM production_runs pr 
@@ -530,10 +561,8 @@ export default async function (fastifyRaw: FastifyInstance) {
                                  WHERE pr.id = $1`,
                                 [id]
                             )
-                            
                             if (runDetails.rows.length > 0) {
                                 const { formula_id, planned_quantity_kg, actual_quantity_kg: currentActual, batch_size_kg } = runDetails.rows[0]
-                                // Use the newly provided actual if available, else planned
                                 const effectiveActual = actual_quantity_kg ?? currentActual ?? planned_quantity_kg
                                 const scaleFactor = effectiveActual / batch_size_kg
 
@@ -544,21 +573,55 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                                 for (const res of formulaResources.rows) {
                                     const expectedQty = res.quantity_required * scaleFactor
-                                    // Assume actual = expected for default transition
                                     await client.query(
                                         `INSERT INTO production_resource_actuals 
                                          (production_run_id, resource_id, actual_quantity_used, expected_quantity, variance, variance_flag)
                                          VALUES ($1, $2, $3, $4, 0, false)`,
                                         [id, res.resource_id, expectedQty, expectedQty]
                                     )
-                                    
-                                    // Also deduct stock
-                                    await client.query(
-                                        `INSERT INTO resource_stock_transactions (resource_id, transaction_type, quantity, reference_id, notes)
-                                         VALUES ($1, 'production_usage', $2, $3, 'Consumed in Production Run')`,
-                                        [res.resource_id, -expectedQty, id]
-                                    )
                                 }
+                            }
+                        }
+
+                        // 2. Perform Stock Deduction (if not already done)
+                        // This applies to both auto-populated and manually-edited actuals.
+                        const stockCheck = await client.query(
+                            `SELECT id FROM resource_stock_transactions WHERE reference_id = $1 AND transaction_type = 'production_usage'`,
+                            [id]
+                        )
+ 
+                        if (stockCheck.rows.length === 0) {
+                            const finalActuals = await client.query(
+                                `SELECT ra.resource_id, ra.actual_quantity_used, r.name, r.current_stock
+                                 FROM production_resource_actuals ra
+                                 JOIN resources r ON ra.resource_id = r.id
+                                 WHERE ra.production_run_id = $1`,
+                                [id]
+                            )
+ 
+                            // Pre-check for stock deficits to avoid generic DB constraint errors
+                            const shortages: string[] = []
+                            for (const act of finalActuals.rows) {
+                                const currentStock = parseFloat(act.current_stock || '0')
+                                const neededStock = parseFloat(act.actual_quantity_used || '0')
+                                
+                                // If current_stock is less than what we need to deduct
+                                if (currentStock < neededStock) {
+                                    const missing = (neededStock - currentStock).toFixed(2)
+                                    shortages.push(`${act.name} (Short ${missing} kg)`)
+                                }
+                            }
+ 
+                            if (shortages.length > 0) {
+                                throw new Error(`Insufficient stock for: ${shortages.join(', ')}`)
+                            }
+ 
+                            for (const act of finalActuals.rows) {
+                                await client.query(
+                                    `INSERT INTO resource_stock_transactions (resource_id, transaction_type, quantity, reference_id, notes)
+                                     VALUES ($1, 'production_usage', $2, $3, 'Consumed in Production Run')`,
+                                    [act.resource_id, -act.actual_quantity_used, id]
+                                )
                             }
                         }
                     }
@@ -576,11 +639,11 @@ export default async function (fastifyRaw: FastifyInstance) {
                     production_run_id: id,
                     status
                 })
-            } catch (err) {
+            } catch (err: any) {
                 fastify.log.error(err)
                 return reply.status(500).send({
                     error: 'Internal Server Error',
-                    message: 'Failed to update production run status'
+                    message: `Failed to update production run status: ${err.message}`
                 })
             }
         }
@@ -599,7 +662,7 @@ export default async function (fastifyRaw: FastifyInstance) {
         },
         handler: async (request, reply) => {
             const { id } = request.params
-            const { formulaId, targetQty, operatorId } = request.body
+            const { formulaId, targetQty, operatorId, actualResources } = request.body
 
             try {
                 // Fetch current status
@@ -663,6 +726,54 @@ export default async function (fastifyRaw: FastifyInstance) {
                     )
                 }
 
+                // Handle resource updates if provided
+                if (actualResources) {
+                    const client = await fastify.db.connect()
+                    try {
+                        await client.query('BEGIN')
+                        
+                        // Scale formula to targetQty to get 'expected' quantities for variance tracking
+                        const runRes = await client.query(
+                            'SELECT formula_id, planned_quantity_kg FROM production_runs WHERE id = $1',
+                            [id]
+                        )
+                        const { formula_id, planned_quantity_kg } = runRes.rows[0]
+                        const formulaRes = await client.query('SELECT batch_size_kg FROM formulas WHERE id = $1', [formula_id])
+                        const scaleFactor = planned_quantity_kg / formulaRes.rows[0].batch_size_kg
+
+                        for (const act of actualResources) {
+                            const erRes = await client.query(
+                                'SELECT quantity_required FROM formula_resources WHERE formula_id = $1 AND resource_id = $2',
+                                [formula_id, act.resourceId]
+                            )
+                            const expectedQty = erRes.rows.length > 0 ? (erRes.rows[0].quantity_required * scaleFactor) : 0
+                            const variance = act.quantity - expectedQty
+                            const varianceFlag = expectedQty > 0 
+                                ? (Math.abs(variance / expectedQty) > 0.05) 
+                                : (variance !== 0);
+
+                            await client.query(
+                                `INSERT INTO production_resource_actuals 
+                                 (production_run_id, resource_id, actual_quantity_used, expected_quantity, variance, variance_flag)
+                                 VALUES ($1, $2, $3, $4, $5, $6)
+                                 ON CONFLICT (production_run_id, resource_id) 
+                                 DO UPDATE SET 
+                                    actual_quantity_used = EXCLUDED.actual_quantity_used,
+                                    expected_quantity = EXCLUDED.expected_quantity,
+                                    variance = EXCLUDED.variance,
+                                    variance_flag = EXCLUDED.variance_flag`,
+                                [id, act.resourceId, act.quantity, expectedQty, variance, varianceFlag]
+                            )
+                        }
+                        await client.query('COMMIT')
+                    } catch (err) {
+                        await client.query('ROLLBACK')
+                        throw err
+                    } finally {
+                        client.release()
+                    }
+                }
+
                 return reply.send({
                     message: 'Production run updated successfully',
                     production_run_id: id
@@ -687,7 +798,11 @@ export default async function (fastifyRaw: FastifyInstance) {
             try {
                 // 1. Active Runs
                 const activeRunsRes = await fastify.db.query(
-                    `SELECT COUNT(*) as count FROM production_runs WHERE status != 'completed'`
+                    `SELECT COUNT(*) as count FROM production_runs pr 
+                     WHERE pr.status IN ('planned', 'running', 'paused')
+                        OR (pr.status IN ('completed', 'packaging') 
+                            AND (SELECT COALESCE(SUM(quantity_kg), 0) FROM finished_stock_transactions WHERE reference_id = pr.id AND transaction_type = 'production_entry') < (COALESCE(pr.actual_quantity_kg, pr.planned_quantity_kg) - 0.1)
+                        )`
                 )
                 const activeRuns = parseInt(activeRunsRes.rows[0].count, 10)
 
@@ -885,7 +1000,7 @@ export default async function (fastifyRaw: FastifyInstance) {
             body: PlanProductionRunSchema
         },
         handler: async (request, reply) => {
-            const { formulaId, colorId, targetQty, operatorId, inkSeries } = request.body
+            const { formulaId, colorId, targetQty, operatorId, inkSeries, actualResources } = request.body
 
             try {
                 // 1. Validate the formula exists and belongs to the specified color
@@ -927,21 +1042,31 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 const runId = runResult.rows[0].id
 
-                // 4. Fetch expected resources, scaled to the requested targetQty
-                const resourcesResult = await fastify.db.query(
-                    `SELECT rr.resource_id, r.name, r.unit,
-                            ROUND((rr.quantity_required * $2 / $3)::numeric, 4) AS expected_quantity
-                     FROM formula_resources rr
-                     JOIN resources r ON rr.resource_id = r.id
-                     WHERE rr.formula_id = $1`,
-                    [formulaId, targetQty, formula.batch_size_kg]
-                )
+                // 4. Create initial actuals if provided
+                if (actualResources) {
+                    for (const act of actualResources) {
+                        const erRes = await fastify.db.query(
+                            'SELECT quantity_required FROM formula_resources WHERE formula_id = $1 AND resource_id = $2',
+                            [formulaId, act.resourceId]
+                        )
+                        const scaleFactor = targetQty / formula.batch_size_kg
+                        const expectedQty = erRes.rows.length > 0 ? (erRes.rows[0].quantity_required * scaleFactor) : 0
+                        const variance = act.quantity - expectedQty
+                        const varianceFlag = Math.abs(variance / expectedQty) > 0.05
+
+                        await fastify.db.query(
+                            `INSERT INTO production_resource_actuals 
+                             (production_run_id, resource_id, actual_quantity_used, expected_quantity, variance, variance_flag)
+                             VALUES ($1, $2, $3, $4, $5, $6)`,
+                            [runId, act.resourceId, act.quantity, expectedQty, variance, varianceFlag]
+                        )
+                    }
+                }
 
                 return reply.status(201).send({
                     message: 'Production batch planned successfully',
                     production_run_id: runId,
-                    status: 'planned',
-                    expected_resources: resourcesResult.rows
+                    status: 'planned'
                 })
 
             } catch (err) {

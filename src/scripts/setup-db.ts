@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS production_runs (
     waste_kg DECIMAL(12, 4) DEFAULT 0,
     started_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
+    loss_reason TEXT,
     created_by INTEGER REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -114,7 +115,8 @@ CREATE TABLE IF NOT EXISTS production_resource_actuals (
     expected_quantity DECIMAL(12, 4),
     variance DECIMAL(12, 4),
     variance_flag BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(production_run_id, resource_id)
 );
 
 -- 9. Resource Stock Transactions: Audit trail for raw material stock changes

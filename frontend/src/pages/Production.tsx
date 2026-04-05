@@ -62,6 +62,8 @@ interface HistoryRun {
   status: string;
   planned_quantity_kg: number;
   actual_quantity_kg: number;
+  wasteQty?: number;
+  lossReason?: string;
   variance: number;
   started_at: string | null;
   completed_at: string | null;
@@ -90,6 +92,7 @@ interface ProductDemand {
   business_code: string;
   total_qty_kg: number;
   order_count: number;
+  client_names?: string[];
 }
 
 const ProgressIndicator = ({ 
@@ -180,13 +183,19 @@ export default function Production() {
   // Edit State
   const [editingRun, setEditingRun] = useState<ActiveRun | null>(null);
   const [editTargetQty, setEditTargetQty] = useState<number>(0);
+  const [editActualResources, setEditActualResources] = useState<
+    { resource_id: number; name: string; unit: string; actual_quantity_used: number }[]
+  >([]);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isLoadingEditData, setIsLoadingEditData] = useState(false);
   
   // Completion Modal State
   const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
   const [completingRun, setCompletingRun] = useState<ActiveRun | null>(null);
   const [actualYield, setActualYield] = useState<number | string>(0);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [lossReason, setLossReason] = useState<string>("Filter Loss"); // Default reason
+  const [customLossReason, setCustomLossReason] = useState<string>("");
 
 
   const fetchMetrics = async () => {
@@ -279,6 +288,13 @@ export default function Production() {
     if (e) e.preventDefault();
     if (!completingRun) return;
 
+    // Combine reasons logic:
+    // If "Other" is selected, use customReason.
+    // If another reason is selected, and customReason has notes, append them.
+    const finalReason = lossReason === "Other" 
+      ? (customLossReason || "Custom Reason (Not specified)")
+      : (customLossReason ? `${lossReason}: ${customLossReason}` : lossReason);
+
     setIsCompleting(true);
     try {
       const parsedYield = Number(actualYield) || 0;
@@ -287,7 +303,8 @@ export default function Production() {
 
       await updateStatus(completingRun.id, "completed", {
         actual_quantity_kg: fromDisplayValue(parsedYield, unitPref),
-        waste_kg: fromDisplayValue(computedWaste, unitPref)
+        waste_kg: fromDisplayValue(computedWaste, unitPref),
+        loss_reason: finalReason
       });
       setIsCompletionModalOpen(false);
       setCompletingRun(null);
@@ -305,10 +322,23 @@ export default function Production() {
 
     setIsEditing(true);
     try {
+      const totalMaterial = (editActualResources || []).reduce((s, r) => s + (r.actual_quantity_used || 0), 0);
+      const targetKg = fromDisplayValue(editTargetQty || 0, unitPref);
+
+      if (Math.abs(totalMaterial - targetKg) >= 0.01) {
+        alert(`Strict Validation: Total material consumption (${totalMaterial.toFixed(2)} ${unitPref}) must exactly match target quantity (${toDisplayValue(targetKg, unitPref)} ${unitPref}) before saving.`);
+        setIsEditing(false);
+        return;
+      }
+
       await apiRequest(`/production-runs/${editingRun.id}`, {
         method: "PATCH",
         body: {
-          planned_quantity_kg: fromDisplayValue(editTargetQty, unitPref),
+          targetQty: targetKg,
+          actualResources: (editActualResources || []).map(r => ({
+            resourceId: r.resource_id,
+            quantity: r.actual_quantity_used
+          }))
         },
       });
       setIsEditModalOpen(false);
@@ -321,24 +351,47 @@ export default function Production() {
     }
   };
 
-  const handleQuickPackRemaining = async (id: number, planned: number, actual: number | null, packaging: any[] | undefined) => {
-    const batchVol = actual ?? planned;
-    const currentPackaged = packaging?.reduce((s, p) => s + Number(p.pack_size_kg * p.quantity_units), 0) ?? 0;
-    const left = batchVol - currentPackaged;
-
-    if (left <= 0.01) return;
-
-    setUpdatingId(id);
+  const openEditModal = async (run: ActiveRun) => {
+    setEditingRun(run);
+    setEditTargetQty(toDisplayValue(run.targetQty, unitPref));
+    setIsEditModalOpen(true);
+    setIsLoadingEditData(true);
     try {
-      await apiRequest(`/production-runs/${id}/packaging/quick`, {
-        method: "POST"
+      const data = await apiRequest<any>(`/production-runs/${run.id}`);
+      // Join expected and actuals to show what's currently planned
+      // If we are in 'planned' or 'running', we might not have 'actual_resources' from DB yet
+      // so we use expected_resources as fallback
+      const resources = (data?.expected_resources || []).map((er: any) => {
+        const ar = (data?.actual_resources || []).find((a: any) => a.resource_id === er.resource_id);
+        return {
+          resource_id: er.resource_id,
+          name: er.name || "Unknown Resource",
+          unit: er.unit || "N/A",
+          actual_quantity_used: Number(ar ? ar.actual_qty : er.expected_qty) || 0
+        };
       });
-      fetchRuns();
-    } catch (err: any) {
-      alert(err.message || "Failed to pack remaining volume");
+      setEditActualResources(resources);
+    } catch (err) {
+      console.error("Failed to fetch run details for editing", err);
     } finally {
-      setUpdatingId(null);
+      setIsLoadingEditData(false);
     }
+  };
+
+  const handleEditTargetQtyChange = (newQty: number) => {
+    const oldQty = editTargetQty;
+    setEditTargetQty(newQty);
+    if (oldQty > 0) {
+      const ratio = newQty / oldQty;
+      setEditActualResources(prev => prev.map(res => ({
+        ...res,
+        actual_quantity_used: Number((res.actual_quantity_used * ratio).toFixed(4))
+      })));
+    }
+  };
+
+  const handleQuickPackRemaining = (id: number) => {
+    navigate(`/production/PR-${id}/packaging`);
   };
 
   useEffect(() => {
@@ -371,14 +424,18 @@ export default function Production() {
   const handleFormulaSelect = (formulaId: string) => {
     const formula = formulas.find((r) => r.id === Number(formulaId)) || null;
     setSelectedFormula(formula);
-    if (formula) {
-      setPlannedQuantityKg(toDisplayValue(Number(formula.batch_size_kg), unitPref));
+    if (formula && Array.isArray(formula.resources)) {
+      setPlannedQuantityKg(toDisplayValue(Number(formula.batch_size_kg || 0), unitPref));
       setActualResources(
         formula.resources.map((res) => ({
           resource_id: res.resource_id,
-          actual_quantity_used: res.quantity_required,
+          actual_quantity_used: res.quantity_required || 0,
         })),
       );
+    } else if (formula) {
+      // Fallback if resources is missing
+      setPlannedQuantityKg(toDisplayValue(Number(formula.batch_size_kg || 0), unitPref));
+      setActualResources([]);
     }
   };
 
@@ -409,6 +466,10 @@ export default function Production() {
           colorId: Number(selectedColor),
           targetQty: fromDisplayValue(planned_quantity_kg, unitPref),
           operatorId: user?.id ?? 1,
+          actualResources: actualResources.map(r => ({
+            resourceId: r.resource_id,
+            quantity: r.actual_quantity_used
+          }))
         },
       });
       setIsModalOpen(false);
@@ -637,6 +698,11 @@ export default function Production() {
                         <div className="text-right">
                           <div className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-0.5">{item.order_count} Active Order{item.order_count !== 1 ? 's' : ''}</div>
                           <div className="text-xl font-black text-slate-900">{formatUnit(item.total_qty_kg, unitPref)}</div>
+                          {item.client_names && item.client_names.length > 0 && (
+                            <div className="text-[9px] font-bold text-slate-500 mt-1">
+                              For: {item.client_names.join(", ")}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center justify-between pt-3 border-t border-slate-50">
@@ -822,11 +888,7 @@ export default function Production() {
 
                                   {(run.status === "planned" || run.status === "running") && (
                                     <button
-                                      onClick={() => {
-                                        setEditingRun(run);
-                                        setEditTargetQty(toDisplayValue(run.targetQty, unitPref));
-                                        setIsEditModalOpen(true);
-                                      }}
+                                      onClick={() => openEditModal(run)}
                                       className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                       title="Edit Batch"
                                     >
@@ -857,6 +919,8 @@ export default function Production() {
                                       onClick={() => {
                                         setCompletingRun(run);
                                         setActualYield(toDisplayValue(run.targetQty, unitPref));
+                                        setLossReason("Filter Loss"); // Reset to default
+                                        setCustomLossReason("");      // Reset custom notes
                                         setIsCompletionModalOpen(true);
                                       }}
                                       className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all shadow-sm active:scale-95"
@@ -1021,6 +1085,27 @@ export default function Production() {
                         </span>
                       </div>
                     </th>
+                    <th 
+                      className="h-12 px-4 text-center align-middle font-bold text-slate-500 text-[10px] uppercase tracking-widest cursor-pointer hover:bg-slate-200/50 hover:text-slate-800 transition-colors group select-none"
+                      onClick={() => {
+                        if (sortKey === "waste") {
+                          setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+                        } else {
+                          setSortKey("waste");
+                          setSortOrder("desc");
+                        }
+                      }}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        Loss
+                        <span className="text-[8px] text-slate-400 group-hover:text-blue-500">
+                          {sortKey === "waste" ? (sortOrder === "asc" ? "▲" : "▼") : "↕"}
+                        </span>
+                      </div>
+                    </th>
+                    <th className="h-12 px-4 text-left align-middle font-bold text-slate-500 text-[10px] uppercase tracking-widest">
+                      Reason
+                    </th>
                     <th className="h-12 px-4 text-center align-middle font-bold text-slate-500 text-[10px] uppercase tracking-widest">
                       Var.
                     </th>
@@ -1036,7 +1121,7 @@ export default function Production() {
                   {isHistoryLoading ? (
                     <tr>
                       <td
-                        colSpan={9}
+                        colSpan={11}
                         className="p-8 text-center animate-pulse text-muted-foreground bg-slate-50/50"
                       >
                         <Loader2 className="inline w-5 h-5 animate-spin mr-2 text-blue-500" />
@@ -1046,7 +1131,7 @@ export default function Production() {
                   ) : historyRuns.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={9}
+                        colSpan={11}
                         className="p-12 text-center text-slate-500 bg-slate-50/50"
                       >
                         <div className="flex flex-col items-center justify-center gap-2">
@@ -1067,6 +1152,9 @@ export default function Production() {
                         } else if (sortKey === "actual") {
                           valA = a.actual_quantity_kg ?? a.planned_quantity_kg;
                           valB = b.actual_quantity_kg ?? b.planned_quantity_kg;
+                        } else if (sortKey === "waste") {
+                          valA = a.wasteQty ?? 0;
+                          valB = b.wasteQty ?? 0;
                         }
                         
                         if (sortOrder === "asc") return valA - valB;
@@ -1140,6 +1228,16 @@ export default function Production() {
                           <td className="p-4 text-center font-mono text-slate-900 font-black border-r">
                             {actual != null ? formatUnit(actual, unitPref) : "—"}
                           </td>
+                          <td className="p-4 text-center font-mono text-orange-600 font-bold border-r bg-orange-50/20">
+                            {run.wasteQty != null ? formatUnit(run.wasteQty, unitPref) : "—"}
+                          </td>
+                          <td className="p-4 text-[10px] text-slate-500 border-r max-w-[150px]">
+                            {run.lossReason ? (
+                              <div className="line-clamp-2" title={run.lossReason}>
+                                {run.lossReason}
+                              </div>
+                            ) : "—"}
+                          </td>
                           <td className="px-5 py-3 text-center border-r min-w-[160px]">
                              <ProgressIndicator 
                               target={expected}
@@ -1178,7 +1276,7 @@ export default function Production() {
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleQuickPackRemaining(run.id, run.planned_quantity_kg, run.actual_quantity_kg, run.packaging);
+                                      handleQuickPackRemaining(run.id);
                                     }}
                                     disabled={updatingId === run.id || !showQuickPack}
                                     className={`flex items-center justify-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-600 hover:bg-purple-600 hover:text-white rounded-lg transition-all disabled:opacity-50 text-[10px] font-bold uppercase tracking-widest border border-purple-100 min-w-[110px] ${
@@ -1186,7 +1284,7 @@ export default function Production() {
                                     }`}
                                   >
                                     {updatingId === run.id && showQuickPack ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <PackageCheck className="w-3.5 h-3.5" />}
-                                    <span>Quick Pack</span>
+                                    <span>Package Remaining</span>
                                   </button>
                                 );
                               })()}
@@ -1310,12 +1408,12 @@ export default function Production() {
                             Actual
                           </div>
                         </div>
-                        {selectedFormula.resources.map((res, idx) => {
+                        {(selectedFormula.resources || []).map((res, idx) => {
+                          const batchSize = Number(selectedFormula.batch_size_kg) || 1;
                           const scaleFactor =
-                            fromDisplayValue(planned_quantity_kg, unitPref) /
-                            Number(selectedFormula.batch_size_kg);
+                            fromDisplayValue(planned_quantity_kg, unitPref) / batchSize;
                           const expectedQty = Number(
-                            (res.quantity_required * scaleFactor).toFixed(4),
+                            ((res.quantity_required || 0) * scaleFactor).toFixed(4),
                           );
                           return (
                             <div
@@ -1334,13 +1432,10 @@ export default function Production() {
                               <div className="col-span-4 flex items-center justify-end gap-2">
                                 <input
                                   type="number"
-                                  step="0.0001"
+                                  step="any"
                                   className="w-20 rounded-md border bg-background px-2 py-1 text-xs text-right font-mono focus:ring-1 focus:ring-blue-600 outline-none"
                                   value={
-                                    actualResources.find(
-                                      (ar) =>
-                                        ar.resource_id === res.resource_id,
-                                    )?.actual_quantity_used || 0
+                                    actualResources[idx]?.actual_quantity_used || ""
                                   }
                                   onChange={(e) => {
                                     const newActuals = [...actualResources];
@@ -1357,6 +1452,30 @@ export default function Production() {
                           );
                         })}
                       </div>
+
+                      {/* Summation Display */}
+                      <div className="mt-4 pt-4 border-t flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Activity className={`h-4 w-4 ${
+                            Math.abs(actualResources.reduce((s, r) => s + r.actual_quantity_used, 0) - planned_quantity_kg) < 0.01
+                              ? "text-emerald-500"
+                              : "text-orange-500"
+                          }`} />
+                          <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Total Material</span>
+                        </div>
+                        <div className="text-right">
+                          <span className={`text-sm font-black ${
+                            Math.abs((Array.isArray(actualResources) ? actualResources.reduce((s, r) => s + (Number(r.actual_quantity_used) || 0), 0) : 0) - planned_quantity_kg) < 0.01
+                              ? "text-emerald-600"
+                              : "text-orange-600"
+                          }`}>
+                            {(Array.isArray(actualResources) ? actualResources.reduce((s, r) => s + (Number(r.actual_quantity_used) || 0), 0) : 0).toFixed(2)} / {planned_quantity_kg} {unitPref}
+                          </span>
+                          {Math.abs((Array.isArray(actualResources) ? actualResources.reduce((s, r) => s + (Number(r.actual_quantity_used) || 0), 0) : 0) - planned_quantity_kg) >= 0.01 && (
+                            <p className="text-[10px] font-bold text-orange-500 mt-0.5">Sum must match planned quantity</p>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1372,8 +1491,12 @@ export default function Production() {
                 </button>
                 <button
                   type="submit"
-                  disabled={!selectedFormula}
+                  disabled={
+                    !selectedFormula || 
+                    Math.abs((Array.isArray(actualResources) ? actualResources.reduce((s, r) => s + (Number(r.actual_quantity_used) || 0), 0) : 0) - planned_quantity_kg) >= 0.01
+                  }
                   className="inline-flex items-center px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                  title={Math.abs((Array.isArray(actualResources) ? actualResources.reduce((s, r) => s + (Number(r.actual_quantity_used) || 0), 0) : 0) - planned_quantity_kg) >= 0.01 ? "Total material must match planned quantity" : ""}
                 >
                   <Play className="mr-2 h-4 w-4" />
                   Start Production
@@ -1392,7 +1515,7 @@ export default function Production() {
             onClick={() => setIsEditModalOpen(false)}
             aria-hidden="true"
           ></div>
-          <div className="bg-card w-full max-w-md rounded-xl shadow-2xl border overflow-hidden relative z-10 scale-in-center">
+          <div className="bg-card w-full max-w-xl rounded-xl shadow-2xl border overflow-hidden relative z-10 scale-in-center">
             <div className="flex items-center justify-between p-6 border-b">
               <h3 className="text-xl font-bold">Edit Run: {editingRun.batchId}</h3>
               <button
@@ -1402,32 +1525,112 @@ export default function Production() {
                 <X className="h-6 w-6" />
               </button>
             </div>
-            <form onSubmit={handleEditSubmit} className="p-6 space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">Target Quantity ({unitPref})</label>
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  required
-                  value={editTargetQty}
-                  onChange={(e) => setEditTargetQty(Number(e.target.value))}
-                  className="w-full rounded-md border text-sm p-2 outline-none focus:ring-1 focus:ring-blue-500"
-                />
+            <form onSubmit={handleEditSubmit} className="p-6 space-y-6">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">Target Quantity ({unitPref})</label>
+                  <input
+                    min="1"
+                    step="0.01"
+                    required
+                    value={editTargetQty || ""}
+                    onChange={(e) => handleEditTargetQtyChange(e.target.value === "" ? 0 : Number(e.target.value))}
+                    className="w-full rounded-md border text-sm p-3 outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                  />
+                </div>
+
+                {isLoadingEditData ? (
+                  <div className="flex items-center justify-center p-12 text-slate-400">
+                    <Loader2 className="w-6 h-6 animate-spin mr-2" />
+                    Loading resource details...
+                  </div>
+                ) : (
+                  <div className="rounded-lg border bg-slate-50/50 p-4 space-y-4">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center">
+                      <FlaskConical className="mr-1.5 h-3.5 w-3.5" />
+                      Raw Material Consumption
+                    </p>
+                    
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-12 gap-2 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b">
+                        <div className="col-span-8">Resource</div>
+                        <div className="col-span-4 text-right">Quantity</div>
+                      </div>
+                      
+                      {(editActualResources || []).map((res, idx) => (
+                        <div key={res.resource_id} className="grid grid-cols-12 gap-2 items-center py-2 border-b border-dashed last:border-0">
+                          <div className="col-span-7 flex flex-col">
+                            <span className="text-sm font-bold text-slate-700 truncate">{res.name || "Untitled"}</span>
+                            <span className="text-[10px] text-slate-400 uppercase font-black">{res.unit || "N/A"}</span>
+                          </div>
+                          <div className="col-span-5 flex items-center justify-end gap-2">
+                            <input
+                              type="number"
+                              step="0.0001"
+                              className="w-full rounded-md border bg-white px-3 py-1.5 text-sm text-right font-mono focus:ring-1 focus:ring-blue-500 outline-none"
+                              value={res.actual_quantity_used || ""}
+                              placeholder="0"
+                              onChange={(e) => {
+                                const val = e.target.value === "" ? 0 : Number(e.target.value);
+                                const newActuals = [...(editActualResources || [])];
+                                newActuals[idx].actual_quantity_used = val;
+                                setEditActualResources(newActuals);
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* edit Summation Display */}
+                    <div className="mt-4 pt-4 border-t flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Activity className={`h-4 w-4 ${
+                          Math.abs((editActualResources || []).reduce((s, r) => s + (r.actual_quantity_used || 0), 0) - fromDisplayValue(editTargetQty || 0, unitPref)) < 0.01
+                            ? "text-emerald-500"
+                            : "text-orange-500"
+                        }`} />
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Total Material</span>
+                      </div>
+                      <div className="text-right">
+                        <span className={`text-sm font-black ${
+                          Math.abs((editActualResources || []).reduce((s, r) => s + (r.actual_quantity_used || 0), 0) - fromDisplayValue(editTargetQty || 0, unitPref)) < 0.01
+                            ? "text-emerald-600"
+                            : "text-orange-600"
+                        }`}>
+                          {((editActualResources || []).reduce((s, r) => s + (r.actual_quantity_used || 0), 0) || 0).toFixed(2)} / {toDisplayValue(fromDisplayValue(editTargetQty || 0, unitPref), unitPref) || 0} {unitPref}
+                        </span>
+                        {Math.abs((editActualResources || []).reduce((s, r) => s + (r.actual_quantity_used || 0), 0) - fromDisplayValue(editTargetQty || 0, unitPref)) >= 0.01 && (
+                          <p className="text-[10px] font-bold text-orange-500 mt-0.5">Sum should match target quantity</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="pt-4 flex justify-end gap-3">
+              
+              <div className="pt-4 flex justify-end gap-3 border-t">
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2 text-sm font-semibold border rounded-lg hover:bg-slate-50 text-slate-700 transition-colors"
+                  className="px-6 py-2.5 text-sm font-bold border rounded-xl hover:bg-slate-50 text-slate-700 transition-colors uppercase tracking-widest"
                   disabled={isEditing}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isEditing || editTargetQty <= 0}
-                  className="px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
+                  disabled={
+                    isEditing || 
+                    editTargetQty <= 0 || 
+                    Math.abs((editActualResources || []).reduce((s, r) => s + (r.actual_quantity_used || 0), 0) - fromDisplayValue(editTargetQty || 0, unitPref)) >= 0.01
+                  }
+                  title={
+                    Math.abs((editActualResources || []).reduce((s, r) => s + (r.actual_quantity_used || 0), 0) - fromDisplayValue(editTargetQty || 0, unitPref)) >= 0.01 
+                    ? "Total material must match target quantity before saving" 
+                    : ""
+                  }
+                  className="px-8 py-2.5 text-sm font-bold rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-400 flex items-center gap-2 transition-all shadow-lg shadow-blue-200 uppercase tracking-widest cursor-pointer disabled:cursor-not-allowed"
                 >
                   {isEditing ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                   Save Changes
@@ -1490,14 +1693,14 @@ export default function Production() {
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <FlaskConical className="w-4 h-4 text-orange-500" />
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Waste Logged</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Yield Loss</label>
                   </div>
                   <div className="relative">
                     <input
                       type="number"
                       step="0.01"
                       readOnly
-                      className="w-full rounded-xl border border-slate-200 bg-slate-100 px-4 py-4 text-2xl font-black text-slate-500 cursor-not-allowed outline-none transition-all pr-12"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-2xl font-black text-slate-500 cursor-not-allowed outline-none transition-all pr-12"
                       value={Math.max(0, toDisplayValue(completingRun.targetQty, unitPref) - (Number(actualYield) || 0)).toFixed(2)}
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{unitPref}</span>
@@ -1506,15 +1709,43 @@ export default function Production() {
                 </div>
               </div>
 
-              <div className="bg-emerald-50/50 rounded-xl p-4 border border-emerald-100 flex items-start gap-4">
-                <div className="p-2 bg-emerald-100/50 rounded-lg text-emerald-700">
-                  <Activity className="w-5 h-5" />
+              {/* Loss Documentation */}
+              <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Activity className="w-4 h-4 text-blue-600" />
+                  <label className="text-xs font-bold text-slate-600 uppercase tracking-widest">Loss Reason Documentation</label>
                 </div>
-                <div>
-                  <p className="text-xs font-bold text-emerald-900 mb-1 uppercase tracking-tight">Yield Efficiency</p>
-                  <p className="text-[11px] text-emerald-700/80 leading-relaxed font-semibold">
-                    Recording the actual amount of paint manufactured vs the target ensures accurate inventory and helps track formulation efficiency.
-                  </p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Primary Reason</label>
+                    <select
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20"
+                      value={lossReason}
+                      onChange={(e) => setLossReason(e.target.value)}
+                    >
+                      <option value="Filter Loss">Filter Loss</option>
+                      <option value="Machine Retention">Machine Retention (Pipelines)</option>
+                      <option value="Spillage">Spillage</option>
+                      <option value="Quality Sampling">Quality Sampling</option>
+                      <option value="Operational Waste">Operational Waste</option>
+                      <option value="Other">Other (Custom Reason)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">
+                      {lossReason === "Other" ? "Specify Reason" : "Additional Details (Optional)"}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder={lossReason === "Other" ? "Enter specific reason..." : "Notes about this discrepancy..."}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20"
+                      value={customLossReason}
+                      onChange={(e) => setCustomLossReason(e.target.value)}
+                      required={lossReason === "Other"}
+                    />
+                  </div>
                 </div>
               </div>
 

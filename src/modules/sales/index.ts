@@ -183,10 +183,12 @@ export default async function (fastifyRaw: FastifyInstance) {
                         c.name as color_name,
                         c.business_code,
                         SUM(i.quantity * i.pack_size_kg) as total_qty_kg,
-                        COUNT(DISTINCT o.id) as order_count
+                        COUNT(DISTINCT o.id) as order_count,
+                        ARRAY_AGG(DISTINCT cl.name) as client_names
                     FROM client_orders o
                     JOIN client_order_items i ON o.id = i.order_id
                     JOIN colors c ON i.color_id = c.id
+                    LEFT JOIN clients cl ON o.client_id = cl.id
                     WHERE o.status = 'pending'
                     GROUP BY i.color_id, c.name, c.business_code
                     ORDER BY total_qty_kg DESC
