@@ -65,6 +65,8 @@ export default async function (fastifyRaw: FastifyInstance) {
                 const result = await client.query(`
                     SELECT 
                         o.id, o.status, o.notes, o.created_at,
+                        o.shipping_status, o.payment_method, o.payment_status,
+                        o.return_status, o.refund_status,
                         o.client_name,
                         cl.id          AS client_id,
                         cl.name        AS client_display_name,
@@ -168,6 +170,96 @@ export default async function (fastifyRaw: FastifyInstance) {
     })
 
     /**
+     * PUT /sales/orders/:id/status
+     * Updates the status of an order (shipping, return, refund, overall status).
+     * Automatically handles inventory restocking if items are returned to warehouse.
+     */
+    const UpdateOrderStatusSchema = Type.Object({
+        status: Type.Optional(Type.String()),
+        shipping_status: Type.Optional(Type.String()),
+        payment_method: Type.Optional(Type.String()),
+        payment_status: Type.Optional(Type.String()),
+        return_status: Type.Optional(Type.String()),
+        refund_status: Type.Optional(Type.String())
+    })
+
+    fastify.put('/orders/:id/status', {
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'sales', 'operator'])],
+        schema: { params: Type.Object({ id: Type.Integer() }), body: UpdateOrderStatusSchema },
+        handler: async (request, reply) => {
+            const { id } = request.params
+            const updates = request.body
+            const user = (request as any).user as { id: number }
+            let client
+            try {
+                client = await fastify.db.connect()
+                await client.query('BEGIN')
+
+                // check current state
+                const currentRes = await client.query('SELECT return_status FROM client_orders WHERE id = $1', [id])
+                if (currentRes.rows.length === 0) {
+                    await client.query('ROLLBACK')
+                    return reply.status(404).send({ error: 'Not Found', message: 'Order not found' })
+                }
+                const currentReturnStatus = currentRes.rows[0].return_status
+
+                // build update query dynamically
+                const updateFields: string[] = []
+                const params: any[] = []
+                let paramIndex = 1
+
+                for (const [key, value] of Object.entries(updates)) {
+                    if (value !== undefined) {
+                        updateFields.push(`${key} = $${paramIndex}`)
+                        params.push(value)
+                        paramIndex++
+                    }
+                }
+
+                if (updateFields.length > 0) {
+                    params.push(id)
+                    await client.query(
+                        `UPDATE client_orders SET ${updateFields.join(', ')} WHERE id = $${paramIndex}`,
+                        params
+                    )
+                }
+
+                // If return_status changes to 'delivered_to_warehouse' and it wasn't before, we restock items
+                if (updates.return_status === 'delivered_to_warehouse' && currentReturnStatus !== 'delivered_to_warehouse') {
+                    // Get items
+                    const itemsRes = await client.query('SELECT color_id, pack_size_kg, quantity FROM client_order_items WHERE order_id = $1', [id])
+                    
+                    for (const item of itemsRes.rows) {
+                        const quantityKg = item.pack_size_kg * item.quantity
+                        await client.query(`
+                            INSERT INTO finished_stock_transactions 
+                            (color_id, pack_size_kg, quantity_units, quantity_kg, transaction_type, notes, created_by)
+                            VALUES ($1, $2, $3, $4, 'production', 'Restock from returned order #' || $5, $6)
+                        `, [item.color_id, item.pack_size_kg, item.quantity, quantityKg, id, user.id])
+                    }
+                }
+
+                // update general status based on workflow
+                if (updates.shipping_status === 'delivered' && !updates.return_status) {
+                    await client.query(`UPDATE client_orders SET status = 'fulfilled' WHERE id = $1`, [id])
+                }
+                if (updates.refund_status === 'refund_successfully') {
+                    await client.query(`UPDATE client_orders SET status = 'fulfilled' WHERE id = $1`, [id])
+                }
+
+                await client.query('COMMIT')
+                return reply.send({ message: 'Order status updated successfully' })
+            } catch (err) {
+                if (client) await client.query('ROLLBACK')
+                fastify.log.error(err)
+                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to update order status' })
+            } finally {
+                if (client) client.release()
+            }
+        }
+    })
+
+    /**
      * GET /sales/orders/demand
      * Aggregates pending order quantities for production planning.
      */
@@ -185,7 +277,13 @@ export default async function (fastifyRaw: FastifyInstance) {
                         SUM(i.quantity * i.pack_size_kg) as total_qty_kg,
 
                         COUNT(DISTINCT o.id) as order_count,
-                        ARRAY_AGG(DISTINCT cl.name) as client_names
+                        ARRAY_AGG(DISTINCT cl.name) as client_names,
+                        json_agg(
+                            json_build_object(
+                                'pack_size_kg', i.pack_size_kg,
+                                'quantity', i.quantity
+                            )
+                        ) as raw_packs
                     FROM client_orders o
                     JOIN client_order_items i ON o.id = i.order_id
                     JOIN colors c ON i.color_id = c.id
@@ -194,7 +292,25 @@ export default async function (fastifyRaw: FastifyInstance) {
                     GROUP BY i.color_id, c.name, c.business_code
                     ORDER BY total_qty_kg DESC
                 `)
-                return reply.send(result.rows)
+
+                const transformed = result.rows.map(row => {
+                    const packMap: Record<number, number> = {};
+                    (row.raw_packs || []).forEach((p: any) => {
+                        packMap[p.pack_size_kg] = (packMap[p.pack_size_kg] || 0) + p.quantity;
+                    });
+                    const groupedPacks = Object.keys(packMap).map(k => ({
+                        pack_size_kg: Number(k),
+                        quantity: packMap[Number(k)]
+                    }));
+                    
+                    const { raw_packs, ...rest } = row;
+                    return {
+                        ...rest,
+                        required_packs: groupedPacks
+                    };
+                });
+
+                return reply.send(transformed)
             } catch (err) {
                 fastify.log.error(err)
                 return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to retrieve order demand' })
