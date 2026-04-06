@@ -214,18 +214,18 @@ export default function PurchaseOrders() {
                          <h4 className="text-lg font-black text-slate-900">Bill To</h4>
                          <div className="text-sm font-bold text-slate-500 space-y-1">
                              <p className="text-slate-800 font-black">{order.supplier_name}</p>
-                             <p className="max-w-[300px] leading-relaxed">{order.supplier_address || 'Official registered address not linked'}</p>
-                             <div className="flex flex-col gap-1 mt-4 text-xs font-bold text-slate-600">
+                             <p className="max-w-[300px] leading-relaxed italic">{order.supplier_address || 'Official registered address not linked'}</p>
+                             {order.supplier_gst && <p className="flex items-center gap-2 font-black text-slate-900 uppercase pt-1">GSTIN: {order.supplier_gst}</p>}
+                             <div className="flex flex-col gap-1 mt-6 text-xs font-bold text-slate-600 border-t border-orange-50 pt-4">
                                 {order.supplier_pocs?.[0] && (
                                    <div className="flex flex-col">
-                                      <p className="text-slate-900 font-black text-[10px] uppercase tracking-widest mb-1">Point of Contact</p>
+                                      <p className="text-slate-900 font-black text-[10px] uppercase tracking-widest mb-1">Primary Liaison</p>
                                       <p className="text-slate-800 font-black mb-1">{order.supplier_pocs[0].name}</p>
                                       {order.supplier_pocs[0].phone && <p>PH: {order.supplier_pocs[0].phone}</p>}
                                       {order.supplier_pocs[0].email && <p>EM: {order.supplier_pocs[0].email}</p>}
                                    </div>
                                 )}
                                 {!order.supplier_pocs?.[0] && <p className="font-black text-slate-900">{order.supplier_phone || 'PH: N/A'}</p>}
-                                {order.supplier_gst && <p className="flex items-center gap-2 font-black text-slate-900 uppercase mt-2">GSTIN: {order.supplier_gst}</p>}
                              </div>
                          </div>
                       </div>
