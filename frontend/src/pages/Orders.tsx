@@ -125,7 +125,6 @@ export default function Orders() {
   };
 
   const selectedClient = clients.find(c => c.id === Number(selectedClientId));
-  const selectedProduct = inventory.find(i => i.color_id === Number(selectedColorId));
   
   const defaultPackSizesStr = localStorage.getItem("default_packaging_sizes") || "0.5kg, 1kg, 5kg, 10kg, 20kg";
   const defaultPackSizes = defaultPackSizesStr

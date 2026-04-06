@@ -20,7 +20,7 @@ import {
   Tag
 } from "lucide-react";
 
-interface POC {
+interface SupplierPOC {
   name: string;
   email?: string;
   phone?: string;
@@ -37,7 +37,7 @@ interface MaterialInfo {
 interface Supplier {
   id: number;
   name: string;
-  pocs: POC[];
+  pocs: SupplierPOC[];
   gst_number: string | null;
   regulatory_info: string | null;
   address: string | null;
@@ -51,7 +51,6 @@ interface Supplier {
 export default function Suppliers() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [, setError] = useState<string | null>(null);
   const [supplierSearch, setSupplierSearch] = useState("");
   const [componentSearch, setComponentSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -61,7 +60,7 @@ export default function Suppliers() {
   // Form state
   const [formData, setFormData] = useState({
     name: "",
-    pocs: [] as POC[],
+    pocs: [] as SupplierPOC[],
     gst_number: "",
     regulatory_info: "",
     address: "",
@@ -78,7 +77,7 @@ export default function Suppliers() {
       const data = await apiRequest<Supplier[]>(url);
       setSuppliers(data);
     } catch (err) {
-      setError("Failed to load suppliers.");
+      console.error("Failed to load suppliers:", err);
     } finally {
       setIsLoading(false);
     }
@@ -132,7 +131,7 @@ export default function Suppliers() {
     });
   };
 
-  const handlePOCChange = (index: number, field: keyof POC, value: string) => {
+  const handlePOCChange = (index: number, field: keyof SupplierPOC, value: string) => {
     const newPocs = [...formData.pocs];
     newPocs[index] = { ...newPocs[index], [field]: value };
     setFormData({ ...formData, pocs: newPocs });

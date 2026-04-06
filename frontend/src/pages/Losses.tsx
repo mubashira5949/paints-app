@@ -3,11 +3,8 @@ import { apiRequest } from "../services/api";
 import { 
   AlertTriangle, 
   Plus, 
-  Search, 
   Filter, 
   Calendar, 
-  Trash2, 
-  Info, 
   Package, 
   Droplets,
   ClipboardList,

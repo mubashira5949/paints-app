@@ -1,30 +1,18 @@
 import { useState, useEffect } from "react";
 import { apiRequest } from "../services/api";
 import {
-  ShoppingCart,
-  CheckCircle2,
-  XCircle,
-  Truck,
-  RotateCcw,
   Mail,
-  MessageCircle,
   Link as LinkIcon,
   ChevronDown,
   ChevronUp,
   Loader2,
-  FileText,
-  DollarSign,
   PencilLine,
   Printer,
-  ShieldCheck,
-  Building2,
-  MapPin,
-  Phone,
-  Calendar,
-  UserCheck
+  UserCheck,
+  XCircle
 } from "lucide-react";
 
-interface POC {
+interface PurchaseOrderPOC {
   name: string;
   email?: string;
   phone?: string;
@@ -52,7 +40,7 @@ interface PurchaseOrder {
   supplier_phone?: string;
   supplier_address?: string;
   supplier_gst?: string;
-  supplier_pocs?: POC[];
+  supplier_pocs?: PurchaseOrderPOC[];
   status: 'draft' | 'pending' | 'ordered' | 'received' | 'partially_received' | 'cancelled';
   notes: string | null;
   share_token: string;
@@ -73,10 +61,8 @@ export default function PurchaseOrders() {
   const [isLoading, setIsLoading] = useState(true);
   const [, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<POItem | null>(null);
-  const [refundData, setRefundData] = useState({ quantity: "", status: "pending" });
   const [editData, setEditData] = useState({ quantity: "", unit_price: "" });
 
   const fetchOrders = async () => {
