@@ -1,28 +1,23 @@
 import { useState, useEffect } from "react";
 import { apiRequest } from "../services/api";
 import {
-  ShoppingCart,
-  CheckCircle2,
-  XCircle,
-  Truck,
-  RotateCcw,
   Mail,
-  MessageCircle,
   Link as LinkIcon,
   ChevronDown,
   ChevronUp,
   Loader2,
-  FileText,
-  DollarSign,
   PencilLine,
   Printer,
-  ShieldCheck,
-  Building2,
-  MapPin,
-  Phone,
-  Calendar,
-  UserCheck
+  UserCheck,
+  XCircle
 } from "lucide-react";
+
+interface PurchaseOrderPOC {
+  name: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+}
 
 interface POItem {
   id: number;
@@ -45,6 +40,7 @@ interface PurchaseOrder {
   supplier_phone?: string;
   supplier_address?: string;
   supplier_gst?: string;
+  supplier_pocs?: PurchaseOrderPOC[];
   status: 'draft' | 'pending' | 'ordered' | 'received' | 'partially_received' | 'cancelled';
   notes: string | null;
   share_token: string;
@@ -65,10 +61,8 @@ export default function PurchaseOrders() {
   const [isLoading, setIsLoading] = useState(true);
   const [, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<POItem | null>(null);
-  const [refundData, setRefundData] = useState({ quantity: "", status: "pending" });
   const [editData, setEditData] = useState({ quantity: "", unit_price: "" });
 
   const fetchOrders = async () => {
@@ -110,6 +104,30 @@ export default function PurchaseOrders() {
 
   const calculateTax = (subtotal: number) => {
     return subtotal * 0.18; // 18% GST (Standard in India)
+  };
+
+  const openEditModal = (item: POItem) => {
+      setSelectedItem(item);
+      setEditData({ quantity: item.quantity.toString(), unit_price: item.unit_price.toString() });
+      setIsEditModalOpen(true);
+  };
+
+  const handleUpdateItem = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!selectedItem) return;
+      try {
+          await apiRequest(`/purchase-orders/${selectedItem.purchase_order_id}/items/${selectedItem.id}`, {
+              method: "PUT",
+              body: { 
+                  quantity: parseFloat(editData.quantity),
+                  unit_price: parseFloat(editData.unit_price)
+              }
+          });
+          setIsEditModalOpen(false);
+          fetchOrders();
+      } catch (err: any) {
+          alert(err.message);
+      }
   };
 
   return (
@@ -162,14 +180,11 @@ export default function PurchaseOrders() {
 
               {expandedId === order.id && (
                 <div className="relative p-12 lg:p-20 bg-white print:p-0">
-                   
                    {/* Main Title */}
                    <h2 className="text-center text-[54px] font-black text-orange-500 uppercase tracking-tight mb-20">Purchase Order</h2>
-
                    <div className="grid grid-cols-2 gap-20 mb-20">
                       {/* Top Left: Company Details */}
                       <div className="space-y-6">
-                         <h4 className="text-lg font-black text-slate-900">Your Company Details</h4>
                          <div className="text-sm font-bold text-slate-500 space-y-1">
                             <p className="text-slate-800">{BUYER_INFO.name}</p>
                             <p className="max-w-[300px] leading-relaxed">{BUYER_INFO.address}</p>
@@ -198,9 +213,20 @@ export default function PurchaseOrders() {
                       <div className="space-y-6">
                          <h4 className="text-lg font-black text-slate-900">Bill To</h4>
                          <div className="text-sm font-bold text-slate-500 space-y-1">
-                            <p className="text-slate-800 font-black">{order.supplier_name}</p>
-                            <p className="max-w-[300px] leading-relaxed">{order.supplier_address || 'Official registered address not linked'}</p>
-                            <p className="flex items-center gap-2 mt-4 font-black text-slate-900">{order.supplier_phone || 'PH: N/A'}</p>
+                             <p className="text-slate-800 font-black">{order.supplier_name}</p>
+                             <p className="max-w-[300px] leading-relaxed italic">{order.supplier_address || 'Official registered address not linked'}</p>
+                             {order.supplier_gst && <p className="flex items-center gap-2 font-black text-slate-900 uppercase pt-1">GSTIN: {order.supplier_gst}</p>}
+                             <div className="flex flex-col gap-1 mt-6 text-xs font-bold text-slate-600 border-t border-orange-50 pt-4">
+                                {order.supplier_pocs?.[0] && (
+                                   <div className="flex flex-col">
+                                      <p className="text-slate-900 font-black text-[10px] uppercase tracking-widest mb-1">Primary Liaison</p>
+                                      <p className="text-slate-800 font-black mb-1">{order.supplier_pocs[0].name}</p>
+                                      {order.supplier_pocs[0].phone && <p>PH: {order.supplier_pocs[0].phone}</p>}
+                                      {order.supplier_pocs[0].email && <p>EM: {order.supplier_pocs[0].email}</p>}
+                                   </div>
+                                )}
+                                {!order.supplier_pocs?.[0] && <p className="font-black text-slate-900">{order.supplier_phone || 'PH: N/A'}</p>}
+                             </div>
                          </div>
                       </div>
 

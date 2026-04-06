@@ -20,7 +20,7 @@ import {
   Tag
 } from "lucide-react";
 
-interface POC {
+interface SupplierPOC {
   name: string;
   email?: string;
   phone?: string;
@@ -37,7 +37,7 @@ interface MaterialInfo {
 interface Supplier {
   id: number;
   name: string;
-  pocs: POC[];
+  pocs: SupplierPOC[];
   gst_number: string | null;
   regulatory_info: string | null;
   address: string | null;
@@ -51,17 +51,16 @@ interface Supplier {
 export default function Suppliers() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [, setError] = useState<string | null>(null);
   const [supplierSearch, setSupplierSearch] = useState("");
   const [componentSearch, setComponentSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
-  const [activeTab, setActiveTab] = useState<'info' | 'catalog'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'stakeholders'>('info');
   
   // Form state
   const [formData, setFormData] = useState({
     name: "",
-    pocs: [] as POC[],
+    pocs: [] as SupplierPOC[],
     gst_number: "",
     regulatory_info: "",
     address: "",
@@ -78,7 +77,7 @@ export default function Suppliers() {
       const data = await apiRequest<Supplier[]>(url);
       setSuppliers(data);
     } catch (err) {
-      setError("Failed to load suppliers.");
+      console.error("Failed to load suppliers:", err);
     } finally {
       setIsLoading(false);
     }
@@ -132,7 +131,7 @@ export default function Suppliers() {
     });
   };
 
-  const handlePOCChange = (index: number, field: keyof POC, value: string) => {
+  const handlePOCChange = (index: number, field: keyof SupplierPOC, value: string) => {
     const newPocs = [...formData.pocs];
     newPocs[index] = { ...newPocs[index], [field]: value };
     setFormData({ ...formData, pocs: newPocs });
@@ -401,8 +400,8 @@ export default function Suppliers() {
                     Core Intelligence
                 </button>
                 <button 
-                    onClick={() => setActiveTab('catalog')}
-                    className={`pb-4 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'catalog' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                    onClick={() => setActiveTab('stakeholders')}
+                    className={`pb-4 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'stakeholders' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                 >
                     Stakeholders ({formData.pocs.length})
                 </button>
@@ -422,15 +421,7 @@ export default function Suppliers() {
                                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                             />
                         </div>
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">GST / Tax ID</label>
-                            <input
-                                className="w-full rounded-2xl border border-slate-200 px-5 py-4 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-mono font-bold"
-                                placeholder="GSTIN Number"
-                                value={formData.gst_number}
-                                onChange={(e) => setFormData({ ...formData, gst_number: e.target.value })}
-                            />
-                        </div>
+                        
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Company Website</label>
                             <input
@@ -440,15 +431,61 @@ export default function Suppliers() {
                                 onChange={(e) => setFormData({ ...formData, website: e.target.value })}
                             />
                         </div>
+                        
+                        <div className="pt-4 space-y-4 border-t border-slate-50 mt-4">
+                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Primary Stakeholder</h3>
+                            <div className="space-y-4 bg-slate-50/50 p-6 rounded-3xl border border-slate-100">
+                                <div className="space-y-2">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">POC Name *</label>
+                                    <input
+                                        required
+                                        className="w-full rounded-xl border border-white px-4 py-3 text-sm font-bold bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                                        placeholder="Full name"
+                                        value={formData.pocs[0]?.name || ""}
+                                        onChange={(e) => handlePOCChange(0, 'name', e.target.value)}
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Email</label>
+                                        <input
+                                            className="w-full rounded-xl border border-white px-4 py-3 text-sm font-bold bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                                            placeholder="Personal work email"
+                                            value={formData.pocs[0]?.email || ""}
+                                            onChange={(e) => handlePOCChange(0, 'email', e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Phone</label>
+                                        <input
+                                            className="w-full rounded-xl border border-white px-4 py-3 text-sm font-bold bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                                            placeholder="Direct number"
+                                            value={formData.pocs[0]?.phone || ""}
+                                            onChange={(e) => handlePOCChange(0, 'phone', e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div className="space-y-6">
                         <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Operations Address</label>
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Billing Address *</label>
                             <textarea
+                                required
                                 className="w-full rounded-2xl border border-slate-200 px-5 py-4 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold min-h-[148px]"
                                 placeholder="Headquarters or shipping location"
                                 value={formData.address}
                                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">GST Number of Supplier</label>
+                            <input
+                                className="w-full rounded-2xl border border-slate-200 px-5 py-4 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-mono font-bold"
+                                placeholder="GSTIN Number"
+                                value={formData.gst_number}
+                                onChange={(e) => setFormData({ ...formData, gst_number: e.target.value })}
                             />
                         </div>
                         <div className="space-y-2">
@@ -465,7 +502,7 @@ export default function Suppliers() {
               ) : (
                 <div className="space-y-6">
                     <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Points of Contact</h3>
+                        <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Additional Stakeholders</h3>
                         <button 
                             type="button"
                             onClick={handleAddPOC}
@@ -476,17 +513,17 @@ export default function Suppliers() {
                     </div>
                     
                     <div className="grid gap-6">
-                        {formData.pocs.map((poc, idx) => (
-                            <div key={idx} className="relative p-8 rounded-[32px] border border-slate-100 bg-slate-50/50 group/form-poc">
-                                {formData.pocs.length > 1 && (
-                                    <button 
-                                        type="button"
-                                        onClick={() => handleRemovePOC(idx)}
-                                        className="absolute top-4 right-4 p-2 text-slate-300 hover:text-red-500 transition-colors"
-                                    >
-                                        <X className="h-5 w-5" />
-                                    </button>
-                                )}
+                        {formData.pocs.slice(1).map((poc, i) => {
+                            const idx = i + 1;
+                            return (
+                             <div key={idx} className="relative p-8 rounded-[32px] border border-slate-100 bg-slate-50/50 group/form-poc">
+                                <button 
+                                    type="button"
+                                    onClick={() => handleRemovePOC(idx)}
+                                    className="absolute top-4 right-4 p-2 text-slate-300 hover:text-red-500 transition-colors"
+                                >
+                                    <X className="h-5 w-5" />
+                                </button>
                                 <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
                                     <div className="lg:col-span-1 space-y-2">
                                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Name</label>
@@ -524,7 +561,8 @@ export default function Suppliers() {
                                     </div>
                                 </div>
                             </div>
-                        ))}
+                           );
+                         })}
                     </div>
                 </div>
               )}

@@ -23,7 +23,7 @@ export default async function (fastifyRaw: FastifyInstance) {
         pocs: Type.Optional(Type.Array(POCSchema)),
         gst_number: Type.Optional(Type.String()),
         regulatory_info: Type.Optional(Type.String()),
-        address: Type.Optional(Type.String()),
+        address: Type.String(),
         website: Type.Optional(Type.String()),
         notes: Type.Optional(Type.String())
     })
