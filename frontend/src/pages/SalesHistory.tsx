@@ -48,13 +48,16 @@ export default function SalesHistory() {
     try {
       const token = localStorage.getItem('token');
       const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
-      const response = await fetch(`${baseUrl}/sales/reports/hsn-wise`, {
+      const response = await fetch(`${baseUrl}/sales/hsn-report`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
       
-      if (!response.ok) throw new Error('Failed to download report');
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(`Server error (${response.status}): ${errorBody.message || response.statusText}`);
+      }
       
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -65,9 +68,9 @@ export default function SalesHistory() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Export failed", err);
-      alert("Failed to export report");
+      alert("Failed to export report: " + (err.message || String(err)));
     } finally {
       setIsExporting(false);
     }
