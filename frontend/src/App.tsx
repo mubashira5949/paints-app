@@ -16,6 +16,10 @@ import Sales from "./pages/Sales";
 import SalesHistory from "./pages/SalesHistory";
 import Orders from "./pages/Orders";
 import Clients from "./pages/Clients";
+import Losses from "./pages/Losses";
+import RawMaterials from "./pages/RawMaterials";
+import Suppliers from "./pages/Suppliers";
+import PurchaseOrders from "./pages/PurchaseOrders";
 
 function App() {
   return (
@@ -41,6 +45,10 @@ function App() {
               <Route path="sales/history" element={<SalesHistory />} />
               <Route path="sales/orders" element={<Orders />} />
               <Route path="clients" element={<Clients />} />
+              <Route path="losses" element={<Losses />} />
+              <Route path="raw-materials" element={<RawMaterials />} />
+              <Route path="suppliers" element={<Suppliers />} />
+              <Route path="purchase-orders" element={<PurchaseOrders />} />
 
               {/* Manager and Admin routes */}
               <Route element={<ProtectedRoute allowedRoles={["manager", "admin"]} />}>

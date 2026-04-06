@@ -152,6 +152,18 @@ fastify.register(salesModule, { prefix: '/sales' })
 
 import clientsModule from './modules/clients'
 import settingsModule from './modules/settings'
+import suppliersModule from './modules/suppliers'
+import purchaseOrdersModule from './modules/purchase-orders'
+
+/**
+ * Register purchase orders module with a '/purchase-orders' prefix.
+ */
+fastify.register(purchaseOrdersModule, { prefix: '/purchase-orders' })
+
+/**
+ * Register suppliers module with a '/suppliers' prefix.
+ */
+fastify.register(suppliersModule, { prefix: '/suppliers' })
 
 /**
  * Register clients module with a '/clients' prefix.
@@ -162,6 +174,13 @@ fastify.register(clientsModule, { prefix: '/clients' })
  * Register settings module with a '/settings' prefix.
  */
 fastify.register(settingsModule, { prefix: '/settings' })
+
+import lossesModule from './modules/losses'
+
+/**
+ * Register losses module with a '/api/losses' prefix.
+ */
+fastify.register(lossesModule, { prefix: '/api/losses' })
 
 /**
  * Root endpoint - returns basic API information.
