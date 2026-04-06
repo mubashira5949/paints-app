@@ -86,7 +86,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                 await client.query('COMMIT')
                 
                 const fullPO = await client.query(`
-                    SELECT po.*, s.name as supplier_name, s.email as supplier_email, s.address as supplier_address, s.phone as supplier_phone, s.gst_number as supplier_gst,
+                    SELECT po.*, s.name as supplier_name, s.email as supplier_email, s.address as supplier_address, s.phone as supplier_phone, s.gst_number as supplier_gst, s.pocs as supplier_pocs,
                     (SELECT json_agg(items) FROM (
                         SELECT poi.*, r.name as resource_name 
                         FROM purchase_order_items poi

@@ -120,6 +120,30 @@ export default function PurchaseOrders() {
     return subtotal * 0.18; // 18% GST (Standard in India)
   };
 
+  const openEditModal = (item: POItem) => {
+      setSelectedItem(item);
+      setEditData({ quantity: item.quantity.toString(), unit_price: item.unit_price.toString() });
+      setIsEditModalOpen(true);
+  };
+
+  const handleUpdateItem = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!selectedItem) return;
+      try {
+          await apiRequest(`/purchase-orders/${selectedItem.purchase_order_id}/items/${selectedItem.id}`, {
+              method: "PUT",
+              body: { 
+                  quantity: parseFloat(editData.quantity),
+                  unit_price: parseFloat(editData.unit_price)
+              }
+          });
+          setIsEditModalOpen(false);
+          fetchOrders();
+      } catch (err: any) {
+          alert(err.message);
+      }
+  };
+
   return (
     <div className="space-y-8 max-w-5xl mx-auto px-4 py-12 print:p-0 print:max-w-none">
       <div className="flex items-center justify-between no-print">

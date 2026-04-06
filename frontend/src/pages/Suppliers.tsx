@@ -422,6 +422,7 @@ export default function Suppliers() {
                                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                             />
                         </div>
+                        
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Company Website</label>
                             <input

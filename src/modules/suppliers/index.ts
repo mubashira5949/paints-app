@@ -4,7 +4,7 @@
  */
 
 import { FastifyInstance } from 'fastify'
-import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
+import { TypeBoxTypeProvider } from '@fastify/type-provider-type provider'
 import { Type } from '@sinclair/typebox'
 import { authorizeRole } from '../../utils/authorizeRole'
 
