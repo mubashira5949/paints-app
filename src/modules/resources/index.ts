@@ -14,13 +14,19 @@ export default async function (fastifyRaw: FastifyInstance) {
     const CreateResourceSchema = Type.Object({
         name: Type.String(),
         description: Type.Optional(Type.String()),
-        unit: Type.String({ description: 'Unit of measurement, e.g., kg, L, g' }) // e.g., kg, L, etc.
+        unit: Type.String({ description: 'Unit of measurement, e.g., kg, L, g' }),
+        supplier_id: Type.Optional(Type.Integer()),
+        color: Type.Optional(Type.String()),
+        feel: Type.Optional(Type.String())
     })
 
     const UpdateResourceSchema = Type.Object({
         name: Type.Optional(Type.String()),
         description: Type.Optional(Type.String()),
-        unit: Type.Optional(Type.String())
+        unit: Type.Optional(Type.String()),
+        supplier_id: Type.Optional(Type.Integer()),
+        color: Type.Optional(Type.String()),
+        feel: Type.Optional(Type.String())
     })
 
     const ResourceIdParamSchema = Type.Object({
@@ -36,7 +42,10 @@ export default async function (fastifyRaw: FastifyInstance) {
         handler: async (request, reply) => {
             try {
                 const result = await fastify.db.query(
-                    'SELECT id, name, description, unit, current_stock, created_at, updated_at FROM resources ORDER BY name ASC'
+                    `SELECT r.id, r.name, r.description, r.unit, r.current_stock, r.color, r.feel, r.supplier_id, s.name as supplier_name, r.created_at, r.updated_at 
+                     FROM resources r
+                     LEFT JOIN suppliers s ON r.supplier_id = s.id
+                     ORDER BY r.name ASC`
                 )
                 return reply.send(result.rows)
             } catch (err) {
@@ -61,7 +70,10 @@ export default async function (fastifyRaw: FastifyInstance) {
             const { id } = request.params
             try {
                 const result = await fastify.db.query(
-                    'SELECT id, name, description, unit, current_stock, created_at, updated_at FROM resources WHERE id = $1',
+                    `SELECT r.id, r.name, r.description, r.unit, r.current_stock, r.color, r.feel, r.supplier_id, s.name as supplier_name, r.created_at, r.updated_at 
+                     FROM resources r
+                     LEFT JOIN suppliers s ON r.supplier_id = s.id
+                     WHERE r.id = $1`,
                     [id]
                 )
                 if (result.rows.length === 0) {
@@ -91,11 +103,11 @@ export default async function (fastifyRaw: FastifyInstance) {
             body: CreateResourceSchema
         },
         handler: async (request, reply) => {
-            const { name, description, unit } = request.body
+            const { name, description, unit, supplier_id, color, feel } = request.body
             try {
                 const insertResult = await fastify.db.query(
-                    'INSERT INTO resources (name, description, unit) VALUES ($1, $2, $3) RETURNING *',
-                    [name, description, unit]
+                    'INSERT INTO resources (name, description, unit, supplier_id, color, feel) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+                    [name, description, unit, supplier_id, color, feel]
                 )
                 const newResource = insertResult.rows[0]
 
@@ -139,7 +151,7 @@ export default async function (fastifyRaw: FastifyInstance) {
         },
         handler: async (request, reply) => {
             const { id } = request.params
-            const { name, description, unit } = request.body
+            const { name, description, unit, supplier_id, color, feel } = request.body
 
             try {
                 // Build dynamic update query
@@ -158,6 +170,18 @@ export default async function (fastifyRaw: FastifyInstance) {
                 if (unit !== undefined) {
                     updates.push(`unit = $${paramIdx++}`)
                     values.push(unit)
+                }
+                if (supplier_id !== undefined) {
+                    updates.push(`supplier_id = $${paramIdx++}`)
+                    values.push(supplier_id)
+                }
+                if (color !== undefined) {
+                    updates.push(`color = $${paramIdx++}`)
+                    values.push(color)
+                }
+                if (feel !== undefined) {
+                    updates.push(`feel = $${paramIdx++}`)
+                    values.push(feel)
                 }
 
                 // If nothing to update, return the existing resource

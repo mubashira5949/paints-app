@@ -9,6 +9,9 @@ import {
   History,
   ClipboardList,
   UserRound,
+  AlertTriangle,
+  Building2,
+  Layers,
 } from "lucide-react";
 
 export type UserRole = "manager" | "operator" | "sales" | "admin" | "worker";
@@ -74,6 +77,30 @@ export const navigation: NavItem[] = [
     path: "/users",
     icon: Users,
     roles: ["manager", "admin"],  // Manager and Admin
+  },
+  {
+    title: "Losses",
+    path: "/losses",
+    icon: AlertTriangle,
+    roles: ["manager", "operator", "sales", "admin"],
+  },
+  {
+    title: "Suppliers",
+    path: "/suppliers",
+    icon: Building2,
+    roles: ["manager", "admin"],
+  },
+  {
+    title: "Raw Materials",
+    path: "/raw-materials",
+    icon: Layers,
+    roles: ["manager", "admin", "operator"],
+  },
+  {
+    title: "Purchase Orders",
+    path: "/purchase-orders",
+    icon: ShoppingCart,
+    roles: ["manager", "admin"],
   },
   {
     title: "Settings",
