@@ -48,7 +48,7 @@ export default function SalesHistory() {
     try {
       const token = localStorage.getItem('token');
       const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
-      const response = await fetch(`${baseUrl}/sales/hsn-report`, {
+      const response = await fetch(`${baseUrl}/sales/export-hsn`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }

@@ -8,10 +8,10 @@ export default async function (fastifyRaw: FastifyInstance) {
     const fastify = fastifyRaw.withTypeProvider<TypeBoxTypeProvider>()
 
     /**
-     * GET /sales/hsn-report
+     * GET /sales/export-hsn
      * Exports an HSN-wise sales report as CSV.
      */
-    fastify.get('/hsn-report', {
+    fastify.get('/export-hsn', {
         preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
         handler: async (request, reply) => {
             fastify.log.info('HSN-wise sales report requested')
