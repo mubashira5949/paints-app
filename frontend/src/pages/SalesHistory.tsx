@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { apiRequest } from "../services/api";
-import { History, Loader2, Package, Search } from "lucide-react";
+import { History, Loader2, Package, Search, Download } from "lucide-react";
 import { formatUnit, useUnitPreference } from "../utils/units";
 import { useDateFormatPreference, formatDate } from "../utils/dateFormatter";
+import { useAuth } from "../contexts/AuthContext";
 
 interface SalesTransaction {
   id: number;
@@ -18,11 +19,13 @@ interface SalesTransaction {
 }
 
 export default function SalesHistory() {
+  const { user } = useAuth();
   const dateFormat = useDateFormatPreference();
   const unitPref = useUnitPreference();
   const [transactions, setTransactions] = useState<SalesTransaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     fetchTransactions();
@@ -37,6 +40,39 @@ export default function SalesHistory() {
       console.error("Failed to fetch transactions", err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleExportHSN = async () => {
+    setIsExporting(true);
+    try {
+      const token = localStorage.getItem('token');
+      const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
+      const response = await fetch(`${baseUrl}/sales/export-hsn`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(`Server error (${response.status}): ${errorBody.message || response.statusText}`);
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `HSN_Sales_Report_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      console.error("Export failed", err);
+      alert("Failed to export report: " + (err.message || String(err)));
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -59,6 +95,21 @@ export default function SalesHistory() {
           </h1>
           <p className="text-slate-500 mt-2 font-medium">View completed sales dispatches.</p>
         </div>
+        
+        {(user?.role === 'admin' || user?.role === 'manager') && (
+          <button
+            onClick={handleExportHSN}
+            disabled={isExporting}
+            className="inline-flex items-center gap-2 bg-slate-900 text-white px-5 py-3 rounded-xl font-bold uppercase tracking-widest text-xs shadow-xl shadow-slate-200 hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-50"
+          >
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+            ) : (
+              <Download className="w-4 h-4 text-emerald-400" />
+            )}
+            {isExporting ? 'Generating...' : 'HSN Report (CSV)'}
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col items-stretch">

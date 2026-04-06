@@ -4,7 +4,51 @@ import { Type } from '@sinclair/typebox'
 import { authorizeRole } from '../../utils/authorizeRole'
 
 export default async function (fastifyRaw: FastifyInstance) {
+    fastifyRaw.log.info('Sales module registering...')
     const fastify = fastifyRaw.withTypeProvider<TypeBoxTypeProvider>()
+
+    /**
+     * GET /sales/export-hsn
+     * Exports an HSN-wise sales report as CSV.
+     */
+    fastify.get('/export-hsn', {
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
+        handler: async (request, reply) => {
+            fastify.log.info('HSN-wise sales report requested')
+            let client
+            try {
+                client = await fastify.db.connect()
+                const result = await client.query(`
+                    SELECT 
+                        COALESCE(c.hsn_code, 'N/A') as hsn_code,
+                        c.name as product_name,
+                        SUM(ABS(t.quantity_units)) as total_units,
+                        SUM(ABS(t.quantity_kg)) as total_weight_kg
+                    FROM finished_stock_transactions t
+                    JOIN colors c ON t.color_id = c.id
+                    WHERE t.transaction_type = 'sale'
+                    GROUP BY c.hsn_code, c.name
+                    ORDER BY c.hsn_code, c.name
+                `)
+
+                let csv = 'HSN Code,Product Name,Total Units,Total Weight (KG)\n'
+                result.rows.forEach(row => {
+                    const rawName = row.product_name || 'Unknown Product'
+                    const productName = rawName.includes(',') ? `"${rawName}"` : rawName
+                    csv += `${row.hsn_code},${productName},${row.total_units || 0},${row.total_weight_kg || 0}\n`
+                })
+
+                reply.header('Content-Type', 'text/csv')
+                reply.header('Content-Disposition', 'attachment; filename=hsn_wise_sales_report.csv')
+                return reply.send(csv)
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to generate report' })
+            } finally {
+                if (client) client.release()
+            }
+        }
+    })
 
     /**
      * GET /sales/transactions
