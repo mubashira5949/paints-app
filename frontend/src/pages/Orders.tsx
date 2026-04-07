@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { apiRequest } from "../services/api";
-import { ClipboardList, Plus, Loader2, Search, X, ShoppingCart, UserRound, MapPin, Receipt } from "lucide-react";
+import { ClipboardList, Plus, Loader2, Search, X, ShoppingCart, UserRound, MapPin, Receipt, BoxIcon } from "lucide-react";
 import { useDateFormatPreference, formatDate } from "../utils/dateFormatter";
+import { useAuth } from "../contexts/AuthContext";
 
 interface OrderItem {
   item_id: number;
@@ -56,6 +57,7 @@ interface InventoryItem {
 }
 
 export default function Orders() {
+  const { user } = useAuth();
   const dateFormat = useDateFormatPreference();
   const [orders, setOrders] = useState<ClientOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -226,12 +228,14 @@ export default function Orders() {
           </h1>
           <p className="text-slate-500 mt-2 font-medium">Manage and view all incoming customer orders.</p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 bg-slate-900 text-white px-5 py-3 rounded-xl font-bold uppercase tracking-widest text-sm shadow-xl shadow-slate-200 hover:bg-slate-800 transition-all active:scale-95"
-        >
-          <Plus className="w-5 h-5" /> New Order
-        </button>
+        {user?.role !== 'operator' && (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 bg-slate-900 text-white px-5 py-3 rounded-xl font-bold uppercase tracking-widest text-sm shadow-xl shadow-slate-200 hover:bg-slate-800 transition-all active:scale-95"
+          >
+            <Plus className="w-5 h-5" /> New Order
+          </button>
+        )}
       </div>
 
       {/* Orders list */}
@@ -270,7 +274,7 @@ export default function Orders() {
                     </h3>
                     <div className="flex flex-wrap gap-3 mt-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                       <span>Order #{o.id} · {formatDate(o.created_at, dateFormat)}</span>
-                      {o.gst_number && (
+                      {o.gst_number && user?.role !== 'operator' && (
                         <span className="flex items-center gap-1 text-amber-600">
                           <Receipt className="w-3 h-3" /> {o.gst_number}
                         </span>

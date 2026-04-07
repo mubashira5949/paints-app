@@ -423,14 +423,26 @@ export default function Dashboard() {
                           <p className="text-[10px] text-slate-500 font-medium">{alert.remaining} left</p>
                         </td>
                         <td className="px-3 py-3 text-right">
-                          <span
-                            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-black uppercase tracking-wider ${alert.status === "critical"
-                              ? "bg-red-100 text-red-700"
-                              : "bg-amber-100 text-amber-700"
-                              }`}
-                          >
-                            {alert.status}
-                          </span>
+                          <div className="flex flex-col items-end gap-1.5">
+                            <span
+                              className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-black uppercase tracking-wider ${alert.status === "critical"
+                                ? "bg-red-100 text-red-700"
+                                : "bg-amber-100 text-amber-700"
+                                }`}
+                            >
+                              {alert.status}
+                            </span>
+                            {(user?.role === 'operator' || user?.role === 'admin' || user?.role === 'manager') && alert.status === "critical" && (
+                              <button
+                                onClick={() => {
+                                  window.alert(`Manager notified to initiate Purchase Order for ${alert.material}`);
+                                }}
+                                className="text-[9px] bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded uppercase tracking-widest font-black transition-colors shadow-sm"
+                              >
+                                Notify Manager
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))
