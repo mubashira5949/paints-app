@@ -24,6 +24,7 @@ export default async function (fastifyRaw: FastifyInstance) {
         name: Type.Optional(Type.String()),
         description: Type.Optional(Type.String()),
         unit: Type.Optional(Type.String()),
+        current_stock: Type.Optional(Type.Number()),
         supplier_id: Type.Optional(Type.Integer()),
         color: Type.Optional(Type.String()),
         feel: Type.Optional(Type.String())
@@ -151,7 +152,7 @@ export default async function (fastifyRaw: FastifyInstance) {
         },
         handler: async (request, reply) => {
             const { id } = request.params
-            const { name, description, unit, supplier_id, color, feel } = request.body
+            const { name, description, unit, supplier_id, color, feel, current_stock } = request.body
 
             try {
                 // Build dynamic update query
@@ -170,6 +171,10 @@ export default async function (fastifyRaw: FastifyInstance) {
                 if (unit !== undefined) {
                     updates.push(`unit = $${paramIdx++}`)
                     values.push(unit)
+                }
+                if (current_stock !== undefined) {
+                    updates.push(`current_stock = $${paramIdx++}`)
+                    values.push(current_stock)
                 }
                 if (supplier_id !== undefined) {
                     updates.push(`supplier_id = $${paramIdx++}`)

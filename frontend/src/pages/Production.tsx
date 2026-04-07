@@ -71,6 +71,7 @@ interface HistoryRun {
   formula_name: string;
   color_name: string;
   packaging?: { pack_size_kg: number; quantity_units: number }[];
+  resource_used?: number;
 }
 
 interface ActiveRun {
@@ -145,7 +146,7 @@ export default function Production() {
   const { user } = useAuth();
   const unitPref = useUnitPreference();
   const navigate = useNavigate();
-  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [metrics, setMetrics] = useState<{ activeRuns: number } | null>(null);
   const [historyRuns, setHistoryRuns] = useState<HistoryRun[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [colors, setColors] = useState<Color[]>([]);
@@ -165,6 +166,12 @@ export default function Production() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   // Filters State
+  const [activeSearch, setActiveSearch] = useState("");
+  const [activeColor, setActiveColor] = useState<number | "">("");
+  const [activeStatus, setActiveStatus] = useState("All");
+  const [activeFromDate, setActiveFromDate] = useState("");
+  const [activeToDate, setActiveToDate] = useState("");
+
   const [filterSearch, setFilterSearch] = useState("");
   const [filterColor, setFilterColor] = useState<number | "">("");
   const [filterStatus, setFilterStatus] = useState("All");
@@ -199,13 +206,16 @@ export default function Production() {
   const [customLossReason, setCustomLossReason] = useState<string>("");
 
 
-  const fetchMetrics = async () => {
-    try {
-      const data = await apiRequest<Metrics>("/production-runs/metrics");
-      setMetrics(data);
-    } catch (err) {
-      console.error("Failed to fetch metrics", err);
-    }
+  // KPI metrics derived from historyRuns — no extra API call needed
+  const historyMetrics = {
+    totalProduction: historyRuns
+      .filter(r => r.status === "completed")
+      .reduce((sum, r) => sum + (Number(r.actual_quantity_kg) || 0), 0),
+    resourceConsumption: historyRuns
+      .reduce((sum, r) => sum + (Number(r.resource_used) || 0), 0),
+    variance: historyRuns
+      .filter(r => r.status === "completed")
+      .reduce((sum, r) => sum + (Number(r.variance) || 0), 0),
   };
 
   const fetchHistory = async () => {
@@ -399,7 +409,10 @@ export default function Production() {
   }, [filterSearch, filterColor, filterStatus, filterFromDate, filterToDate]);
 
   useEffect(() => {
-    fetchMetrics();
+    // Fetch active runs count for the Active Runs card only
+    apiRequest<{ activeRuns: number }>("/production-runs/metrics")
+      .then(setMetrics)
+      .catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -496,7 +509,13 @@ export default function Production() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-xl border bg-card p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition">
+        {(() => {
+          const isFiltered = filterSearch || filterColor || filterStatus !== "All" || filterFromDate || filterToDate;
+          const periodLabel = isFiltered ? "Filtered" : "All Time";
+          
+          return (
+            <>
+              <div className="rounded-xl border bg-card p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition">
           <div className="flex items-center justify-between space-y-0 pb-2">
             <h3 className="tracking-tight text-sm font-medium text-muted-foreground">
               Active Runs
@@ -515,16 +534,16 @@ export default function Production() {
         <div className="rounded-xl border bg-card p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition">
           <div className="flex items-center justify-between space-y-0 pb-2">
             <h3 className="tracking-tight text-sm font-medium text-muted-foreground">
-              Today's Production
+              Total Production
             </h3>
             <Droplets className="h-5 w-5 text-green-500" />
           </div>
           <div>
             <div className="text-3xl font-bold">
-              {formatUnit(metrics?.todayProduction ?? 0, unitPref)}
+              {formatUnit(historyMetrics.totalProduction, unitPref)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Paint produced today
+              Paint produced ({periodLabel})
             </p>
           </div>
         </div>
@@ -537,10 +556,10 @@ export default function Production() {
           </div>
           <div>
             <div className="text-3xl font-bold">
-              {formatUnit(metrics?.resourceConsumption ?? 0, unitPref)}
+              {formatUnit(historyMetrics.resourceConsumption, unitPref)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Raw material used today
+              Raw material used ({periodLabel})
             </p>
           </div>
         </div>
@@ -554,21 +573,24 @@ export default function Production() {
           <div>
             <div
               className={`text-3xl font-bold ${
-                (metrics?.variance ?? 0) > 0
+                historyMetrics.variance > 0
                   ? "text-green-600"
-                  : (metrics?.variance ?? 0) < 0
+                  : historyMetrics.variance < 0
                   ? "text-orange-500"
                   : "text-muted-foreground"
               }`}
             >
-              {metrics?.variance && metrics.variance > 0 ? "+" : ""}
-              {formatUnit(metrics?.variance ?? 0, unitPref)}
+              {historyMetrics.variance > 0 ? "+" : ""}
+              {formatUnit(historyMetrics.variance, unitPref)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Actual vs Planned (Today)
+              Actual vs Planned ({periodLabel})
             </p>
           </div>
         </div>
+            </>
+          );
+        })()}
       </div>
 
       <div className="rounded-xl border bg-white shadow-sm p-4 mb-6">
@@ -579,15 +601,15 @@ export default function Production() {
               type="text"
               placeholder="Search Batch ID..."
               className="pl-10 w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2 text-sm focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all"
-              value={filterSearch}
-              onChange={(e) => setFilterSearch(e.target.value)}
+              value={activeSearch}
+              onChange={(e) => setActiveSearch(e.target.value)}
             />
           </div>
           <div className="w-full md:w-48">
             <select
               className="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2 text-sm focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all"
-              value={filterColor}
-              onChange={(e) => setFilterColor(e.target.value === "" ? "" : Number(e.target.value))}
+              value={activeColor}
+              onChange={(e) => setActiveColor(e.target.value === "" ? "" : Number(e.target.value))}
             >
               <option value="">All Colors</option>
               {colors.map((c) => (
@@ -598,8 +620,8 @@ export default function Production() {
           <div className="w-full md:w-48">
             <select
               className="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2 text-sm focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none transition-all"
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
+              value={activeStatus}
+              onChange={(e) => setActiveStatus(e.target.value)}
             >
               <option value="All">All Status</option>
               <option value="completed">Completed</option>
@@ -613,15 +635,15 @@ export default function Production() {
             <input
               type="date"
               className="w-full md:w-32 rounded-md bg-transparent px-2 py-1 text-xs focus:ring-2 focus:ring-blue-600 outline-none"
-              value={filterFromDate}
-              onChange={(e) => setFilterFromDate(e.target.value)}
+              value={activeFromDate}
+              onChange={(e) => setActiveFromDate(e.target.value)}
             />
             <span className="text-slate-400 text-xs font-medium">to</span>
             <input
               type="date"
               className="w-full md:w-32 rounded-md bg-transparent px-2 py-1 text-xs focus:ring-2 focus:ring-blue-600 outline-none"
-              value={filterToDate}
-              onChange={(e) => setFilterToDate(e.target.value)}
+              value={activeToDate}
+              onChange={(e) => setActiveToDate(e.target.value)}
             />
           </div>
         </div>
@@ -780,11 +802,11 @@ export default function Production() {
                 <div className="flex flex-col gap-4">
                   {activeRuns
                     .filter((run) => {
-                      if (filterSearch && !run.batchId.toLowerCase().includes(filterSearch.toLowerCase())) return false;
-                      if (filterColor && colors.find(c => c.id === filterColor)?.name !== run.color) return false;
-                      if (filterStatus && filterStatus !== "All" && run.status !== filterStatus) return false;
-                      if (filterFromDate && run.started_at && new Date(run.started_at) < new Date(filterFromDate)) return false;
-                      if (filterToDate && run.started_at && new Date(run.started_at) > new Date(filterToDate)) return false;
+                      if (activeSearch && !run.batchId.toLowerCase().includes(activeSearch.toLowerCase()) && !run.color.toLowerCase().includes(activeSearch.toLowerCase())) return false;
+                      if (activeColor && colors.find(c => c.id === activeColor)?.name !== run.color) return false;
+                      if (activeStatus && activeStatus !== "All" && run.status !== activeStatus) return false;
+                      if (activeFromDate && run.started_at && new Date(run.started_at) < new Date(activeFromDate)) return false;
+                      if (activeToDate && run.started_at && new Date(run.started_at) > new Date(activeToDate)) return false;
                       return true;
                     })
                     .slice(0, showAllActive ? activeRuns.length : 5).map((run) => {

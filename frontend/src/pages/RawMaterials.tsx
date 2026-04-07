@@ -54,7 +54,8 @@ export default function RawMaterials() {
     unit: "kg",
     supplier_id: "",
     color: "",
-    feel: ""
+    feel: "",
+    current_stock: "0"
   });
 
   const [orderFormData, setOrderFormData] = useState({
@@ -93,7 +94,8 @@ export default function RawMaterials() {
         unit: resource.unit,
         supplier_id: resource.supplier_id?.toString() || "",
         color: resource.color || "",
-        feel: resource.feel || ""
+        feel: resource.feel || "",
+        current_stock: resource.current_stock?.toString() || "0"
       });
     } else {
       setEditingResource(null);
@@ -103,7 +105,8 @@ export default function RawMaterials() {
         unit: "kg",
         supplier_id: "",
         color: "",
-        feel: ""
+        feel: "",
+        current_stock: "0"
       });
     }
     setIsModalOpen(true);
@@ -162,6 +165,7 @@ export default function RawMaterials() {
     try {
       const body = {
         ...formData,
+        current_stock: parseFloat(formData.current_stock) || 0,
         supplier_id: formData.supplier_id ? parseInt(formData.supplier_id) : null
       };
 
@@ -411,18 +415,33 @@ export default function RawMaterials() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Source Supplier</label>
-                <select
-                  className="w-full rounded-2xl border border-slate-200 px-5 py-3 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all font-bold appearance-none"
-                  value={formData.supplier_id}
-                  onChange={(e) => setFormData({ ...formData, supplier_id: e.target.value })}
-                >
-                  <option value="">Select a supplier...</option>
-                  {suppliers.map(sup => (
-                    <option key={sup.id} value={sup.id}>{sup.name}</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Source Supplier</label>
+                  <select
+                    className="w-full rounded-2xl border border-slate-200 px-5 py-3 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all font-bold appearance-none"
+                    value={formData.supplier_id}
+                    onChange={(e) => setFormData({ ...formData, supplier_id: e.target.value })}
+                  >
+                    <option value="">Select a supplier...</option>
+                    {suppliers.map(sup => (
+                      <option key={sup.id} value={sup.id}>{sup.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Current Stock ({formData.unit}) *</label>
+                  <input
+                    required
+                    type="number"
+                    step="any"
+                    className="w-full rounded-2xl border border-slate-200 px-5 py-3 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all font-bold placeholder:text-slate-300 bg-amber-50"
+                    placeholder="e.g. 500"
+                    value={formData.current_stock}
+                    onChange={(e) => setFormData({ ...formData, current_stock: e.target.value })}
+                  />
+                  <p className="text-[9px] text-amber-600 font-bold ml-1 uppercase tracking-widest">⚠️ OVERRIDES WAREHOUSE RECORDS</p>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-6">

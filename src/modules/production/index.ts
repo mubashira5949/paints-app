@@ -99,7 +99,11 @@ export default async function (fastifyRaw: FastifyInstance) {
      */
     fastify.get('/metrics', {
         preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'operator'])],
+        schema: {
+            querystring: HistoryQuerySchema
+        },
         handler: async (request, reply) => {
+            const { search, color, status, start, end } = request.query as any;
             try {
                 // 1. Active Runs — anything not completed or packaging
                 const activeRunsRes = await fastify.db.query(
@@ -111,28 +115,68 @@ export default async function (fastifyRaw: FastifyInstance) {
                 )
                 const activeRuns = parseInt(activeRunsRes.rows[0].count, 10)
 
-                // 2. Today's Production — sum of actual_quantity_kg for completed runs today
+                // Parse Filters
+                let filterClause = ''
+                const params: any[] = []
+
+                if (search) {
+                    params.push(`%${search}%`)
+                    filterClause += ` AND (('PR-' || pr.id::text) ILIKE $${params.length} OR r.name ILIKE $${params.length} OR c.name ILIKE $${params.length})`
+                }
+                if (color) {
+                    params.push(color)
+                    filterClause += ` AND c.name ILIKE $${params.length}`
+                }
+                if (status && status !== 'All') {
+                    params.push(status.toLowerCase())
+                    filterClause += ` AND pr.status = $${params.length}`
+                }
+                if (start) {
+                    params.push(start)
+                    filterClause += ` AND DATE(pr.created_at) >= $${params.length}`
+                }
+                if (end) {
+                    params.push(end)
+                    filterClause += ` AND DATE(pr.created_at) <= $${params.length}`
+                }
+                // If NO filters at all, we now default to ALL TIME instead of CURRENT_DATE
+                // to avoid confusing 0 totals if no production happened today.
+                
+                // 2. Production — sum of actual_quantity_kg
+                // We default to 'completed' status ONLY if no specific status is requested.
+                // Or if they specifically filter, we respect their filter.
+                const statusClause = (!status || status === 'All') ? "AND pr.status = 'completed'" : "";
+                
                 const todayProductionRes = await fastify.db.query(
-                    `SELECT COALESCE(SUM(actual_quantity_kg), 0) AS total
-                     FROM production_runs
-                     WHERE DATE(created_at) = CURRENT_DATE AND status = 'completed'`
+                    `SELECT COALESCE(SUM(pr.actual_quantity_kg), 0) AS total
+                     FROM production_runs pr
+                     JOIN formulas r ON pr.formula_id = r.id
+                     JOIN colors c ON r.color_id = c.id
+                     WHERE 1=1 ${filterClause} ${statusClause}`,
+                    params
                 )
                 const todayProduction = parseFloat(todayProductionRes.rows[0].total)
 
-                // 3. Resource Consumption — sum of actual qty used today
+                // 3. Resource Consumption — sum of actual qty used
                 const consumptionRes = await fastify.db.query(
                     `SELECT COALESCE(SUM(pra.actual_quantity_used), 0) AS total
                      FROM production_resource_actuals pra
                      JOIN production_runs pr ON pra.production_run_id = pr.id
-                     WHERE DATE(pra.created_at) = CURRENT_DATE`
+                     JOIN formulas r ON pr.formula_id = r.id
+                     JOIN colors c ON r.color_id = c.id
+                     WHERE 1=1 ${filterClause}`,
+                    params
                 )
                 const resourceConsumption = parseFloat(consumptionRes.rows[0].total)
 
-                // 4. Variance — (actual - planned) summed for today's completed runs
+                // 4. Variance — sum(actual - planned)
                 const varianceRes = await fastify.db.query(
-                    `SELECT COALESCE(SUM(actual_quantity_kg - planned_quantity_kg), 0) AS variance
-                     FROM production_runs
-                     WHERE DATE(created_at) = CURRENT_DATE AND status = 'completed'`
+                    `SELECT COALESCE(SUM(pr.actual_quantity_kg - pr.planned_quantity_kg), 0) AS variance
+                     FROM production_runs pr
+                     JOIN formulas r ON pr.formula_id = r.id
+                     JOIN colors c ON r.color_id = c.id
+                     WHERE 1=1 ${filterClause} ${statusClause}`,
+                    params
                 )
                 const variance = parseFloat(varianceRes.rows[0].variance)
 
@@ -182,6 +226,11 @@ export default async function (fastifyRaw: FastifyInstance) {
                         r.name AS formula_name,
                         c.name AS color_name,
                         (
+                            SELECT COALESCE(SUM(pra.actual_quantity_used), 0)
+                            FROM production_resource_actuals pra
+                            WHERE pra.production_run_id = pr.id
+                        ) AS resource_used,
+                        (
                             SELECT json_agg(
                                 json_build_object(
                                     'pack_size_kg', fst.pack_size_kg,
@@ -201,7 +250,7 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 if (search) {
                     params.push(`%${search}%`)
-                    query += ` AND (pr.id::text LIKE $${params.length} OR r.name ILIKE $${params.length} OR c.name ILIKE $${params.length})`
+                    query += ` AND (('PR-' || pr.id::text) ILIKE $${params.length} OR r.name ILIKE $${params.length} OR c.name ILIKE $${params.length})`
                 }
 
                 if (color) {
@@ -224,7 +273,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                     query += ` AND DATE(pr.created_at) <= $${params.length}`
                 }
 
-                query += ` ORDER BY pr.created_at DESC LIMIT 20`
+                query += ` ORDER BY pr.created_at DESC`
 
                 const result = await fastify.db.query(query, params)
                 return reply.send(result.rows)
@@ -373,7 +422,7 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 if (search) {
                     params.push(`%${search}%`)
-                    query += ` AND (pr.id::text LIKE $${params.length} OR r.name ILIKE $${params.length} OR c.name ILIKE $${params.length})`
+                    query += ` AND (('PR-' || pr.id::text) ILIKE $${params.length} OR r.name ILIKE $${params.length} OR c.name ILIKE $${params.length})`
                 }
 
                 if (color_id) {

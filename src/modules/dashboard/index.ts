@@ -54,8 +54,8 @@ export default async function (fastifyRaw: FastifyInstance) {
                         SELECT 
                             (SELECT COUNT(*) FROM resources) as "rawMaterials",
                             (SELECT COUNT(*) FROM resources WHERE current_stock <= reorder_level) as "lowStock",
-                            (SELECT COALESCE(SUM(quantity_units), 0) FROM finished_stock) as "finishedStock",
-                            (SELECT COUNT(*) FROM production_runs WHERE status = 'in_progress') as "activeRuns"
+                            (SELECT COALESCE(SUM(quantity_units), 0) FROM finished_stock_transactions WHERE transaction_type = 'production_entry') as "finishedStock",
+                            (SELECT COUNT(*) FROM production_runs WHERE status IN ('planned', 'running', 'paused')) as "activeRuns"
                     `),
                     // 2. Fetch Production Chart Data (Last 6 months)
                     fastify.db.query(`
