@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Building2,
   Layers,
+  TrendingUp,
 } from "lucide-react";
 
 export type UserRole = "manager" | "operator" | "sales" | "admin" | "worker";
@@ -29,6 +30,12 @@ export const navigation: NavItem[] = [
     path: "/",
     icon: LayoutDashboard,
     roles: ["manager", "operator", "sales", "admin", "worker"],
+  },
+  {
+    title: "Analytics & Trends",
+    path: "/trends",
+    icon: TrendingUp,
+    roles: ["manager", "admin", "sales", "operator"],
   },
   {
     title: "Production",
