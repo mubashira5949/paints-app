@@ -65,7 +65,7 @@ export const navigation: NavItem[] = [
     title: "Orders",
     path: "/sales/orders",
     icon: ClipboardList,
-    roles: ["manager", "sales", "admin"],
+    roles: ["manager", "sales", "admin", "operator"],
   },
   {
     title: "Clients",
