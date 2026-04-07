@@ -20,6 +20,7 @@ import Losses from "./pages/Losses";
 import RawMaterials from "./pages/RawMaterials";
 import Suppliers from "./pages/Suppliers";
 import PurchaseOrders from "./pages/PurchaseOrders";
+import Trends from "./pages/Trends";
 
 function App() {
   return (
@@ -35,6 +36,7 @@ function App() {
               <Route index element={<Navigate to="/dashboard" replace />} />
 
               <Route path="dashboard" element={<Dashboard />} />
+              <Route path="trends" element={<Trends />} />
               <Route path="inventory" element={<Inventory />} />
               <Route path="formulas" element={<Formulas />} />
               <Route path="production" element={<Production />} />

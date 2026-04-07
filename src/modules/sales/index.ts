@@ -363,4 +363,71 @@ export default async function (fastifyRaw: FastifyInstance) {
             }
         }
     })
+
+    /**
+     * GET /sales/trends
+     * Returns trending products and sales by client, plus unsold/returned/wastage stats.
+     */
+    fastify.get('/trends', {
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'sales', 'operator'])],
+        handler: async (request, reply) => {
+            let client
+            try {
+                client = await fastify.db.connect()
+
+                const trendingProductsRes = await client.query(`
+                    SELECT 
+                        c.name as color_name,
+                        cl.name as client_name,
+                        SUM(i.quantity * i.pack_size_kg) as total_kg
+                    FROM client_order_items i
+                    JOIN client_orders o ON i.order_id = o.id
+                    JOIN colors c ON i.color_id = c.id
+                    LEFT JOIN clients cl ON o.client_id = cl.id
+                    WHERE o.status != 'cancelled'
+                    GROUP BY c.name, cl.name
+                    ORDER BY total_kg DESC
+                    LIMIT 50
+                `)
+
+                const trendingClientsRes = await client.query(`
+                    SELECT 
+                        cl.name as client_name,
+                        SUM(i.quantity * i.pack_size_kg) as total_kg,
+                        COUNT(DISTINCT o.id) as order_count
+                    FROM client_orders o
+                    LEFT JOIN client_order_items i ON o.id = i.order_id
+                    LEFT JOIN clients cl ON o.client_id = cl.id
+                    WHERE o.status != 'cancelled' AND cl.name IS NOT NULL
+                    GROUP BY cl.name
+                    ORDER BY total_kg DESC
+                `)
+
+                const inventoryStatsRes = await client.query(`
+                    SELECT 
+                        (SELECT COALESCE(SUM(quantity_units * pack_size_kg), 0) FROM finished_stock WHERE quantity_units > 0) as unsold_kg,
+                        (SELECT COALESCE(SUM(ABS(quantity_kg)), 0) FROM finished_stock_transactions WHERE notes ILIKE '%restock from returned order%') as returned_kg
+                `)
+
+                const wastageRes = await client.query(`
+                    SELECT lr.name as reason, SUM(pl.quantity_kg) as total_kg 
+                    FROM product_losses pl 
+                    JOIN loss_reasons lr ON pl.reason_id = lr.id 
+                    GROUP BY lr.name
+                `)
+
+                return reply.send({
+                    trendingProducts: trendingProductsRes.rows,
+                    trendingClients: trendingClientsRes.rows,
+                    inventoryStats: inventoryStatsRes.rows[0],
+                    wastage: wastageRes.rows
+                })
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to retrieve trends' })
+            } finally {
+                if (client) client.release()
+            }
+        }
+    })
 }

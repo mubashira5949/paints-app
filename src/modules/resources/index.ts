@@ -288,4 +288,36 @@ export default async function (fastifyRaw: FastifyInstance) {
             }
         }
     })
+
+    /**
+     * GET /resources/analytics
+     * Generates a report detailing frequently used versus stagnant materials.
+     */
+    fastify.get('/analytics', {
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'operator'])],
+        handler: async (request, reply) => {
+            try {
+                const result = await fastify.db.query(`
+                    SELECT
+                        r.id,
+                        r.name,
+                        r.current_stock,
+                        r.unit,
+                        COALESCE(SUM(ABS(t.quantity)) FILTER (WHERE t.transaction_type IN ('production', 'consumption')), 0) as used_quantity,
+                        MAX(t.created_at) as last_used
+                    FROM resources r
+                    LEFT JOIN resource_stock_transactions t ON r.id = t.resource_id
+                    GROUP BY r.id, r.name, r.current_stock, r.unit
+                    ORDER BY used_quantity DESC
+                `)
+                return reply.send(result.rows)
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({
+                    error: 'Internal Server Error',
+                    message: 'Failed to retrieve resource analytics'
+                })
+            }
+        }
+    })
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { apiRequest } from "../services/api";
-import { History, Loader2, Package, Search, Download } from "lucide-react";
+import { History, Loader2, Package, Search, Download, Filter } from "lucide-react";
 import { formatUnit, useUnitPreference } from "../utils/units";
 import { useDateFormatPreference, formatDate } from "../utils/dateFormatter";
 import { useAuth } from "../contexts/AuthContext";
@@ -25,7 +25,12 @@ export default function SalesHistory() {
   const [transactions, setTransactions] = useState<SalesTransaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [colorFilter, setColorFilter] = useState("");
   const [isExporting, setIsExporting] = useState(false);
+
+  const uniqueColors = Array.from(new Set(transactions.map(t => t.color_name))).sort();
 
   useEffect(() => {
     fetchTransactions();
@@ -76,12 +81,25 @@ export default function SalesHistory() {
     }
   };
 
-  const filtered = transactions.filter(t => 
-    t.color_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (t.notes && t.notes.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (t.logged_by && t.logged_by.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (t.business_code && t.business_code.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filtered = transactions.filter(t => {
+    const matchesSearch = 
+      t.color_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (t.notes && t.notes.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (t.logged_by && t.logged_by.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (t.business_code && t.business_code.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    const matchesColor = colorFilter ? t.color_name === colorFilter : true;
+    
+    let matchesDate = true;
+    if (dateFrom || dateTo) {
+      const tDate = new Date(t.created_at).setHours(0,0,0,0);
+      const fromD = dateFrom ? new Date(dateFrom).setHours(0,0,0,0) : -Infinity;
+      const toD = dateTo ? new Date(dateTo).setHours(23,59,59,999) : Infinity;
+      matchesDate = tDate >= fromD && tDate <= toD;
+    }
+
+    return matchesSearch && matchesColor && matchesDate;
+  });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -124,7 +142,37 @@ export default function SalesHistory() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{filtered.length} entries</p>
+
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto mt-3 md:mt-0">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-slate-400" />
+              <select 
+                value={colorFilter}
+                onChange={e => setColorFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none min-w-[120px]"
+              >
+                <option value="">All Colors</option>
+                {uniqueColors.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input 
+                type="date"
+                value={dateFrom}
+                onChange={e => setDateFrom(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+              />
+              <span className="text-slate-400 text-xs font-bold uppercase">to</span>
+              <input 
+                type="date"
+                value={dateTo}
+                onChange={e => setDateTo(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+              />
+            </div>
+          </div>
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap ml-auto md:ml-0">{filtered.length} entries</p>
         </div>
 
         <div className="overflow-x-auto">
