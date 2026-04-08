@@ -367,7 +367,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                         total_qty_kg: row.total_qty_kg,
                         order_count: row.order_count,
                         client_names: row.client_names,
-                        detailed_orders: row.detailed_orders,
+                        detailed_orders: typeof row.detailed_orders === 'string' ? JSON.parse(row.detailed_orders) : (row.detailed_orders || []),
                         required_packs: groupedPacks
                     };
                 });
