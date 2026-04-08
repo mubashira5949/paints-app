@@ -670,7 +670,6 @@ export default function Production() {
                     return (
                     <div key={item.color_id} 
                          className={`relative group bg-white p-3 rounded-xl border border-slate-100 hover:border-emerald-300 hover:shadow-xl transition-all duration-300 ${expandedDemand == item.color_id ? 'z-[100] ring-4 ring-emerald-400/20 shadow-2xl scale-[1.02]' : 'z-auto'}`}
-                         onMouseLeave={() => expandedDemand == item.color_id && setExpandedDemand(null)}
                     >
                       {/* Color swatch + name */}
                       <div className="flex items-center gap-2 mb-2">
