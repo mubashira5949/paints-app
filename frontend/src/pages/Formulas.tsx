@@ -391,34 +391,36 @@ export default function Formulas() {
 
   const openEditFormula = (formula: Formula) => {
     setEditingFormula(formula);
+    const totalQty = formula.resources.reduce((s, r) => s + (r.quantity_required || 0), 0);
     setFormulaForm({
       name: formula.name,
       version: formula.version,
-      batch_size_kg: toDisplayValue(formula.batch_size_kg, unitPref),
+      batch_size_kg: totalQty,
       resources: formula.resources.length > 0 ? formula.resources.map(r => ({ resource_id: r.resource_id, quantity_required: r.quantity_required })) : [{ resource_id: 0, quantity_required: 0 }]
     });
     setIsFormulaModalOpen(true);
   };
 
   const addResourceRow = () => {
-    setFormulaForm(prev => ({
-      ...prev,
-      resources: [...prev.resources, { resource_id: 0, quantity_required: 0 }]
-    }));
+    setFormulaForm(prev => {
+      const newResources = [...prev.resources, { resource_id: 0, quantity_required: 0 }];
+      return { ...prev, resources: newResources, batch_size_kg: newResources.reduce((s, r) => s + (r.quantity_required || 0), 0) };
+    });
   };
 
   const removeResourceRow = (index: number) => {
-    setFormulaForm(prev => ({
-      ...prev,
-      resources: prev.resources.filter((_, i) => i !== index)
-    }));
+    setFormulaForm(prev => {
+      const newResources = prev.resources.filter((_, i) => i !== index);
+      return { ...prev, resources: newResources, batch_size_kg: newResources.reduce((s, r) => s + (r.quantity_required || 0), 0) };
+    });
   };
 
   const updateResourceRow = (index: number, field: string, value: number) => {
     setFormulaForm(prev => {
       const newResources = [...prev.resources];
       newResources[index] = { ...newResources[index], [field]: value };
-      return { ...prev, resources: newResources };
+      const totalQty = newResources.reduce((s, r) => s + (r.quantity_required || 0), 0);
+      return { ...prev, resources: newResources, batch_size_kg: totalQty };
     });
   };
 
@@ -874,8 +876,24 @@ export default function Formulas() {
                   <input required type="text" className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="1.0.0" value={formulaForm.version} onChange={(e) => setFormulaForm({ ...formulaForm, version: e.target.value })} />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <label className="text-sm font-bold text-slate-700">Base Batch Size ({unitPref})</label>
-                  <input required type="number" min={0.01} step="0.01" className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder={`e.g. ${toDisplayValue(100, unitPref)}`} value={formulaForm.batch_size_kg} onChange={(e) => setFormulaForm({ ...formulaForm, batch_size_kg: Number(e.target.value) })} />
+                  <label className="text-sm font-bold text-slate-700 flex items-center justify-between">
+                    <span>Base Batch Size ({unitPref})</span>
+                    <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Auto-calculated from materials</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      readOnly
+                      type="number"
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 font-mono cursor-not-allowed select-none"
+                      value={formulaForm.batch_size_kg || 0}
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold uppercase tracking-widest pointer-events-none">
+                      = Σ materials
+                    </span>
+                  </div>
+                  {formulaForm.batch_size_kg === 0 && (
+                    <p className="text-[11px] text-amber-600 font-medium">⚠ Add material quantities above — batch size will compute automatically.</p>
+                  )}
                 </div>
               </div>
 
