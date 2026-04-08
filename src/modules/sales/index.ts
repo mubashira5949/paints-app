@@ -348,16 +348,24 @@ export default async function (fastifyRaw: FastifyInstance) {
                 const transformed = result.rows.map(row => {
                     const packMap: Record<number, number> = {};
                     (row.raw_packs || []).forEach((p: any) => {
-                        packMap[p.pack_size_kg] = (packMap[p.pack_size_kg] || 0) + p.quantity;
+                        if (p && p.pack_size_kg) {
+                            packMap[p.pack_size_kg] = (packMap[p.pack_size_kg] || 0) + (p.quantity || 0);
+                        }
                     });
+                    
                     const groupedPacks = Object.keys(packMap).map(k => ({
                         pack_size_kg: Number(k),
                         quantity: packMap[Number(k)]
                     }));
                     
-                    const { raw_packs, ...rest } = row;
                     return {
-                        ...rest,
+                        color_id: row.color_id,
+                        color_name: row.color_name,
+                        business_code: row.business_code,
+                        total_qty_kg: row.total_qty_kg,
+                        order_count: row.order_count,
+                        client_names: row.client_names,
+                        detailed_orders: row.detailed_orders,
                         required_packs: groupedPacks
                     };
                 });

@@ -714,27 +714,37 @@ export default function Production() {
                             )}
                           </div>
                           <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 p-3 bg-white">
-                            {item.detailed_orders && item.detailed_orders.length > 0 ? (
+                            {item.detailed_orders && item.detailed_orders.length > 0 && item.detailed_orders[0] !== null ? (
                               item.detailed_orders.map((o, idx) => (
-                                <div key={o.order_id || idx} className="py-3 px-2 hover:bg-slate-50 transition-colors">
+                                <div key={o?.order_id || idx} className="py-3 px-2 hover:bg-slate-50 transition-colors">
                                   <div className="flex justify-between items-start mb-1.5">
                                     <p className="text-sm font-black text-slate-800 leading-tight flex-1 mr-2">
-                                      {o.client_name}
+                                      {o?.client_name || "Unknown Client"}
                                     </p>
                                     <span className="text-[10px] font-bold text-slate-400 shrink-0">
-                                      {formatDate(o.order_date, dateFormat)}
+                                      {o?.order_date ? formatDate(o.order_date, dateFormat) : "—"}
                                     </span>
                                   </div>
                                   <div className="flex items-center">
                                     <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[11px] px-2 py-0.5 rounded-lg font-black">
-                                       Required: {formatUnit(o.quantity_kg, unitPref)}
+                                       Required: {formatUnit(o?.quantity_kg || 0, unitPref)}
                                     </span>
                                   </div>
                                 </div>
                               ))
+                            ) : item.client_names && item.client_names.length > 0 ? (
+                              item.client_names.map((name, idx) => (
+                                <div key={idx} className="py-3 px-2 hover:bg-slate-50 transition-colors">
+                                  <p className="text-sm font-black text-slate-800 leading-tight">
+                                    {name}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Pending Order</p>
+                                </div>
+                              ))
                             ) : (
-                              <div className="p-4 text-center text-slate-400 text-xs italic">
-                                Loading order information...
+                              <div className="p-6 text-center">
+                                <p className="text-xs font-bold text-slate-400 italic">No specific order details available.</p>
+                                <p className="text-[10px] text-slate-300 mt-1 uppercase">Total Demand: {formatUnit(item.total_qty_kg, unitPref)}</p>
                               </div>
                             )}
                           </div>
