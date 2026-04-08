@@ -121,6 +121,13 @@ export default function Clients() {
     e.preventDefault();
     if (!name) return;
     setIsSubmitting(true);
+
+    // Auto-flush any pending address the user typed but forgot to click "+ ADD" for
+    const finalAddresses = [...shippingAddresses];
+    if (addrLabel && addrAddress) {
+      finalAddresses.push({ label: addrLabel, address: addrAddress, isDefault: addrIsDefault });
+    }
+
     try {
       await apiRequest("/clients", {
         method: "POST",
@@ -131,7 +138,7 @@ export default function Clients() {
           contactPhone: contactPhone || undefined,
           contactEmail: contactEmail || undefined,
           billingAddress: billingAddress || undefined,
-          shippingAddresses: shippingAddresses.map(a => ({
+          shippingAddresses: finalAddresses.map(a => ({
             label: a.label, address: a.address, isDefault: a.isDefault
           }))
         }
@@ -168,6 +175,15 @@ export default function Clients() {
     if (!editClient) return;
     setIsEditSubmitting(true);
     try {
+      // Auto-flush pending address if the user typed one but forgot to click "+ Add"
+      if (editAddrLabel && editAddrAddress) {
+        // We eat any errors here to ensure the main client update still proceeds
+        await apiRequest(`/clients/${editClient.id}/addresses`, {
+          method: "POST",
+          body: { label: editAddrLabel, address: editAddrAddress, isDefault: editAddrIsDefault }
+        }).catch(err => console.error("Failed to auto-save pending address:", err));
+      }
+
       await apiRequest(`/clients/${editClient.id}`, {
         method: "PUT",
         body: {
