@@ -668,7 +668,7 @@ export default function Production() {
                     const activeRunForColor = activeRuns.find(r => r.color === item.color_name);
                     const prodStatus = activeRunForColor ? activeRunForColor.status : null;
                     return (
-                    <div key={item.color_id} className="relative group bg-white p-3 rounded-xl border border-slate-100 hover:border-emerald-300 hover:shadow-md transition-all duration-200">
+                    <div key={item.color_id} className={`relative group bg-white p-3 rounded-xl border border-slate-100 hover:border-emerald-300 hover:shadow-md transition-all duration-200 ${expandedDemand === item.color_id ? 'z-50 ring-2 ring-emerald-200 ring-offset-2' : 'z-auto'}`}>
                       {/* Color swatch + name */}
                       <div className="flex items-center gap-2 mb-2">
                         <div
@@ -702,7 +702,7 @@ export default function Production() {
 
                       {/* Dropdown for detailed orders */}
                       {expandedDemand === item.color_id && item.detailed_orders && item.detailed_orders.length > 0 && (
-                        <div className="absolute top-[calc(100%+5px)] right-0 md:left-0 md:right-auto z-50 w-64 bg-white shadow-2xl shadow-slate-200/50 border border-slate-200 rounded-xl overflow-hidden animate-in fade-in slide-in-from-top-2">
+                        <div className="absolute top-[calc(100%+5px)] -left-2 sm:left-0 z-50 w-64 sm:w-72 bg-white shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15)] border border-slate-200 rounded-xl overflow-hidden animate-in fade-in slide-in-from-top-2">
                           <div className="bg-slate-50 px-3 py-2 border-b border-slate-100 flex justify-between items-center">
                             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Client Details</span>
                             {/* Running Status Pill */}
