@@ -529,95 +529,40 @@ export default function Production() {
         ))}
       </div>
 
-      {activeTab === "overview" && (
-      <div className="grid gap-4 md:grid-cols-4 animate-in fade-in duration-300">
-        {(() => {
-          const isFiltered = filterSearch || filterColor || filterStatus !== "All" || filterFromDate || filterToDate;
-          const periodLabel = isFiltered ? "Filtered" : "All Time";
-          
-          return (
-            <>
-              <div className="rounded-xl border bg-card p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition">
-          <div className="flex items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium text-muted-foreground">
-              Active Runs
-            </h3>
-            <Activity className="h-5 w-5 text-amber-500" />
+      {activeTab === "overview" && (() => {
+        const isFiltered = filterSearch || filterColor || filterStatus !== "All" || filterFromDate || filterToDate;
+        const periodLabel = isFiltered ? "Filtered" : "All Time";
+        return (
+        <div className="flex flex-wrap items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl shadow-sm animate-in fade-in duration-300">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-100 rounded-lg">
+            <Activity className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+            <span className="text-xs text-slate-500 font-medium">Runs</span>
+            <span className="text-sm font-black text-slate-800">{metrics?.activeRuns ?? 0}</span>
           </div>
-          <div>
-            <div className="text-3xl font-bold">
-              {metrics?.activeRuns ?? 0}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Currently running batches
-            </p>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-lg">
+            <Droplets className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+            <span className="text-xs text-slate-500 font-medium">Produced</span>
+            <span className="text-sm font-black text-slate-800">{formatUnit(historyMetrics.totalProduction, unitPref)}</span>
           </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-lg">
+            <FlaskConical className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+            <span className="text-xs text-slate-500 font-medium">Materials</span>
+            <span className="text-sm font-black text-slate-800">{formatUnit(historyMetrics.resourceConsumption, unitPref)}</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 border border-purple-100 rounded-lg">
+            <Activity className="h-3.5 w-3.5 text-purple-500 shrink-0" />
+            <span className="text-xs text-slate-500 font-medium">Variance</span>
+            <span className={`text-sm font-black ${
+              historyMetrics.variance > 0 ? "text-green-600" : historyMetrics.variance < 0 ? "text-orange-500" : "text-slate-800"
+            }`}>{historyMetrics.variance > 0 ? "+" : ""}{formatUnit(historyMetrics.variance, unitPref)}</span>
+          </div>
+          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest ml-auto">{periodLabel}</span>
         </div>
-        <div className="rounded-xl border bg-card p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition">
-          <div className="flex items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium text-muted-foreground">
-              Total Production
-            </h3>
-            <Droplets className="h-5 w-5 text-green-500" />
-          </div>
-          <div>
-            <div className="text-3xl font-bold">
-              {formatUnit(historyMetrics.totalProduction, unitPref)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Paint produced ({periodLabel})
-            </p>
-          </div>
-        </div>
-        <div className="rounded-xl border bg-card p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition">
-          <div className="flex items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium text-muted-foreground">
-              Resource Consumption
-            </h3>
-            <FlaskConical className="h-5 w-5 text-blue-500" />
-          </div>
-          <div>
-            <div className="text-3xl font-bold">
-              {formatUnit(historyMetrics.resourceConsumption, unitPref)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Raw material used ({periodLabel})
-            </p>
-          </div>
-        </div>
-        <div className="rounded-xl border bg-card p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition">
-          <div className="flex items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium text-muted-foreground">
-              Production Variance
-            </h3>
-            <Activity className="h-5 w-5 text-purple-500" />
-          </div>
-          <div>
-            <div
-              className={`text-3xl font-bold ${
-                historyMetrics.variance > 0
-                  ? "text-green-600"
-                  : historyMetrics.variance < 0
-                  ? "text-orange-500"
-                  : "text-muted-foreground"
-              }`}
-            >
-              {historyMetrics.variance > 0 ? "+" : ""}
-              {formatUnit(historyMetrics.variance, unitPref)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Actual vs Planned ({periodLabel})
-            </p>
-          </div>
-        </div>
-            </>
-          );
-        })()}
-      </div>
-      )}
+        );
+      })()}
 
       {activeTab === "active" && (
-      <div className="rounded-xl border bg-white shadow-sm p-4 mb-6 animate-in fade-in duration-300">
+      <div className="rounded-xl border bg-white shadow-sm p-4 mb-6 animate-in fade-in duration-300 sticky top-0 z-20 backdrop-blur-sm bg-white/95">
         <div className="flex flex-col md:flex-row items-center gap-4">
           <div className="flex-1 relative w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -709,87 +654,62 @@ export default function Production() {
                    <p className="text-xs text-slate-400 mt-1">All orders are currently fulfilled or none are recorded.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {(showAllDemand ? demand : demand.slice(0, 4)).map((item) => (
-                    <div key={item.color_id} className="relative group bg-white p-4 rounded-xl border border-slate-100 hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-50/50 transition-all duration-300">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <div 
-                            className="h-10 w-10 rounded-lg shadow-inner border" 
-                            style={{ backgroundColor: colors.find(c => c.id === item.color_id)?.color_code || '#cbd5e1' }}
-                          />
-                          <div>
-                            <h4 className="font-black text-slate-900 text-sm leading-tight">{item.color_name}</h4>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-0.5">{item.order_count} Active Order{item.order_count !== 1 ? 's' : ''}</div>
-                          <div className="text-xl font-black text-slate-900">{formatUnit(item.total_qty_kg, unitPref)}</div>
-                          {item.client_names && item.client_names.length > 0 && (
-                            <div className="text-[9px] font-bold text-slate-500 mt-1">
-                              For: {item.client_names.join(", ")}
-                            </div>
-                          )}
-                          {item.required_packs && item.required_packs.length > 0 && (
-                            <div className="text-[10px] font-bold text-indigo-600 mt-2 flex flex-wrap gap-1 justify-end">
-                              {item.required_packs.map((p, idx) => (
-                                <span key={idx} className="bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded shadow-sm">
-                                  {p.quantity}x {p.pack_size_kg}kg
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                    <div key={item.color_id} className="group bg-white p-3 rounded-xl border border-slate-100 hover:border-emerald-300 hover:shadow-md transition-all duration-200">
+                      {/* Color swatch + name */}
+                      <div className="flex items-center gap-2 mb-2">
+                        <div
+                          className="h-7 w-7 rounded-md shrink-0 border border-white shadow-sm"
+                          style={{ backgroundColor: colors.find(c => c.id === item.color_id)?.color_code || '#cbd5e1' }}
+                        />
+                        <h4 className="font-black text-slate-900 text-xs leading-tight truncate">{item.color_name}</h4>
                       </div>
-                      <div className="flex items-center justify-between pt-3 border-t border-slate-50">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Needed</span>
-                        <button 
-                          onClick={() => {
-                            setSelectedColor(item.color_id);
-                            setIsModalOpen(true);
-                          }}
-                          className="flex items-center gap-1.5 text-[10px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 transition-colors"
-                        >
-                          Plan Batch <ArrowRight className="h-3 w-3" />
-                        </button>
-                      </div>
+                      {/* Qty + orders */}
+                      <div className="text-lg font-black text-slate-900 leading-none mb-1">{formatUnit(item.total_qty_kg, unitPref)}</div>
+                      <div className="text-[10px] font-bold text-emerald-600 mb-3">{item.order_count} order{item.order_count !== 1 ? 's' : ''}</div>
+                      {/* Action */}
+                      <button
+                        onClick={() => { setSelectedColor(item.color_id); setIsModalOpen(true); }}
+                        className="w-full flex items-center justify-center gap-1 text-[10px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 border border-blue-100 hover:border-blue-300 rounded-lg py-1 transition-colors"
+                      >
+                        Plan <ArrowRight className="h-2.5 w-2.5" />
+                      </button>
                     </div>
                   ))}
                 </div>
               )}
-              {demand.length > 0 && !showAllDemand && (
-                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-4 text-center italic">
-                  Showing top demand products based on pending orders
-                </p>
+              {demand.length > 4 && (
+                <div className="mt-4 text-center">
+                  <button
+                    onClick={() => setShowAllDemand(!showAllDemand)}
+                    className="text-xs text-slate-500 hover:text-slate-800 font-bold uppercase tracking-widest transition-colors"
+                  >
+                    {showAllDemand ? `Show Less ↑` : `View All ${demand.length} Products ↓`}
+                  </button>
+                </div>
               )}
             </div>
           </div>
           )}
           {activeTab === "active" && (
           <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden animate-in fade-in duration-300">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <div className="flex items-center gap-3">
-                <Droplets className="mr-3 h-5 w-5 text-blue-500" />
-                <h2 className="text-lg font-bold text-slate-800">Active Production Runs</h2>
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <Droplets className="h-4 w-4 text-blue-500" />
+                <h2 className="text-sm font-bold text-slate-800">Active Production Runs</h2>
                 <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
-                  {showAllActive ? `Showing all ${activeRuns.length}` : `Showing ${Math.min(5, activeRuns.length)} of ${activeRuns.length}`}
+                  {activeRuns.length} total
                 </span>
               </div>
-              <div className="flex items-center gap-3">
-                {activeRuns.length > 0 && (
-                  <span className="text-xs font-bold bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full border border-blue-200 shadow-sm hidden sm:inline">
-                    {activeRuns.length} active
-                  </span>
-                )}
-                {activeRuns.length > 5 && (
-                  <button 
-                    onClick={() => setShowAllActive(!showAllActive)}
-                    className="text-xs text-blue-600 hover:text-blue-800 font-bold tracking-wider uppercase bg-blue-50 px-2 py-1 rounded border border-blue-100 transition-colors"
-                  >
-                    {showAllActive ? 'View Less' : 'View All'}
-                  </button>
-                )}
-              </div>
+              {activeRuns.length > 3 && (
+                <button
+                  onClick={() => setShowAllActive(!showAllActive)}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-bold tracking-wider uppercase transition-colors"
+                >
+                  {showAllActive ? 'Show Less ↑' : `View All ${activeRuns.length} ↓`}
+                </button>
+              )}
             </div>
             <div className="p-5 space-y-4">
               {isActiveLoading ? (
@@ -818,7 +738,7 @@ export default function Production() {
                       if (activeToDate && run.started_at && new Date(run.started_at) > new Date(activeToDate)) return false;
                       return true;
                     })
-                    .slice(0, showAllActive ? activeRuns.length : 5).map((run) => {
+                    .slice(0, showAllActive ? activeRuns.length : 3).map((run) => {
                     const isUpdating = updatingId === run.id;
                     const statusConfig: Record<string, { label: string; className: string; icon: any; color: "blue" | "green" | "purple" | "orange" }> = {
                       planned:   { label: "Planned",   className: "bg-slate-100 text-slate-700", icon: Activity, color: "blue" },
