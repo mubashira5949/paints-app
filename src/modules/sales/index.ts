@@ -324,6 +324,14 @@ export default async function (fastifyRaw: FastifyInstance) {
                         ARRAY_AGG(DISTINCT cl.name) as client_names,
                         json_agg(
                             json_build_object(
+                                'order_id', o.id,
+                                'client_name', COALESCE(cl.name, o.client_name),
+                                'order_date', o.created_at,
+                                'quantity_kg', i.quantity * i.pack_size_kg
+                            )
+                        ) as detailed_orders,
+                        json_agg(
+                            json_build_object(
                                 'pack_size_kg', i.pack_size_kg,
                                 'quantity', i.quantity
                             )
