@@ -25,6 +25,7 @@ import {
   ArrowRight
 } from "lucide-react";
 import { useUnitPreference, formatUnit, toDisplayValue, fromDisplayValue } from "../utils/units";
+import { useDateFormatPreference, formatDate } from "../utils/dateFormatter";
 
 interface Resource {
   resource_id: number;
@@ -87,6 +88,12 @@ interface ProductDemand {
   order_count: number;
   client_names?: string[];
   required_packs?: { pack_size_kg: number, quantity: number }[];
+  detailed_orders?: {
+    order_id: number;
+    client_name: string;
+    order_date: string;
+    quantity_kg: number;
+  }[];
 }
 
 const ProgressIndicator = ({ 
@@ -137,6 +144,7 @@ const ProgressIndicator = ({
 export default function Production() {
   const { user } = useAuth();
   const unitPref = useUnitPreference();
+  const dateFormat = useDateFormatPreference();
   const navigate = useNavigate();
   const [metrics, setMetrics] = useState<{ activeRuns: number } | null>(null);
   const [historyRuns, setHistoryRuns] = useState<HistoryRun[]>([]);
@@ -148,6 +156,7 @@ export default function Production() {
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
+  const [expandedDemand, setExpandedDemand] = useState<number | null>(null);
   const [showAllActive, setShowAllActive] = useState(false);
   const [demand, setDemand] = useState<ProductDemand[]>([]);
   const [isDemandLoading, setIsDemandLoading] = useState(true);
@@ -623,7 +632,7 @@ export default function Production() {
         <div>
           {/* Demand Overview */}
           {(activeTab === "overview" || activeTab === "planning") && (
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-8 animate-in fade-in duration-300">
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm mb-8 animate-in fade-in duration-300">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-emerald-50/30">
               <div className="flex items-center gap-3">
                 <ShoppingBag className="h-5 w-5 text-emerald-600" />
@@ -655,15 +664,30 @@ export default function Production() {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {(showAllDemand ? demand : demand.slice(0, 4)).map((item) => (
-                    <div key={item.color_id} className="group bg-white p-3 rounded-xl border border-slate-100 hover:border-emerald-300 hover:shadow-md transition-all duration-200">
+                  {(showAllDemand ? demand : demand.slice(0, 4)).map((item) => {
+                    const activeRunForColor = activeRuns.find(r => r.color === item.color_name);
+                    const prodStatus = activeRunForColor ? activeRunForColor.status : null;
+                    return (
+                    <div key={item.color_id} className="relative group bg-white p-3 rounded-xl border border-slate-100 hover:border-emerald-300 hover:shadow-md transition-all duration-200">
                       {/* Color swatch + name */}
                       <div className="flex items-center gap-2 mb-2">
                         <div
                           className="h-7 w-7 rounded-md shrink-0 border border-white shadow-sm"
                           style={{ backgroundColor: colors.find(c => c.id === item.color_id)?.color_code || '#cbd5e1' }}
                         />
-                        <h4 className="font-black text-slate-900 text-xs leading-tight truncate">{item.color_name}</h4>
+                        <h4 className="font-black text-slate-900 text-xs leading-tight truncate flex-1">{item.color_name}</h4>
+                        {/* Info details toggle */}
+                        <div 
+                           className="bg-emerald-50 text-emerald-600 rounded-lg p-1.5 cursor-pointer hover:bg-emerald-100 hover:text-emerald-700 transition-colors"
+                           title="Order Details"
+                           onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setExpandedDemand(expandedDemand === item.color_id ? null : item.color_id);
+                           }}
+                        >
+                           <Eye className="h-3.5 w-3.5" />
+                        </div>
                       </div>
                       {/* Qty + orders */}
                       <div className="text-lg font-black text-slate-900 leading-none mb-1">{formatUnit(item.total_qty_kg, unitPref)}</div>
@@ -675,8 +699,40 @@ export default function Production() {
                       >
                         Plan <ArrowRight className="h-2.5 w-2.5" />
                       </button>
+
+                      {/* Dropdown for detailed orders */}
+                      {expandedDemand === item.color_id && item.detailed_orders && item.detailed_orders.length > 0 && (
+                        <div className="absolute top-[calc(100%+5px)] right-0 md:left-0 md:right-auto z-50 w-64 bg-white shadow-2xl shadow-slate-200/50 border border-slate-200 rounded-xl overflow-hidden animate-in fade-in slide-in-from-top-2">
+                          <div className="bg-slate-50 px-3 py-2 border-b border-slate-100 flex justify-between items-center">
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Client Details</span>
+                            {/* Running Status Pill */}
+                            {prodStatus && prodStatus !== 'planned' && prodStatus !== 'completed' && (
+                               <span className="text-[9px] bg-blue-100 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded-full font-bold uppercase">
+                                 {prodStatus === 'running' ? 'Running' : prodStatus === 'paused' ? 'Paused' : prodStatus === 'packaging' ? 'Package Completed' : prodStatus}
+                               </span>
+                            )}
+                          </div>
+                          <div className="max-h-48 overflow-y-auto divide-y divide-slate-50 p-2">
+                            {item.detailed_orders.map(o => (
+                              <div key={o.order_id} className="py-2.5 px-2 hover:bg-slate-50/50 rounded-lg group/order transition-colors">
+                                <p className="text-xs font-black text-slate-800 leading-tight mb-0.5">
+                                  {o.client_name}
+                                </p>
+                                <div className="flex items-center justify-between mt-1">
+                                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] px-1.5 rounded font-black">
+                                    {formatUnit(o.quantity_kg, unitPref)}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-slate-400">
+                                    {formatDate(o.order_date, dateFormat)}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  ))}
+                  )})}
                 </div>
               )}
               {demand.length > 4 && (
