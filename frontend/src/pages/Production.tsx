@@ -650,7 +650,7 @@ export default function Production() {
                 </button>
               )}
             </div>
-            <div className="p-5">
+            <div className="p-5 overflow-visible">
               {isDemandLoading ? (
                 <div className="p-8 text-center text-slate-400 flex flex-col items-center gap-2">
                   <Loader2 className="h-6 w-6 animate-spin text-emerald-500" />
@@ -668,7 +668,10 @@ export default function Production() {
                     const activeRunForColor = activeRuns.find(r => r.color === item.color_name);
                     const prodStatus = activeRunForColor ? activeRunForColor.status : null;
                     return (
-                    <div key={item.color_id} className={`relative group bg-white p-3 rounded-xl border border-slate-100 hover:border-emerald-300 hover:shadow-md transition-all duration-200 ${expandedDemand === item.color_id ? 'z-50 ring-2 ring-emerald-200 ring-offset-2' : 'z-auto'}`}>
+                    <div key={item.color_id} 
+                         className={`relative group bg-white p-3 rounded-xl border border-slate-100 hover:border-emerald-300 hover:shadow-xl transition-all duration-300 ${expandedDemand == item.color_id ? 'z-[100] ring-4 ring-emerald-400/20 shadow-2xl scale-[1.02]' : 'z-auto'}`}
+                         onMouseLeave={() => expandedDemand == item.color_id && setExpandedDemand(null)}
+                    >
                       {/* Color swatch + name */}
                       <div className="flex items-center gap-2 mb-2">
                         <div
@@ -701,36 +704,43 @@ export default function Production() {
                       </button>
 
                       {/* Dropdown for detailed orders */}
-                      {expandedDemand === item.color_id && item.detailed_orders && item.detailed_orders.length > 0 && (
-                        <div className="absolute top-[calc(100%+5px)] -left-2 sm:left-0 z-50 w-64 sm:w-72 bg-white shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15)] border border-slate-200 rounded-xl overflow-hidden animate-in fade-in slide-in-from-top-2">
-                          <div className="bg-slate-50 px-3 py-2 border-b border-slate-100 flex justify-between items-center">
-                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Client Details</span>
-                            {/* Running Status Pill */}
+                      {expandedDemand == item.color_id && (
+                        <div className="absolute top-[calc(100%+12px)] left-0 sm:-left-3 z-[110] w-64 sm:w-80 bg-white shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)] border border-slate-200 rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-4 duration-200">
+                          <div className="bg-emerald-900 px-4 py-3 flex justify-between items-center text-white">
+                            <span className="text-[11px] font-black uppercase tracking-widest opacity-90">Order Breakdown</span>
                             {prodStatus && prodStatus !== 'planned' && prodStatus !== 'completed' && (
-                               <span className="text-[9px] bg-blue-100 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded-full font-bold uppercase">
+                               <span className="text-[10px] bg-white/20 backdrop-blur-md px-2 py-1 rounded-lg font-bold uppercase">
                                  {prodStatus === 'running' ? 'Running' : prodStatus === 'paused' ? 'Paused' : prodStatus === 'packaging' ? 'Package Completed' : prodStatus}
                                </span>
                             )}
                           </div>
-                          <div className="max-h-48 overflow-y-auto divide-y divide-slate-50 p-2">
-                            {item.detailed_orders.map(o => (
-                              <div key={o.order_id} className="py-2.5 px-2 hover:bg-slate-50/50 rounded-lg group/order transition-colors">
-                                <p className="text-xs font-black text-slate-800 leading-tight mb-0.5">
-                                  {o.client_name}
-                                </p>
-                                <div className="flex items-center justify-between mt-1">
-                                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] px-1.5 rounded font-black">
-                                    {formatUnit(o.quantity_kg, unitPref)}
-                                  </span>
-                                  <span className="text-[10px] font-bold text-slate-400">
-                                    {formatDate(o.order_date, dateFormat)}
-                                  </span>
+                          <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 p-3 bg-white">
+                            {item.detailed_orders && item.detailed_orders.length > 0 ? (
+                              item.detailed_orders.map((o, idx) => (
+                                <div key={o.order_id || idx} className="py-3 px-2 hover:bg-slate-50 transition-colors">
+                                  <div className="flex justify-between items-start mb-1.5">
+                                    <p className="text-sm font-black text-slate-800 leading-tight flex-1 mr-2">
+                                      {o.client_name}
+                                    </p>
+                                    <span className="text-[10px] font-bold text-slate-400 shrink-0">
+                                      {formatDate(o.order_date, dateFormat)}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center">
+                                    <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[11px] px-2 py-0.5 rounded-lg font-black">
+                                       Required: {formatUnit(o.quantity_kg, unitPref)}
+                                    </span>
+                                  </div>
                                 </div>
+                              ))
+                            ) : (
+                              <div className="p-4 text-center text-slate-400 text-xs italic">
+                                Loading order information...
                               </div>
-                            ))}
+                            )}
                           </div>
                         </div>
-                      )}
+                      )}        )}
                     </div>
                   )})}
                 </div>
