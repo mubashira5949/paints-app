@@ -327,7 +327,9 @@ export default async function (fastifyRaw: FastifyInstance) {
                                 'order_id', o.id,
                                 'client_name', COALESCE(cl.name, o.client_name),
                                 'order_date', o.created_at,
-                                'quantity_kg', i.quantity * i.pack_size_kg
+                                'quantity_kg', i.quantity * i.pack_size_kg,
+                                'pack_size_kg', i.pack_size_kg,
+                                'quantity', i.quantity
                             )
                         ) as detailed_orders,
                         json_agg(
