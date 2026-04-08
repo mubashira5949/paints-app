@@ -716,8 +716,8 @@ export default function Production() {
                             )}
                           </div>
                           <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 p-3 bg-white">
-                            {Array.isArray(item.detailed_orders) && item.detailed_orders.filter(o => o && o.order_id).length > 0 ? (
-                              item.detailed_orders.filter(o => o && o.order_id).map((o, idx) => (
+                            {Array.isArray(item.detailed_orders) && item.detailed_orders.filter(Boolean).length > 0 ? (
+                              item.detailed_orders.filter(Boolean).map((o, idx) => (
                                 <div key={o.order_id || idx} className="py-3 px-3 hover:bg-slate-50 transition-all rounded-lg mb-1 border border-transparent hover:border-emerald-100">
                                   <div className="flex justify-between items-start mb-2">
                                     <p className="text-sm font-black text-slate-800 leading-tight flex-1 mr-2 italic">
