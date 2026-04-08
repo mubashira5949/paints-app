@@ -715,43 +715,48 @@ export default function Production() {
                                </span>
                             )}
                           </div>
-                          <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 p-3 bg-white">
-                            {item.detailed_orders && item.detailed_orders.length > 0 && item.detailed_orders[0] !== null ? (
-                              item.detailed_orders.map((o, idx) => (
-                                <div key={o?.order_id || idx} className="py-3 px-2 hover:bg-slate-50 transition-colors">
-                                  <div className="flex justify-between items-start mb-1.5">
-                                    <p className="text-sm font-black text-slate-800 leading-tight flex-1 mr-2">
-                                      {o?.client_name || "Unknown Client"}
+                          <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 p-3 bg-white">
+                            {Array.isArray(item.detailed_orders) && item.detailed_orders.filter(o => o && o.order_id).length > 0 ? (
+                              item.detailed_orders.filter(o => o && o.order_id).map((o, idx) => (
+                                <div key={o.order_id || idx} className="py-3 px-3 hover:bg-slate-50 transition-all rounded-lg mb-1 border border-transparent hover:border-emerald-100">
+                                  <div className="flex justify-between items-start mb-2">
+                                    <p className="text-sm font-black text-slate-800 leading-tight flex-1 mr-2 italic">
+                                      {o.client_name || "Guest Client"}
                                     </p>
-                                    <span className="text-[10px] font-bold text-slate-400 shrink-0">
-                                      {o?.order_date ? formatDate(o.order_date, dateFormat) : "—"}
+                                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                                      {o.order_date ? formatDate(o.order_date, dateFormat) : "—"}
                                     </span>
                                   </div>
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex flex-col gap-0.5">
-                                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">
-                                        Requirement: {formatUnit(o?.pack_size_kg || 0, unitPref)} × {o?.quantity || 0} unit{o?.quantity !== 1 ? 's' : ''}
-                                      </span>
-                                      <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[11px] w-fit px-2 py-0.5 rounded-lg font-black">
-                                         Total: {formatUnit(o?.quantity_kg || 0, unitPref)}
-                                      </span>
+                                  <div className="grid grid-cols-2 gap-2 mt-2">
+                                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Package Size</p>
+                                      <p className="text-xs font-black text-slate-700">{formatUnit(o.pack_size_kg || 0, unitPref)}</p>
+                                    </div>
+                                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Units Requested</p>
+                                      <p className="text-xs font-black text-slate-700">{o.quantity || 0} unit{o.quantity !== 1 ? 's' : ''}</p>
                                     </div>
                                   </div>
-                                </div>
-                              ))
-                            ) : item.client_names && item.client_names.length > 0 ? (
-                              item.client_names.map((name, idx) => (
-                                <div key={idx} className="py-3 px-2 hover:bg-slate-50 transition-colors">
-                                  <p className="text-sm font-black text-slate-800 leading-tight">
-                                    {name}
-                                  </p>
-                                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Pending Order</p>
+                                  <div className="mt-2 bg-emerald-50 p-2 rounded-lg border border-emerald-100 flex justify-between items-center">
+                                    <span className="text-[10px] font-black text-emerald-600 uppercase">Total Target</span>
+                                    <span className="text-xs font-black text-emerald-800">{formatUnit(o.quantity_kg || 0, unitPref)}</span>
+                                  </div>
                                 </div>
                               ))
                             ) : (
-                              <div className="p-6 text-center">
-                                <p className="text-xs font-bold text-slate-400 italic">No specific order details available.</p>
-                                <p className="text-[10px] text-slate-300 mt-1 uppercase">Total Demand: {formatUnit(item.total_qty_kg, unitPref)}</p>
+                              <div className="p-4 space-y-3">
+                                <p className="text-xs font-black text-slate-500 uppercase tracking-tight text-center">Summary List</p>
+                                {item.client_names && item.client_names.map((name, idx) => (
+                                  <div key={idx} className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg border border-slate-100">
+                                    <span className="text-xs font-black text-slate-700">{name}</span>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase">Order pending</span>
+                                  </div>
+                                ))}
+                                {(!item.client_names || item.client_names.length === 0) && (
+                                  <div className="p-4 text-center text-slate-400 italic text-xs">
+                                    No order details found for this color.
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
