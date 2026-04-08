@@ -21,8 +21,6 @@ import {
   Cog,
   Timer,
   Box,
-  BookOpen,
-  User,
   ShoppingBag,
   ArrowRight
 } from "lucide-react";
@@ -49,12 +47,6 @@ interface Color {
   color_code: string;
 }
 
-interface Metrics {
-  activeRuns: number;
-  todayProduction: number;
-  resourceConsumption: number;
-  variance: number;
-}
 
 interface HistoryRun {
   id: number;
@@ -160,6 +152,7 @@ export default function Production() {
   const [demand, setDemand] = useState<ProductDemand[]>([]);
   const [isDemandLoading, setIsDemandLoading] = useState(true);
   const [showAllDemand, setShowAllDemand] = useState(false);
+  const [activeTab, setActiveTab] = useState<"overview" | "active" | "planning" | "history">("overview");
 
   // Sorting State for History
   const [sortKey, setSortKey] = useState<"target" | "actual" | "waste" | null>(null);
@@ -274,7 +267,6 @@ export default function Production() {
 
   const fetchRuns = () => {
     fetchActiveRuns();
-    fetchMetrics();
     fetchHistory();
     fetchDemand();
   };
@@ -502,13 +494,43 @@ export default function Production() {
             <Settings className="mr-3 h-8 w-8 text-blue-600" />
             Production Runs
           </h1>
-          <p className="text-muted-foreground mt-1 text-lg">
+          <p className="text-muted-foreground mt-1 text-base">
             Manage manufacturing workflows and track resource consumption.
           </p>
         </div>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-md hover:shadow-lg transition-all duration-200 active:scale-95"
+        >
+          <Plus className="h-4 w-4" />
+          Start New Batch
+        </button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      {/* Tabs Menu */}
+      <div className="flex items-center gap-2 border-b border-slate-200 mb-6 bg-slate-50/50 p-1 rounded-t-xl overflow-x-auto">
+        {[
+          { id: "overview", label: "Overview" },
+          { id: "active", label: "Active Runs" },
+          { id: "planning", label: "Planning" },
+          { id: "history", label: "History" }
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`px-6 py-2.5 text-sm font-black tracking-widest uppercase transition-all rounded-lg shrink-0 ${
+              activeTab === tab.id
+                ? "bg-slate-800 text-white shadow-md border hover:bg-slate-700"
+                : "bg-white text-slate-500 border border-slate-200 hover:text-slate-800 hover:bg-slate-50"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "overview" && (
+      <div className="grid gap-4 md:grid-cols-4 animate-in fade-in duration-300">
         {(() => {
           const isFiltered = filterSearch || filterColor || filterStatus !== "All" || filterFromDate || filterToDate;
           const periodLabel = isFiltered ? "Filtered" : "All Time";
@@ -592,8 +614,10 @@ export default function Production() {
           );
         })()}
       </div>
+      )}
 
-      <div className="rounded-xl border bg-white shadow-sm p-4 mb-6">
+      {activeTab === "active" && (
+      <div className="rounded-xl border bg-white shadow-sm p-4 mb-6 animate-in fade-in duration-300">
         <div className="flex flex-col md:flex-row items-center gap-4">
           <div className="flex-1 relative w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -648,30 +672,13 @@ export default function Production() {
           </div>
         </div>
       </div>
+      )}
 
-      <div className="grid gap-8 md:grid-cols-3 md:items-start pt-2">
-        <div className="md:col-span-1 space-y-6 md:sticky md:top-6">
-          <div
-            className="rounded-xl border border-transparent bg-gradient-to-br from-blue-600 to-indigo-700 shadow-lg p-6 flex flex-col items-center justify-center text-center space-y-4 h-64 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer group"
-            onClick={() => setIsModalOpen(true)}
-          >
-            <div className="p-4 bg-white/20 text-white rounded-full shadow-inner group-hover:bg-white/30 group-hover:scale-110 transition-all duration-300">
-              <Plus className="h-10 w-10" />
-            </div>
-            <div>
-              <h3 className="font-bold text-xl text-white tracking-tight">
-                Start New Batch
-              </h3>
-              <p className="text-sm text-blue-100 mt-2 px-2 font-medium">
-                Create a batch using a selected formula tracking realtime usage.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="md:col-span-2 space-y-10">
+      <div className="space-y-10">
+        <div>
           {/* Demand Overview */}
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-8">
+          {(activeTab === "overview" || activeTab === "planning") && (
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-8 animate-in fade-in duration-300">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-emerald-50/30">
               <div className="flex items-center gap-3">
                 <ShoppingBag className="h-5 w-5 text-emerald-600" />
@@ -757,7 +764,9 @@ export default function Production() {
               )}
             </div>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          )}
+          {activeTab === "active" && (
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden animate-in fade-in duration-300">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center gap-3">
                 <Droplets className="mr-3 h-5 w-5 text-blue-500" />
@@ -821,155 +830,112 @@ export default function Production() {
                     const sc = statusConfig[run.status] ?? statusConfig.planned;
                     const StatusIcon = sc.icon;
 
-                    const produced = run.actual_quantity_kg ?? 0;
-                    const packaged = run.packaging?.reduce((s, p) => s + (p.pack_size_kg * p.quantity_units), 0) ?? 0;
-                    
-                    let progressLabel = "Production Progress";
-                    let currentVal = (run.status === 'running' || run.status === 'paused') ? 0 : produced;
-                    let targetVal = run.targetQty;
-                    let barColor = sc.color;
-
-                    if (run.status === 'packaging') {
-                      progressLabel = "Packaging Progress";
-                      currentVal = packaged;
-                      targetVal = produced || run.targetQty;
-                      barColor = "purple";
-                    } else if (run.status === 'completed') {
-                      currentVal = produced;
-                      targetVal = produced;
-                    }
-
                     return (
-                      <div key={run.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 group overflow-hidden">
-                        <div className="p-5">
-                          {/* Header */}
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                            <div className="flex items-center gap-3">
-                              <div className="px-3 py-1 bg-slate-100 text-slate-800 rounded-lg font-mono font-bold text-xs ring-1 ring-slate-200 group-hover:bg-blue-50 group-hover:text-blue-700 transition-colors">
-                                {run.batchId}
-                              </div>
-                              <h3 className="font-extrabold text-slate-900 tracking-tight">{run.color}</h3>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${sc.className}`}>
-                                <StatusIcon className="w-3.5 h-3.5" />
-                                {sc.label}
-                              </span>
-                            </div>
-                          </div>
+                      <div
+                        key={run.id}
+                        className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl border border-slate-200 hover:border-blue-200 hover:shadow-sm transition-all duration-200 group"
+                      >
+                        {/* Batch ID */}
+                        <span className="font-mono font-bold text-xs text-slate-500 bg-slate-100 group-hover:bg-blue-50 group-hover:text-blue-700 px-2.5 py-1 rounded-lg shrink-0 transition-colors">
+                          {run.batchId}
+                        </span>
 
-                          {/* Info Grid */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
-                            <div className="space-y-4">
-                              <div className="space-y-1">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Formula</p>
-                                <p className="text-xs font-semibold text-slate-600 flex items-center gap-2">
-                                  <BookOpen className="w-3.5 h-3.5 text-slate-400" />
-                                  {run.formula}
-                                </p>
-                              </div>
-                              <div className="flex gap-10">
-                                <div>
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Target</p>
-                                  <p className="text-base font-black text-slate-800">{formatUnit(run.targetQty, unitPref)}</p>
-                                </div>
-                                <div>
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Actual</p>
-                                  <p className="text-base font-black text-slate-800">
-                                    {run.actual_quantity_kg != null ? formatUnit(run.actual_quantity_kg, unitPref) : "—"}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
+                        {/* Color swatch + name */}
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <div
+                            className="h-3 w-3 rounded-full shrink-0 border border-white shadow-sm"
+                            style={{ backgroundColor: colors.find(c => c.name === run.color)?.color_code || '#94a3b8' }}
+                          />
+                          <span className="font-bold text-slate-800 text-sm truncate">{run.color}</span>
+                        </div>
 
-                            <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 self-center">
-                              <ProgressIndicator 
-                                label={progressLabel}
-                                target={targetVal}
-                                actual={currentVal}
-                                color={barColor}
-                              />
-                            </div>
-                          </div>
+                        {/* Target */}
+                        <span className="text-xs text-slate-500 font-mono shrink-0">
+                          <span className="text-slate-400 mr-1">Target</span>
+                          <span className="font-black text-slate-700">{formatUnit(run.targetQty, unitPref)}</span>
+                        </span>
 
-                          {/* Footer / Actions */}
-                          <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-                            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                              <User className="w-3.5 h-3.5 text-slate-300" />
-                              {run.operator ?? 'System'}
-                            </div>
-                            
-                            <div className="flex items-center gap-2">
-                              {isUpdating ? (
-                                <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-500 rounded-lg text-xs font-bold uppercase tracking-widest">
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> UPDATING...
-                                </div>
-                              ) : (
-                                <>
-                                  <button
-                                    onClick={() => navigate(`/production/${run.batchId}`)}
-                                    className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest"
-                                    title="View Details"
-                                  >
-                                    <Eye className="w-4 h-4" />
-                                    <span className="hidden sm:inline">Details</span>
-                                  </button>
+                        {/* Actual (if available) */}
+                        {run.actual_quantity_kg != null && (
+                          <span className="text-xs text-slate-500 font-mono shrink-0">
+                            <span className="text-slate-400 mr-1">Actual</span>
+                            <span className="font-black text-emerald-700">{formatUnit(run.actual_quantity_kg, unitPref)}</span>
+                          </span>
+                        )}
 
-                                  {(run.status === "planned" || run.status === "running") && (
-                                    <button
-                                      onClick={() => openEditModal(run)}
-                                      className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                      title="Edit Batch"
-                                    >
-                                      <Pencil className="w-4 h-4" />
-                                    </button>
-                                  )}
-                                  
-                                  {(run.status === "planned" || run.status === "paused") && (
-                                    <button
-                                      onClick={() => updateStatus(run.id, "running")}
-                                      className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all shadow-sm active:scale-95"
-                                    >
-                                      <Play className="w-3.5 h-3.5 fill-current" /> START
-                                    </button>
-                                  )}
+                        {/* Status badge */}
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest shrink-0 ${sc.className}`}>
+                          <StatusIcon className="w-3 h-3" />
+                          {sc.label}
+                        </span>
 
-                                  {run.status === "running" && (
-                                    <button
-                                      onClick={() => updateStatus(run.id, "paused")}
-                                      className="flex items-center gap-1.5 px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-200 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all shadow-sm active:scale-95"
-                                    >
-                                      <Pause className="w-3.5 h-3.5 fill-current" /> PAUSE
-                                    </button>
-                                  )}
+                        {/* Actions */}
+                        <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                          {isUpdating ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => navigate(`/production/${run.batchId}`)}
+                                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                                title="View Details"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
 
-                                  {(run.status === "running" || run.status === "paused") && (
-                                    <button
-                                      onClick={() => {
-                                        setCompletingRun(run);
-                                        setActualYield(toDisplayValue(run.targetQty, unitPref));
-                                        setLossReason("Filter Loss"); // Reset to default
-                                        setCustomLossReason("");      // Reset custom notes
-                                        setIsCompletionModalOpen(true);
-                                      }}
-                                      className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all shadow-sm active:scale-95"
-                                    >
-                                      <CheckCircle2 className="w-3.5 h-3.5" /> COMPLETE
-                                    </button>
-                                  )}
-
-                                  {(run.status === "completed" || run.status === "packaging") && (
-                                    <button
-                                      onClick={() => navigate(`/production/${run.batchId}/packaging`)}
-                                      className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all shadow-sm active:scale-95"
-                                    >
-                                      <Box className="w-3.5 h-3.5" /> PACKAGE
-                                    </button>
-                                  )}
-                                </>
+                              {(run.status === "planned" || run.status === "running") && (
+                                <button
+                                  onClick={() => openEditModal(run)}
+                                  className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                  title="Edit Batch"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
                               )}
-                            </div>
-                          </div>
+
+                              {(run.status === "planned" || run.status === "paused") && (
+                                <button
+                                  onClick={() => updateStatus(run.id, "running")}
+                                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all active:scale-95"
+                                >
+                                  <Play className="w-3 h-3 fill-current" /> Start
+                                </button>
+                              )}
+
+                              {run.status === "running" && (
+                                <button
+                                  onClick={() => updateStatus(run.id, "paused")}
+                                  className="flex items-center gap-1 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-200 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all active:scale-95"
+                                >
+                                  <Pause className="w-3 h-3 fill-current" /> Pause
+                                </button>
+                              )}
+
+                              {(run.status === "running" || run.status === "paused") && (
+                                <button
+                                  onClick={() => {
+                                    setCompletingRun(run);
+                                    setActualYield(toDisplayValue(run.targetQty, unitPref));
+                                    setLossReason("Filter Loss");
+                                    setCustomLossReason("");
+                                    setIsCompletionModalOpen(true);
+                                  }}
+                                  className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all active:scale-95"
+                                >
+                                  <CheckCircle2 className="w-3 h-3" /> Done
+                                </button>
+                              )}
+
+                              {(run.status === "completed" || run.status === "packaging") && (
+                                <button
+                                  onClick={() => navigate(`/production/${run.batchId}/packaging`)}
+                                  className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all active:scale-95"
+                                >
+                                  <Box className="w-3 h-3" /> Pack
+                                </button>
+                              )}
+                            </>
+                          )}
                         </div>
                       </div>
                     );
@@ -978,9 +944,11 @@ export default function Production() {
               )}
             </div>
           </div>
+          )}
 
           {/* History Runs Table */}
-          <div className="rounded-xl border bg-white shadow-sm overflow-hidden mt-6">
+          {activeTab === "history" && (
+          <div className="rounded-xl border bg-white shadow-sm overflow-hidden animate-in fade-in duration-300">
             <div className="p-5 border-b flex flex-col gap-4 bg-slate-50">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -1340,6 +1308,7 @@ export default function Production() {
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
 
