@@ -93,6 +93,8 @@ interface ProductDemand {
     client_name: string;
     order_date: string;
     quantity_kg: number;
+    pack_size_kg: number;
+    quantity: number;
   }[];
 }
 
@@ -725,10 +727,15 @@ export default function Production() {
                                       {o?.order_date ? formatDate(o.order_date, dateFormat) : "—"}
                                     </span>
                                   </div>
-                                  <div className="flex items-center">
-                                    <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[11px] px-2 py-0.5 rounded-lg font-black">
-                                       Required: {formatUnit(o?.quantity_kg || 0, unitPref)}
-                                    </span>
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex flex-col gap-0.5">
+                                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">
+                                        Requirement: {formatUnit(o?.pack_size_kg || 0, unitPref)} × {o?.quantity || 0} unit{o?.quantity !== 1 ? 's' : ''}
+                                      </span>
+                                      <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[11px] w-fit px-2 py-0.5 rounded-lg font-black">
+                                         Total: {formatUnit(o?.quantity_kg || 0, unitPref)}
+                                      </span>
+                                    </div>
                                   </div>
                                 </div>
                               ))
