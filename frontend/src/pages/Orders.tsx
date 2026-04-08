@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { apiRequest } from "../services/api";
-import { ClipboardList, Plus, Loader2, Search, X, ShoppingCart, UserRound, MapPin, Receipt, BoxIcon } from "lucide-react";
+import { ClipboardList, Plus, Loader2, Search, X, ShoppingCart, UserRound, MapPin, Receipt } from "lucide-react";
 import { useDateFormatPreference, formatDate } from "../utils/dateFormatter";
 import { useAuth } from "../contexts/AuthContext";
 
