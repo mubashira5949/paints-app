@@ -328,12 +328,14 @@ export default function Clients() {
             Onboard and manage your customer accounts.
           </p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 bg-slate-900 text-white px-5 py-3 rounded-xl font-bold uppercase tracking-widest text-sm shadow-xl shadow-slate-200 hover:bg-slate-800 transition-all active:scale-95"
-        >
-          <Plus className="w-5 h-5" /> Onboard Client
-        </button>
+        {isManager && (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 bg-slate-900 text-white px-5 py-3 rounded-xl font-bold uppercase tracking-widest text-sm shadow-xl shadow-slate-200 hover:bg-slate-800 transition-all active:scale-95"
+          >
+            <Plus className="w-5 h-5" /> Onboard Client
+          </button>
+        )}
       </div>
 
       {/* Search bar */}
@@ -413,16 +415,18 @@ export default function Clients() {
                     <span className="px-2.5 py-1 bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-lg border border-slate-200">
                       {c.shipping_addresses.length} addr.
                     </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        openEditModal(c)
-                      }}
-                      className="p-2 rounded-lg hover:bg-violet-50 text-slate-400 hover:text-violet-600 transition-colors"
-                      title="Edit client"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
+                    {isManager && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openEditModal(c)
+                        }}
+                        className="p-2 rounded-lg hover:bg-violet-50 text-slate-400 hover:text-violet-600 transition-colors"
+                        title="Edit client"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    )}
                     {isManager && (
                       <button
                         onClick={(e) => {

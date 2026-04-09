@@ -574,12 +574,12 @@ export default function Orders() {
             Manage and view all incoming customer orders.
           </p>
         </div>
-        {user?.role !== 'operator' && (
+        {(user?.role === 'admin' || user?.role === 'manager') && (
           <button
             onClick={() => setIsModalOpen(true)}
             className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3.5 rounded-xl font-black uppercase tracking-widest text-sm shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95 group border border-blue-500"
           >
-            <Plus className="w-5 h-5 group-hover:scale-110 transition-transform" /> New Order
+            <Plus className="w-5 h-5" /> New Order
           </button>
         )}
       </div>
