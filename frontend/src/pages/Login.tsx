@@ -122,7 +122,7 @@ export default function Login() {
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Email Input Field Group */}
           <div className="space-y-2 group">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            <label className="text-sm font-bold text-slate-950 dark:text-white">
               Email or Username
             </label>
             <div className="relative">
@@ -145,7 +145,7 @@ export default function Login() {
           {/* Password Input Field Group */}
           <div className="space-y-2 group">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              <label className="text-sm font-bold text-slate-950 dark:text-white">
                 Password
               </label>
               <a
