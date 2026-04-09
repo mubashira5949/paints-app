@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
-import { apiRequest } from "../services/api";
+import { useEffect, useState } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
+import { apiRequest } from '../services/api'
 import {
   ArrowLeft,
   Activity,
@@ -15,164 +15,188 @@ import {
   Box,
   Cog,
   Timer,
-} from "lucide-react";
-import { useUnitPreference, formatUnit } from "../utils/units";
-import { useDateFormatPreference, formatDate } from "../utils/dateFormatter";
+} from 'lucide-react'
+import { useUnitPreference, formatUnit } from '../utils/units'
+import { useDateFormatPreference, formatDate } from '../utils/dateFormatter'
 
 interface ResourceActual {
-  resource_id: number;
-  name: string;
-  unit: string;
-  actual_qty: number | null;
-  expected_qty: number;
-  variance: number | null;
-  variance_flag: boolean;
+  resource_id: number
+  name: string
+  unit: string
+  actual_qty: number | null
+  expected_qty: number
+  variance: number | null
+  variance_flag: boolean
 }
 
 interface ResourceExpected {
-  resource_id: number;
-  name: string;
-  unit: string;
-  expected_qty: number;
+  resource_id: number
+  name: string
+  unit: string
+  expected_qty: number
 }
 
 interface PackagingEntry {
-  pack_size_kg: number;
-  quantity_units: number;
-  volume_kg: number;
+  pack_size_kg: number
+  quantity_units: number
+  volume_kg: number
 }
 
 interface RunDetail {
-  id: number;
-  batchId: string;
-  status: string;
-  planned_quantity_kg: number;
-  actual_quantity_kg: number | null;
-  variance: number;
-  started_at: string | null;
-  completed_at: string | null;
-  created_at: string;
-  formula_id: number;
-  formula_name: string;
-  formula_version: string;
-  batch_size_kg: number;
-  color_name: string;
-  color_code: string;
-  operator: string | null;
-  expected_resources: ResourceExpected[];
-  actual_resources: ResourceActual[];
-  packaging: PackagingEntry[];
+  id: number
+  batchId: string
+  status: string
+  planned_quantity_kg: number
+  actual_quantity_kg: number | null
+  variance: number
+  started_at: string | null
+  completed_at: string | null
+  created_at: string
+  formula_id: number
+  formula_name: string
+  formula_version: string
+  batch_size_kg: number
+  color_name: string
+  color_code: string
+  operator: string | null
+  expected_resources: ResourceExpected[]
+  actual_resources: ResourceActual[]
+  packaging: PackagingEntry[]
 }
 
 const statusConfig: Record<string, { label: string; className: string; icon: any }> = {
-  planned:   { label: "Planned",   className: "bg-slate-100 text-slate-700", icon: Activity },
-  running:   { label: "Running",   className: "bg-blue-100 text-blue-800", icon: Cog },
-  paused:    { label: "In Progress", className: "bg-amber-100 text-amber-800", icon: Timer },
-  completed: { label: "Completed", className: "bg-emerald-100 text-emerald-800", icon: CheckCircle2 },
-  packaging: { label: "Packaging", className: "bg-purple-100 text-purple-800", icon: Box },
-};
+  planned: {
+    label: 'Planned',
+    className: 'bg-slate-100 text-slate-700',
+    icon: Activity,
+  },
+  running: {
+    label: 'Running',
+    className: 'bg-blue-100 text-blue-800',
+    icon: Cog,
+  },
+  paused: {
+    label: 'In Progress',
+    className: 'bg-amber-100 text-amber-800',
+    icon: Timer,
+  },
+  completed: {
+    label: 'Completed',
+    className: 'bg-emerald-100 text-emerald-800',
+    icon: CheckCircle2,
+  },
+  packaging: {
+    label: 'Packaging',
+    className: 'bg-purple-100 text-purple-800',
+    icon: Box,
+  },
+}
 
 export default function ProductionDetail() {
-  const { batchId } = useParams<{ batchId: string }>();
-  const navigate = useNavigate();
-  const dateFormat = useDateFormatPreference();
-  const unitPref = useUnitPreference();
-  const [run, setRun] = useState<RunDetail | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { batchId } = useParams<{ batchId: string }>()
+  const navigate = useNavigate()
+  const dateFormat = useDateFormatPreference()
+  const unitPref = useUnitPreference()
+  const [run, setRun] = useState<RunDetail | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   // Parse numeric id from "PR-5" → 5
-  const numericId = batchId?.replace(/^PR-/i, "");
+  const numericId = batchId?.replace(/^PR-/i, '')
 
-  const [isPacking, setIsPacking] = useState(false);
+  const [isPacking, setIsPacking] = useState(false)
 
   useEffect(() => {
-    if (!numericId) return;
-    fetchRun();
-  }, [numericId]);
+    if (!numericId) return
+    fetchRun()
+  }, [numericId])
 
   const fetchRun = async () => {
-    setIsLoading(true);
+    setIsLoading(true)
     try {
-      const data = await apiRequest<RunDetail>(`/production-runs/${numericId}`);
-      setRun(data);
+      const data = await apiRequest<RunDetail>(`/production-runs/${numericId}`)
+      setRun(data)
     } catch (err: any) {
-      setError(err.message ?? "Failed to load run details");
+      setError(err.message ?? 'Failed to load run details')
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   const handleQuickPackRemaining = async () => {
-    if (!run || !numericId) return;
-    const batchVol = run.actual_quantity_kg ?? run.planned_quantity_kg;
-    const currentPackaged = run.packaging.reduce((s, p) => s + Number(p.volume_kg), 0);
-    const left = batchVol - currentPackaged;
+    if (!run || !numericId) return
+    const batchVol = run.actual_quantity_kg ?? run.planned_quantity_kg
+    const currentPackaged = run.packaging.reduce((s, p) => s + Number(p.volume_kg), 0)
+    const left = batchVol - currentPackaged
 
-    if (left <= 0.01) return; // Ignore tiny remainders
+    if (left <= 0.01) return // Ignore tiny remainders
 
-    setIsPacking(true);
+    setIsPacking(true)
     try {
       await apiRequest(`/production-runs/${numericId}/packaging`, {
-        method: "POST",
+        method: 'POST',
         body: {
-          packaging_details: [{
-            pack_size_kg: left,
-            quantity_units: 1
-          }]
-        }
-      });
-      await fetchRun();
+          packaging_details: [
+            {
+              pack_size_kg: left,
+              quantity_units: 1,
+            },
+          ],
+        },
+      })
+      await fetchRun()
     } catch (err: any) {
-      alert(err.message || "Failed to pack remaining volume");
+      alert(err.message || 'Failed to pack remaining volume')
     } finally {
-      setIsPacking(false);
+      setIsPacking(false)
     }
-  };
+  }
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
         <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading run details…
       </div>
-    );
+    )
   }
 
   if (error || !run) {
     return (
       <div className="text-center py-20 text-red-500">
         <AlertTriangle className="mx-auto w-8 h-8 mb-2" />
-        {error ?? "Run not found"}
+        {error ?? 'Run not found'}
         <div className="mt-4">
           <Link to="/production" className="text-blue-600 hover:underline text-sm">
             ← Back to Production
           </Link>
         </div>
       </div>
-    );
+    )
   }
 
-  const sc = statusConfig[run.status] ?? statusConfig.planned;
-  const packaged = run.packaging.reduce((s, p) => s + Number(p.volume_kg), 0);
-  const batchVolume = run.actual_quantity_kg ?? run.planned_quantity_kg;
-  const remainingVolume = batchVolume - packaged;
-  const isFullyPacked = remainingVolume <= 0.01;
-  const hasActuals = run.actual_resources.length > 0;
+  const sc = statusConfig[run.status] ?? statusConfig.planned
+  const packaged = run.packaging.reduce((s, p) => s + Number(p.volume_kg), 0)
+  const batchVolume = run.actual_quantity_kg ?? run.planned_quantity_kg
+  const remainingVolume = batchVolume - packaged
+  const isFullyPacked = remainingVolume <= 0.01
+  const hasActuals = run.actual_resources.length > 0
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-10">
       {/* Header */}
       <div className="flex items-center justify-between pt-2">
         <button
-          onClick={() => navigate("/production")}
+          onClick={() => navigate('/production')}
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="w-4 h-4" /> Back to Production
         </button>
-        <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${sc.className}`}>
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${sc.className}`}
+        >
           {(() => {
-            const StatusIcon = sc.icon;
-            return <StatusIcon className="w-3.5 h-3.5" />;
+            const StatusIcon = sc.icon
+            return <StatusIcon className="w-3.5 h-3.5" />
           })()}
           {sc.label}
         </span>
@@ -181,20 +205,26 @@ export default function ProductionDetail() {
       {/* Title block */}
       <div className="rounded-xl border bg-card shadow-sm p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1">Batch</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1">
+            Batch
+          </p>
           <h1 className="text-3xl font-bold font-mono tracking-tight">{run.batchId}</h1>
-          <p className="text-muted-foreground text-sm mt-1">{run.color_name} · {run.formula_name} {run.formula_version}</p>
+          <p className="text-muted-foreground text-sm mt-1">
+            {run.color_name} · {run.formula_name} {run.formula_version}
+          </p>
         </div>
-        {(run.status === "completed" || run.status === "packaging") && run.packaging.length === 0 && (
-          <Link
-            to={`/production/${run.batchId}/packaging`}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-colors shadow-sm"
-          >
-            <PackageCheck className="w-4 h-4" /> Start Packaging
-          </Link>
-        )}
-        {(run.status === "completed" || run.status === "packaging") && run.packaging.length > 0 && (
-          isFullyPacked ? (
+        {(run.status === 'completed' || run.status === 'packaging') &&
+          run.packaging.length === 0 && (
+            <Link
+              to={`/production/${run.batchId}/packaging`}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-colors shadow-sm"
+            >
+              <PackageCheck className="w-4 h-4" /> Start Packaging
+            </Link>
+          )}
+        {(run.status === 'completed' || run.status === 'packaging') &&
+          run.packaging.length > 0 &&
+          (isFullyPacked ? (
             <span
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-slate-200 text-slate-400 font-semibold text-sm cursor-not-allowed opacity-60"
               title="All volume has been packaged"
@@ -208,8 +238,7 @@ export default function ProductionDetail() {
             >
               <PackageCheck className="w-4 h-4" /> Add More Packaging
             </Link>
-          )
-        )}
+          ))}
       </div>
 
       {/* KPI Cards */}
@@ -227,9 +256,7 @@ export default function ProductionDetail() {
             <Activity className="w-3.5 h-3.5 text-green-500" />
           </div>
           <p className="text-2xl font-bold">
-            {run.actual_quantity_kg != null
-              ? formatUnit(run.actual_quantity_kg, unitPref)
-              : "—"}
+            {run.actual_quantity_kg != null ? formatUnit(run.actual_quantity_kg, unitPref) : '—'}
           </p>
         </div>
         <div className="rounded-xl border bg-card p-4 shadow-sm">
@@ -237,8 +264,11 @@ export default function ProductionDetail() {
             <span className="text-xs text-muted-foreground font-medium">Variance</span>
             <FlaskConical className="w-3.5 h-3.5 text-purple-500" />
           </div>
-          <p className={`text-2xl font-bold ${run.variance > 0 ? "text-green-600" : run.variance < 0 ? "text-orange-500" : "text-muted-foreground"}`}>
-            {run.variance > 0 ? "+" : ""}{formatUnit(run.variance, unitPref)}
+          <p
+            className={`text-2xl font-bold ${run.variance > 0 ? 'text-green-600' : run.variance < 0 ? 'text-orange-500' : 'text-muted-foreground'}`}
+          >
+            {run.variance > 0 ? '+' : ''}
+            {formatUnit(run.variance, unitPref)}
           </p>
         </div>
         <div className="rounded-xl border bg-card p-4 shadow-sm">
@@ -246,44 +276,61 @@ export default function ProductionDetail() {
             <span className="text-xs text-muted-foreground font-medium">Packaged</span>
             <Box className="w-3.5 h-3.5 text-amber-500" />
           </div>
-          <p className="text-2xl font-bold">{packaged > 0 ? formatUnit(packaged, unitPref) : "—"}</p>
+          <p className="text-2xl font-bold">
+            {packaged > 0 ? formatUnit(packaged, unitPref) : '—'}
+          </p>
         </div>
       </div>
 
       {/* Meta info */}
       <div className="rounded-xl border bg-card shadow-sm p-5 grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
         <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Operator</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">
+            Operator
+          </p>
           <div className="flex items-center gap-1.5 font-medium">
             <User className="w-3.5 h-3.5 text-muted-foreground" />
-            {run.operator ?? "—"}
+            {run.operator ?? '—'}
           </div>
         </div>
         <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Formula</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">
+            Formula
+          </p>
           <div className="flex items-center gap-1.5 font-medium">
             <BookOpen className="w-3.5 h-3.5 text-muted-foreground" />
-            {run.formula_name} {run.formula_version && <span className="text-muted-foreground text-xs">v{run.formula_version}</span>}
+            {run.formula_name}{' '}
+            {run.formula_version && (
+              <span className="text-muted-foreground text-xs">v{run.formula_version}</span>
+            )}
           </div>
         </div>
         <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Batch Size</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">
+            Batch Size
+          </p>
           <p className="font-medium">{formatUnit(run.batch_size_kg, unitPref)}</p>
         </div>
         {run.started_at && (
           <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Started</p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">
+              Started
+            </p>
             <p className="font-medium">{formatDate(run.started_at, dateFormat, true)}</p>
           </div>
         )}
         {run.completed_at && (
           <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Completed</p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">
+              Completed
+            </p>
             <p className="font-medium">{formatDate(run.completed_at, dateFormat, true)}</p>
           </div>
         )}
         <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Created</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">
+            Created
+          </p>
           <p className="font-medium">{formatDate(run.created_at, dateFormat)}</p>
         </div>
       </div>
@@ -298,59 +345,78 @@ export default function ProductionDetail() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-slate-50/50">
-                <th className="px-4 h-10 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500">Material</th>
-                <th className="px-4 h-10 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500">Expected</th>
-                <th className="px-4 h-10 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500">Actual</th>
-                <th className="px-4 h-10 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500">Variance</th>
-                <th className="px-4 h-10 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500">Flag</th>
+                <th className="px-4 h-10 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                  Material
+                </th>
+                <th className="px-4 h-10 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                  Expected
+                </th>
+                <th className="px-4 h-10 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                  Actual
+                </th>
+                <th className="px-4 h-10 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                  Variance
+                </th>
+                <th className="px-4 h-10 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                  Flag
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y">
-              {!hasActuals ? (
-                // Show expected resources only (run not yet completed)
-                run.expected_resources.map((r) => (
-                  <tr key={r.resource_id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium">{r.name}</td>
-                    <td className="px-4 py-3 text-center font-mono text-slate-600">{Number(r.expected_qty).toFixed(4)} {r.unit}</td>
-                    <td className="px-4 py-3 text-center text-muted-foreground">—</td>
-                    <td className="px-4 py-3 text-center text-muted-foreground">—</td>
-                    <td className="px-4 py-3 text-center text-muted-foreground">—</td>
-                  </tr>
-                ))
-              ) : (
-                run.actual_resources.map((r) => {
-                  const v = Number(r.variance ?? 0);
-                  const varColor = r.variance_flag
-                    ? "text-red-700 bg-red-100 font-bold"
-                    : v > 0
-                    ? "text-green-600 bg-green-50"
-                    : v < 0
-                    ? "text-orange-600 bg-orange-50"
-                    : "text-slate-500 bg-slate-50";
-                  return (
+              {!hasActuals
+                ? // Show expected resources only (run not yet completed)
+                  run.expected_resources.map((r) => (
                     <tr key={r.resource_id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 font-medium">{r.name}</td>
-                      <td className="px-4 py-3 text-center font-mono text-slate-500">{Number(r.expected_qty).toFixed(4)} {r.unit}</td>
-                      <td className="px-4 py-3 text-center font-mono font-semibold">{r.actual_qty != null ? Number(r.actual_qty).toFixed(4) : "—"} {r.unit}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-bold ${varColor}`}>
-                          {v > 0 ? "+" : ""}{v.toFixed(4)} {r.unit}
-                        </span>
+                      <td className="px-4 py-3 text-center font-mono text-slate-600">
+                        {Number(r.expected_qty).toFixed(4)} {r.unit}
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        {r.variance_flag ? (
-                          <AlertTriangle className="inline w-3.5 h-3.5 text-red-500" />
-                        ) : (
-                          <CheckCircle2 className="inline w-3.5 h-3.5 text-green-500" />
-                        )}
-                      </td>
+                      <td className="px-4 py-3 text-center text-muted-foreground">—</td>
+                      <td className="px-4 py-3 text-center text-muted-foreground">—</td>
+                      <td className="px-4 py-3 text-center text-muted-foreground">—</td>
                     </tr>
-                  );
-                })
-              )}
+                  ))
+                : run.actual_resources.map((r) => {
+                    const v = Number(r.variance ?? 0)
+                    const varColor = r.variance_flag
+                      ? 'text-red-700 bg-red-100 font-bold'
+                      : v > 0
+                        ? 'text-green-600 bg-green-50'
+                        : v < 0
+                          ? 'text-orange-600 bg-orange-50'
+                          : 'text-slate-500 bg-slate-50'
+                    return (
+                      <tr key={r.resource_id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 font-medium">{r.name}</td>
+                        <td className="px-4 py-3 text-center font-mono text-slate-500">
+                          {Number(r.expected_qty).toFixed(4)} {r.unit}
+                        </td>
+                        <td className="px-4 py-3 text-center font-mono font-semibold">
+                          {r.actual_qty != null ? Number(r.actual_qty).toFixed(4) : '—'} {r.unit}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-bold ${varColor}`}
+                          >
+                            {v > 0 ? '+' : ''}
+                            {v.toFixed(4)} {r.unit}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {r.variance_flag ? (
+                            <AlertTriangle className="inline w-3.5 h-3.5 text-red-500" />
+                          ) : (
+                            <CheckCircle2 className="inline w-3.5 h-3.5 text-green-500" />
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
               {run.expected_resources.length === 0 && !hasActuals && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground text-sm">No resource data</td>
+                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground text-sm">
+                    No resource data
+                  </td>
                 </tr>
               )}
             </tbody>
@@ -365,12 +431,12 @@ export default function ProductionDetail() {
             <PackageCheck className="w-4 h-4 text-purple-500" />
             <h2 className="font-semibold text-sm">Packaging</h2>
           </div>
-          {(run.status === "completed" || run.status === "packaging") && !isFullyPacked && (
+          {(run.status === 'completed' || run.status === 'packaging') && !isFullyPacked && (
             <Link
               to={`/production/${run.batchId}/packaging`}
               className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline"
             >
-              {run.packaging.length > 0 ? "Manage" : "Start Packaging →"}
+              {run.packaging.length > 0 ? 'Manage' : 'Start Packaging →'}
             </Link>
           )}
           {isFullyPacked && run.packaging.length > 0 && (
@@ -381,12 +447,15 @@ export default function ProductionDetail() {
         </div>
         {run.packaging.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">
-            {run.status === "completed" ? (
+            {run.status === 'completed' ? (
               <>
                 <PackageCheck className="mx-auto w-8 h-8 opacity-20 mb-2" />
                 <p className="text-sm font-medium">Ready to pack</p>
                 <p className="text-xs mt-1">
-                  <Link to={`/production/${run.batchId}/packaging`} className="text-blue-600 hover:underline font-semibold">
+                  <Link
+                    to={`/production/${run.batchId}/packaging`}
+                    className="text-blue-600 hover:underline font-semibold"
+                  >
                     Start Packaging →
                   </Link>
                 </p>
@@ -403,10 +472,14 @@ export default function ProductionDetail() {
                   <div className="p-1.5 bg-purple-50 rounded-md">
                     <Box className="w-4 h-4 text-purple-600" />
                   </div>
-                  <span className="font-semibold">{formatUnit(p.pack_size_kg, unitPref)} (Size)</span>
+                  <span className="font-semibold">
+                    {formatUnit(p.pack_size_kg, unitPref)} (Size)
+                  </span>
                   <span className="text-muted-foreground">× {p.quantity_units} units</span>
                 </div>
-                <span className="font-mono text-muted-foreground text-xs">{formatUnit(p.volume_kg, unitPref)} total</span>
+                <span className="font-mono text-muted-foreground text-xs">
+                  {formatUnit(p.volume_kg, unitPref)} total
+                </span>
               </div>
             ))}
             <div className="flex items-center justify-between px-5 py-3 bg-slate-50 text-sm border-t">
@@ -414,35 +487,53 @@ export default function ProductionDetail() {
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="font-bold text-slate-700">Packaging Progress</span>
                   <span className="font-mono text-xs font-bold text-slate-500">
-                    {((packaged / (run.actual_quantity_kg ?? run.planned_quantity_kg)) * 100).toFixed(1)}%
+                    {(
+                      (packaged / (run.actual_quantity_kg ?? run.planned_quantity_kg)) *
+                      100
+                    ).toFixed(1)}
+                    %
                   </span>
                 </div>
                 <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                  <div 
+                  <div
                     className="h-full bg-purple-500 rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min((packaged / (run.actual_quantity_kg ?? run.planned_quantity_kg)) * 100, 100)}%` }}
+                    style={{
+                      width: `${Math.min((packaged / (run.actual_quantity_kg ?? run.planned_quantity_kg)) * 100, 100)}%`,
+                    }}
                   />
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-1.5 flex justify-between items-center">
                   <span>{formatUnit(packaged, unitPref)} done</span>
                   <span className="flex items-center gap-2">
-                    {(run.status === "completed" || run.status === "packaging") && (run.actual_quantity_kg ?? run.planned_quantity_kg) - packaged > 0.01 && (
-                      <button
-                        onClick={handleQuickPackRemaining}
-                        disabled={isPacking}
-                        className="text-[9px] font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-1.5 py-0.5 rounded border border-purple-200 transition-colors disabled:opacity-50"
-                      >
-                        {isPacking ? "Packing..." : "Pack Remaining"}
-                      </button>
-                    )}
-                    <span>{formatUnit(Math.max(0, (run.actual_quantity_kg ?? run.planned_quantity_kg) - packaged), unitPref)} left to pack</span>
+                    {(run.status === 'completed' || run.status === 'packaging') &&
+                      (run.actual_quantity_kg ?? run.planned_quantity_kg) - packaged > 0.01 && (
+                        <button
+                          onClick={handleQuickPackRemaining}
+                          disabled={isPacking}
+                          className="text-[9px] font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-1.5 py-0.5 rounded border border-purple-200 transition-colors disabled:opacity-50"
+                        >
+                          {isPacking ? 'Packing...' : 'Pack Remaining'}
+                        </button>
+                      )}
+                    <span>
+                      {formatUnit(
+                        Math.max(0, (run.actual_quantity_kg ?? run.planned_quantity_kg) - packaged),
+                        unitPref,
+                      )}{' '}
+                      left to pack
+                    </span>
                   </span>
                 </p>
               </div>
               <div className="text-right shrink-0">
-                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Total Packaged</span>
-                <span className="font-bold font-mono text-base">{formatUnit(packaged, unitPref)}
-                  <span className="text-muted-foreground font-normal text-xs ml-1.5">/ {formatUnit(run.actual_quantity_kg ?? run.planned_quantity_kg, unitPref)}</span>
+                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                  Total Packaged
+                </span>
+                <span className="font-bold font-mono text-base">
+                  {formatUnit(packaged, unitPref)}
+                  <span className="text-muted-foreground font-normal text-xs ml-1.5">
+                    / {formatUnit(run.actual_quantity_kg ?? run.planned_quantity_kg, unitPref)}
+                  </span>
                 </span>
               </div>
             </div>
@@ -450,5 +541,5 @@ export default function ProductionDetail() {
         )}
       </div>
     </div>
-  );
+  )
 }

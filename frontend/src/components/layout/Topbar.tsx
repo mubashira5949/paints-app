@@ -1,12 +1,12 @@
-import { Menu, LogOut, User as UserIcon } from "lucide-react";
-import { useAuth } from "../../contexts/AuthContext";
+import { Menu, LogOut, User as UserIcon } from 'lucide-react'
+import { useAuth } from '../../contexts/AuthContext'
 
 interface TopbarProps {
-  onMenuClick: () => void;
+  onMenuClick: () => void
 }
 
 export function Topbar({ onMenuClick }: TopbarProps) {
-  const { user, logout } = useAuth();
+  const { user, logout } = useAuth()
 
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-x-4 border-b bg-background px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
@@ -30,10 +30,10 @@ export function Topbar({ onMenuClick }: TopbarProps) {
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-medium leading-none">
-                {user?.username || "Loading..."}
+                {user?.username || 'Loading...'}
               </span>
               <span className="text-xs text-muted-foreground capitalize mt-1">
-                {user?.role || "Active Session"}
+                {user?.role || 'Active Session'}
               </span>
             </div>
           </div>
@@ -48,5 +48,5 @@ export function Topbar({ onMenuClick }: TopbarProps) {
         </div>
       </div>
     </header>
-  );
+  )
 }

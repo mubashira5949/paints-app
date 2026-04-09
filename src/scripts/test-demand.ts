@@ -1,4 +1,11 @@
-import { db } from '../services/db';
+import { Pool } from 'pg';
+import dotenv from 'dotenv';
+dotenv.config();
+
+const db = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
 async function test() {
   const result = await db.query(`

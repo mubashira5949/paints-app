@@ -3,52 +3,47 @@
  * Handles fetch requests to the backend with automatic JWT token inclusion.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
-type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
 interface RequestOptions {
-  method?: HttpMethod;
-  body?: any;
-  headers?: Record<string, string>;
-  signal?: AbortSignal;
+  method?: HttpMethod
+  body?: any
+  headers?: Record<string, string>
+  signal?: AbortSignal
 }
 
-export async function apiRequest<T>(
-  endpoint: string,
-  options: RequestOptions = {},
-): Promise<T> {
-  const token = localStorage.getItem("token");
+export async function apiRequest<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+  const token = localStorage.getItem('token')
   const headers: Record<string, string> = {
-    ...(options.body ? { "Content-Type": "application/json" } : {}),
+    ...(options.body ? { 'Content-Type': 'application/json' } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
-  };
+  }
 
-  const url = `${API_BASE_URL}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
+  const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
 
   const response = await fetch(url, {
-    method: options.method || "GET",
+    method: options.method || 'GET',
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
     signal: options.signal,
-  });
+  })
 
   if (!response.ok) {
     if (response.status === 401) {
-      localStorage.removeItem("token");
+      localStorage.removeItem('token')
       // Use window.location as a fallback to force a full reload and redirect to login
       // if the app is stuck in an invalid state.
-      window.location.href = "/login";
-      return Promise.reject(new Error("Session expired. Please login again."));
+      window.location.href = '/login'
+      return Promise.reject(new Error('Session expired. Please login again.'))
     }
 
-    const errorData = await response.json().catch(() => ({}));
-    const errorMessage = errorData.message || response.statusText;
-    throw new Error(
-      errorMessage || `Request failed with status ${response.status}`,
-    );
+    const errorData = await response.json().catch(() => ({}))
+    const errorMessage = errorData.message || response.statusText
+    throw new Error(errorMessage || `Request failed with status ${response.status}`)
   }
 
-  return response.json();
+  return response.json()
 }
