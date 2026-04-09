@@ -23,6 +23,10 @@ import {
   Box,
   ShoppingBag,
   ArrowRight,
+<<<<<<< HEAD
+  Building2,
+=======
+>>>>>>> origin/main
 } from 'lucide-react'
 import { useUnitPreference, formatUnit, toDisplayValue, fromDisplayValue } from '../utils/units'
 import { useDateFormatPreference, formatDate } from '../utils/dateFormatter'
@@ -62,6 +66,11 @@ interface HistoryRun {
   created_at: string
   formula_name: string
   color_name: string
+<<<<<<< HEAD
+  client_name?: string
+  order_date?: string
+=======
+>>>>>>> origin/main
   packaging?: { pack_size_kg: number; quantity_units: number }[]
   resource_used?: number
 }
@@ -70,12 +79,21 @@ interface ActiveRun {
   id: number
   batchId: string
   color: string
+<<<<<<< HEAD
+  color_name?: string
+=======
+>>>>>>> origin/main
   formula: string
   targetQty: number
   actual_quantity_kg?: number | null
   status: 'planned' | 'running' | 'paused' | 'completed' | 'packaging'
   started_at: string | null
   operator: string | null
+<<<<<<< HEAD
+  client_name?: string
+  order_date?: string
+=======
+>>>>>>> origin/main
   packaging?: { pack_size_kg: number; quantity_units: number }[]
 }
 
@@ -144,6 +162,11 @@ export default function Production() {
   const unitPref = useUnitPreference()
   const dateFormat = useDateFormatPreference()
   const navigate = useNavigate()
+<<<<<<< HEAD
+  const canManageProduction =
+    user?.role === 'admin' || user?.role === 'manager' || user?.role === 'operator'
+=======
+>>>>>>> origin/main
   const [metrics, setMetrics] = useState<{ activeRuns: number } | null>(null)
   const [historyRuns, setHistoryRuns] = useState<HistoryRun[]>([])
   const [isHistoryLoading, setIsHistoryLoading] = useState(true)
@@ -155,6 +178,15 @@ export default function Production() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [showAllHistory, setShowAllHistory] = useState(false)
   const [expandedDemand, setExpandedDemand] = useState<number | null>(null)
+<<<<<<< HEAD
+  const [prefilledOrder, setPrefilledOrder] = useState<{
+    orderId: number
+    clientName: string
+    orderDate: string
+    targetQty: number
+  } | null>(null)
+=======
+>>>>>>> origin/main
   const [showAllActive, setShowAllActive] = useState(false)
   const [demand, setDemand] = useState<ProductDemand[]>([])
   const [isDemandLoading, setIsDemandLoading] = useState(true)
@@ -269,7 +301,20 @@ export default function Production() {
     setIsDemandLoading(true)
     try {
       const data = await apiRequest<ProductDemand[]>('/sales/orders/demand')
+<<<<<<< HEAD
+      
+      const sortedData = data.sort((a, b) => {
+        const getLatestDate = (demand: ProductDemand) => {
+          if (!demand.detailed_orders || demand.detailed_orders.length === 0) return 0
+          return Math.max(...demand.detailed_orders.map(o => new Date(o.order_date).getTime()))
+        }
+        return getLatestDate(b) - getLatestDate(a)
+      })
+
+      setDemand(sortedData)
+=======
       setDemand(data)
+>>>>>>> origin/main
     } catch (err) {
       console.error('Failed to fetch demand', err)
     } finally {
@@ -418,9 +463,17 @@ export default function Production() {
     navigate(`/production/PR-${id}/packaging`)
   }
 
+  // Refetch history whenever filters change OR user switches to history tab
   useEffect(() => {
+<<<<<<< HEAD
+    if (activeTab === 'history' || activeTab === 'overview') {
+      fetchHistory()
+    }
+  }, [filterSearch, filterColor, filterStatus, filterFromDate, filterToDate, activeTab])
+=======
     fetchHistory()
   }, [filterSearch, filterColor, filterStatus, filterFromDate, filterToDate])
+>>>>>>> origin/main
 
   useEffect(() => {
     // Fetch active runs count for the Active Runs card only
@@ -428,13 +481,30 @@ export default function Production() {
       .then(setMetrics)
       .catch(console.error)
   }, [])
+<<<<<<< HEAD
 
+  // Refetch data when tab changes, and on initial mount
   useEffect(() => {
     Promise.all([fetchColors(), fetchActiveRuns(), fetchDemand()])
-  }, [])
+  }, [activeTab])
 
   useEffect(() => {
     const interval = setInterval(fetchActiveRuns, 10000)
+    return () => clearInterval(interval)
+=======
+
+  useEffect(() => {
+    Promise.all([fetchColors(), fetchActiveRuns(), fetchDemand()])
+>>>>>>> origin/main
+  }, [])
+
+  // Also poll history every 30s as fallback
+  useEffect(() => {
+<<<<<<< HEAD
+    const interval = setInterval(fetchHistory, 30000)
+=======
+    const interval = setInterval(fetchActiveRuns, 10000)
+>>>>>>> origin/main
     return () => clearInterval(interval)
   }, [])
 
@@ -493,12 +563,22 @@ export default function Production() {
             resourceId: r.resource_id,
             quantity: r.actual_quantity_used,
           })),
+<<<<<<< HEAD
+          orderId: prefilledOrder?.orderId,
+          clientName: prefilledOrder?.clientName,
+          orderDate: prefilledOrder?.orderDate,
+=======
+>>>>>>> origin/main
         },
       })
       setIsModalOpen(false)
       fetchRuns()
       setSelectedColor('')
       setSelectedFormula(null)
+<<<<<<< HEAD
+      setPrefilledOrder(null)
+=======
+>>>>>>> origin/main
     } catch (err: any) {
       alert(err.message)
     }
@@ -530,7 +610,10 @@ export default function Production() {
         {[
           { id: 'overview', label: 'Overview' },
           { id: 'active', label: 'Active Runs' },
+<<<<<<< HEAD
+=======
           { id: 'planning', label: 'Planning' },
+>>>>>>> origin/main
           { id: 'history', label: 'History' },
         ].map((tab) => (
           <button
@@ -724,6 +807,51 @@ export default function Production() {
                               {item.color_name}
                             </h4>
                             {/* Info details toggle */}
+<<<<<<< HEAD
+                            <div className="flex items-center gap-1.5 ml-auto">
+                              <span
+                                className={`text-[8px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded-md border shadow-sm ${
+                                  !prodStatus
+                                    ? 'bg-amber-50 text-amber-600 border-amber-100'
+                                    : prodStatus === 'running'
+                                      ? 'bg-blue-50 text-blue-600 border-blue-100'
+                                      : prodStatus === 'paused'
+                                        ? 'bg-slate-50 text-slate-500 border-slate-200'
+                                        : prodStatus === 'packed'
+                                          ? 'bg-emerald-600 text-white border-emerald-700 shadow-emerald-200'
+                                          : prodStatus === 'packaging'
+                                            ? 'bg-purple-50 text-purple-600 border-purple-100'
+                                            : 'bg-slate-50 text-slate-600 border-slate-100'
+                                }`}
+                              >
+                                {!prodStatus
+                                  ? 'Pending'
+                                  : prodStatus === 'running'
+                                    ? 'Running'
+                                    : prodStatus === 'paused'
+                                      ? 'Paused'
+                                      : prodStatus === 'packed'
+                                        ? 'Package Completed'
+                                        : prodStatus === 'packaging'
+                                          ? 'Packaging'
+                                          : prodStatus === 'completed'
+                                            ? 'Completed'
+                                            : prodStatus}
+                              </span>
+                              <div
+                                className="bg-emerald-50 text-emerald-600 rounded-lg p-1.5 cursor-pointer hover:bg-emerald-100 hover:text-emerald-700 transition-colors"
+                                title="Order Details"
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  setExpandedDemand(
+                                    expandedDemand === item.color_id ? null : item.color_id,
+                                  )
+                                }}
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                              </div>
+=======
                             <div
                               className="bg-emerald-50 text-emerald-600 rounded-lg p-1.5 cursor-pointer hover:bg-emerald-100 hover:text-emerald-700 transition-colors"
                               title="Order Details"
@@ -736,12 +864,53 @@ export default function Production() {
                               }}
                             >
                               <Eye className="h-3.5 w-3.5" />
+>>>>>>> origin/main
                             </div>
                           </div>
                           {/* Qty + orders */}
                           <div className="text-lg font-black text-slate-900 leading-none mb-1">
                             {formatUnit(item.total_qty_kg, unitPref)}
                           </div>
+<<<<<<< HEAD
+                          <div className="flex flex-col gap-1 mb-3">
+                            <div className="text-[10px] font-bold text-emerald-600">
+                              {item.order_count} order{item.order_count !== 1 ? 's' : ''}
+                            </div>
+                            {item.detailed_orders && item.detailed_orders.length > 0 && (
+                              <div className="flex flex-col gap-0.5">
+                                <div className="text-[9px] font-black text-slate-500 uppercase flex items-center gap-1.5 line-clamp-1">
+                                  <Building2 className="w-2.5 h-2.5 text-slate-400" />
+                                  <span className="truncate">
+                                    {item.detailed_orders[0].client_name}
+                                    {item.detailed_orders.length > 1 &&
+                                      ` + ${item.detailed_orders.length - 1} more`}
+                                  </span>
+                                </div>
+                                <div className="text-[9px] font-bold text-slate-400 flex items-center gap-1.5 mt-0.5">
+                                  <Calendar className="w-2.5 h-2.5" />
+                                  <span>
+                                    {item.detailed_orders[0].order_date
+                                      ? formatDate(item.detailed_orders[0].order_date, dateFormat)
+                                      : '—'}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          {/* Action */}
+                          {canManageProduction && (
+                            <button
+                              onClick={() => {
+                                setSelectedColor(item.color_id)
+                                setPrefilledOrder(null)
+                                setIsModalOpen(true)
+                              }}
+                              className="w-full flex items-center justify-center gap-1 text-[10px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 border border-blue-100 hover:border-blue-300 rounded-lg py-1 transition-colors"
+                            >
+                              Plan <ArrowRight className="h-2.5 w-2.5" />
+                            </button>
+                          )}
+=======
                           <div className="text-[10px] font-bold text-emerald-600 mb-3">
                             {item.order_count} order
                             {item.order_count !== 1 ? 's' : ''}
@@ -756,11 +925,42 @@ export default function Production() {
                           >
                             Plan <ArrowRight className="h-2.5 w-2.5" />
                           </button>
+>>>>>>> origin/main
 
                           {/* Dropdown for detailed orders */}
                           {expandedDemand == item.color_id && (
                             <div className="absolute top-[calc(100%+12px)] left-0 sm:-left-3 z-[110] w-64 sm:w-80 bg-white shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)] border border-slate-200 rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-4 duration-200">
                               <div className="bg-emerald-900 px-4 py-3 flex justify-between items-center text-white">
+<<<<<<< HEAD
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[11px] font-black uppercase tracking-widest opacity-90">
+                                    Order Breakdown
+                                  </span>
+                                  {prodStatus &&
+                                    prodStatus !== 'planned' &&
+                                    prodStatus !== 'completed' && (
+                                      <span className="text-[10px] bg-white/20 backdrop-blur-md px-2 py-1 rounded-lg font-bold uppercase">
+                                        {prodStatus === 'running'
+                                          ? 'Running'
+                                          : prodStatus === 'paused'
+                                            ? 'Paused'
+                                            : prodStatus === 'packaging'
+                                              ? 'Packed'
+                                              : prodStatus}
+                                      </span>
+                                    )}
+                                </div>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setExpandedDemand(null)
+                                  }}
+                                  className="p-1 rounded-md hover:bg-white/20 transition-all active:scale-95"
+                                  title="Close Breakdown"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+=======
                                 <span className="text-[11px] font-black uppercase tracking-widest opacity-90">
                                   Order Breakdown
                                 </span>
@@ -777,6 +977,7 @@ export default function Production() {
                                             : prodStatus}
                                     </span>
                                   )}
+>>>>>>> origin/main
                               </div>
                               <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 p-3 bg-white">
                                 {Array.isArray(item.detailed_orders) &&
@@ -848,6 +1049,28 @@ export default function Production() {
                                             {formatUnit(o.quantity_kg || 0, unitPref)}
                                           </span>
                                         </div>
+<<<<<<< HEAD
+
+                                        {canManageProduction && (
+                                          <button
+                                            onClick={() => {
+                                              setSelectedColor(item.color_id)
+                                              setPrefilledOrder({
+                                                orderId: o.order_id,
+                                                clientName: o.client_name,
+                                                orderDate: o.order_date,
+                                                targetQty: o.quantity_kg,
+                                              })
+                                              setIsModalOpen(true)
+                                              setExpandedDemand(null)
+                                            }}
+                                            className="w-full mt-2 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all shadow-sm flex items-center justify-center gap-1.5"
+                                          >
+                                            <Play className="w-3 h-3" /> Plan for this Order
+                                          </button>
+                                        )}
+=======
+>>>>>>> origin/main
                                       </div>
                                     ))
                                 ) : (
@@ -936,6 +1159,11 @@ export default function Production() {
                   <div className="flex flex-col gap-4">
                     {activeRuns
                       .filter((run) => {
+<<<<<<< HEAD
+                        // Never show fully-packaged runs in the Active Runs list
+                        if (run.status === 'packed') return false
+=======
+>>>>>>> origin/main
                         if (
                           activeSearch &&
                           !run.batchId.toLowerCase().includes(activeSearch.toLowerCase()) &&
@@ -976,7 +1204,11 @@ export default function Production() {
                           }
                         > = {
                           planned: {
+<<<<<<< HEAD
+                            label: 'Pending',
+=======
                             label: 'Planned',
+>>>>>>> origin/main
                             className: 'bg-slate-100 text-slate-700',
                             icon: Activity,
                             color: 'blue',
@@ -994,11 +1226,24 @@ export default function Production() {
                             color: 'orange',
                           },
                           packaging: {
+<<<<<<< HEAD
+                            label: 'Packed',
+=======
                             label: 'Packaging',
+>>>>>>> origin/main
                             className: 'bg-purple-100 text-purple-800',
                             icon: Box,
                             color: 'purple',
                           },
+<<<<<<< HEAD
+                          packed: {
+                            label: 'Packed',
+                            className: 'bg-emerald-600 text-white shadow-sm font-black',
+                            icon: CheckCircle2,
+                            color: 'green',
+                          },
+=======
+>>>>>>> origin/main
                           completed: {
                             label: 'Completed',
                             className: 'bg-emerald-100 text-emerald-800',
@@ -1019,6 +1264,39 @@ export default function Production() {
                               {run.batchId}
                             </span>
 
+<<<<<<< HEAD
+                            {/* Color swatch + name + Client Info */}
+                            <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className="h-2.5 w-2.5 rounded-full shrink-0 border border-white shadow-sm"
+                                  style={{
+                                    backgroundColor:
+                                      colors.find((c) => c.name === (run.color || run.color_name))
+                                        ?.color_code || '#94a3b8',
+                                  }}
+                                />
+                                <span className="font-black text-slate-800 text-[13px] truncate">
+                                  {run.color || run.color_name}
+                                </span>
+                              </div>
+                              {run.client_name && (
+                                <div className="flex items-center gap-2 text-[9px] font-bold">
+                                  <div className="flex items-center gap-1 text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100/50">
+                                    <Building2 className="w-2.5 h-2.5" />
+                                    <span className="truncate max-w-[120px]">
+                                      {run.client_name}
+                                    </span>
+                                  </div>
+                                  {run.order_date && (
+                                    <div className="flex items-center gap-1 text-slate-400">
+                                      <Calendar className="w-2.5 h-2.5 opacity-50" />
+                                      <span>{formatDate(run.order_date, dateFormat)}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+=======
                             {/* Color swatch + name */}
                             <div className="flex items-center gap-2 min-w-0 flex-1">
                               <div
@@ -1032,6 +1310,7 @@ export default function Production() {
                               <span className="font-bold text-slate-800 text-sm truncate">
                                 {run.color}
                               </span>
+>>>>>>> origin/main
                             </div>
 
                             {/* Target */}
@@ -1074,6 +1353,53 @@ export default function Production() {
                                     <Eye className="w-3.5 h-3.5" />
                                   </button>
 
+<<<<<<< HEAD
+                                  {canManageProduction && (
+                                    <>
+                                      {(run.status === 'planned' || run.status === 'running') && (
+                                        <button
+                                          onClick={() => openEditModal(run)}
+                                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                          title="Edit Batch"
+                                        >
+                                          <Pencil className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
+
+                                      {(run.status === 'planned' || run.status === 'paused') && (
+                                        <button
+                                          onClick={() => updateStatus(run.id, 'running')}
+                                          className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all active:scale-95"
+                                        >
+                                          <Play className="w-3 h-3 fill-current" /> Start
+                                        </button>
+                                      )}
+
+                                      {run.status === 'running' && (
+                                        <button
+                                          onClick={() => updateStatus(run.id, 'paused')}
+                                          className="flex items-center gap-1 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-200 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all active:scale-95"
+                                        >
+                                          <Pause className="w-3 h-3 fill-current" /> Pause
+                                        </button>
+                                      )}
+
+                                      {(run.status === 'running' || run.status === 'paused') && (
+                                        <button
+                                          onClick={() => {
+                                            setCompletingRun(run)
+                                            setActualYield(toDisplayValue(run.targetQty, unitPref))
+                                            setLossReason('Filter Loss')
+                                            setCustomLossReason('')
+                                            setIsCompletionModalOpen(true)
+                                          }}
+                                          className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all active:scale-95"
+                                        >
+                                          <CheckCircle2 className="w-3 h-3" /> Done
+                                        </button>
+                                      )}
+                                    </>
+=======
                                   {(run.status === 'planned' || run.status === 'running') && (
                                     <button
                                       onClick={() => openEditModal(run)}
@@ -1115,6 +1441,7 @@ export default function Production() {
                                     >
                                       <CheckCircle2 className="w-3 h-3" /> Done
                                     </button>
+>>>>>>> origin/main
                                   )}
 
                                   {(run.status === 'completed' || run.status === 'packaging') && (
@@ -1356,6 +1683,19 @@ export default function Production() {
                           const variancePct = expected > 0 ? (variance / expected) * 100 : 0
 
                           const timelineStep =
+<<<<<<< HEAD
+                            run.status === 'packed'
+                              ? 4
+                              : run.status === 'packaging'
+                                ? 4
+                                : run.status === 'completed'
+                                  ? run.packaging && run.packaging.length > 0
+                                    ? 4
+                                    : 3
+                                  : run.status === 'running'
+                                    ? 2
+                                    : 1
+=======
                             run.status === 'completed'
                               ? run.packaging && run.packaging.length > 0
                                 ? 4
@@ -1363,11 +1703,20 @@ export default function Production() {
                               : run.status === 'running'
                                 ? 2
                                 : 1
+>>>>>>> origin/main
 
                           const statusConfig: Record<
                             string,
                             { label: string; className: string; icon: any }
                           > = {
+<<<<<<< HEAD
+                            packed: {
+                              label: 'Packed',
+                              icon: PackageCheck,
+                              className: 'bg-emerald-600 text-white font-black',
+                            },
+=======
+>>>>>>> origin/main
                             completed: {
                               label: 'Completed',
                               icon: CheckCircle2,
@@ -1431,8 +1780,23 @@ export default function Production() {
                               <td className="p-4 text-slate-500 font-mono font-bold text-xs border-r group-hover:text-blue-600 transition-colors">
                                 {run.batchId}
                               </td>
+<<<<<<< HEAD
+                               <td className="p-4 border-r">
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="font-bold text-slate-900 leading-tight">
+                                    {run.color_name}
+                                  </span>
+                                  {run.client_name && (
+                                    <div className="flex items-center gap-1.5 text-[10px] text-blue-600 font-black uppercase tracking-tight">
+                                      <Building2 className="w-2.5 h-2.5" />
+                                      {run.client_name}
+                                    </div>
+                                  )}
+                                </div>
+=======
                               <td className="p-4 font-bold text-slate-900 border-r">
                                 {run.color_name}
+>>>>>>> origin/main
                               </td>
                               <td className="p-4 text-slate-500 text-xs border-r italic">
                                 {run.formula_name}
@@ -1484,6 +1848,48 @@ export default function Production() {
                                     <span>Details</span>
                                   </button>
 
+<<<<<<< HEAD
+                                  {/* Rerun Button for under-produced batches */}
+                                  {run.status === 'completed' &&
+                                    Number(run.actual_quantity_kg || 0) <
+                                      Number(run.planned_quantity_kg) - 0.5 && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        const colorObj = colors.find((c) => c.name === run.color_name)
+                                        if (colorObj) {
+                                          setSelectedColor(colorObj.id)
+                                          // Find formula
+                                          const matchingFormula = formulas.find(
+                                            (f) =>
+                                              f.name === run.formula_name &&
+                                              f.color_id === colorObj.id,
+                                          )
+                                          if (matchingFormula) {
+                                            setSelectedFormula(matchingFormula)
+                                            const diff =
+                                              Number(run.planned_quantity_kg) -
+                                              Number(run.actual_quantity_kg || 0)
+                                            setPlannedQuantityKg(toDisplayValue(diff, unitPref))
+                                            setPrefilledOrder({
+                                              orderId: (run as any).order_id,
+                                              clientName: run.client_name || 'Partial Fulfillment',
+                                              orderDate: (run as any).order_date,
+                                              targetQty: diff,
+                                            })
+                                            setIsModalOpen(true)
+                                          }
+                                        }
+                                      }}
+                                      className="flex items-center gap-1 text-orange-600 hover:text-orange-700 font-black text-[10px] uppercase tracking-widest transition-colors bg-orange-50 px-2 py-1 rounded-lg border border-orange-200"
+                                      title="Click to run production for the remaining volume"
+                                    >
+                                      <Activity className="w-3 h-3" /> Rerun Remainder
+                                    </button>
+                                  )}
+
+=======
+>>>>>>> origin/main
                                   {(() => {
                                     const isPackaging = run.status === 'packaging'
                                     const batchVol =
@@ -1564,6 +1970,33 @@ export default function Production() {
               </button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
+              {prefilledOrder && (
+                <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 flex items-start gap-3 animate-in slide-in-from-top-2 duration-300">
+                  <div className="bg-blue-600 p-2 rounded-lg text-white">
+                    <Building2 className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex justify-between items-start">
+                      <h4 className="text-[10px] font-black text-blue-700 uppercase tracking-widest leading-none mb-1">
+                        Planning for Customer Order
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() => setPrefilledOrder(null)}
+                        className="text-[9px] font-black text-blue-600 hover:text-blue-800 underline uppercase tracking-tighter"
+                      >
+                        Clear linkage
+                      </button>
+                    </div>
+                    <p className="text-sm font-black text-slate-900 leading-tight">
+                      {prefilledOrder.clientName}
+                    </p>
+                    <p className="text-[10px] font-bold text-slate-500 mt-0.5">
+                      Order Date: {formatDate(prefilledOrder.orderDate, dateFormat)}
+                    </p>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Select Color</label>
@@ -1612,7 +2045,8 @@ export default function Production() {
                       <input
                         type="number"
                         step="0.1"
-                        className="w-24 rounded-md border bg-background px-3 py-1 text-sm text-right font-mono"
+                        disabled={!!prefilledOrder?.clientName && planned_quantity_kg > 0} 
+                        className="w-24 rounded-md border bg-background px-3 py-1 text-sm text-right font-mono disabled:bg-slate-50 disabled:text-slate-500"
                         value={planned_quantity_kg}
                         onChange={(e) => handleQuantityChange(Number(e.target.value))}
                       />
