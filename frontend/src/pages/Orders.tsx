@@ -1,16 +1,6 @@
 import { useState, useEffect } from 'react'
 import { apiRequest } from '../services/api'
 import {
-  ClipboardList,
-  Plus,
-  Loader2,
-  Search,
-  X,
-  ShoppingCart,
-  UserRound,
-  MapPin,
-  Receipt,
-<<<<<<< HEAD
   LayoutGrid,
   Table,
   ChevronDown,
@@ -19,8 +9,15 @@ import {
   AlertCircle,
   CheckCircle2,
   Calendar,
-=======
->>>>>>> origin/main
+  MapPin,
+  Receipt,
+  Search,
+  Plus,
+  Loader2,
+  ClipboardList,
+  X,
+  UserRound,
+  ShoppingCart,
 } from 'lucide-react'
 import { useDateFormatPreference, formatDate } from '../utils/dateFormatter'
 import { useAuth } from '../contexts/AuthContext'
@@ -83,25 +80,15 @@ export default function Orders() {
   const [orders, setOrders] = useState<ClientOrder[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-<<<<<<< HEAD
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card')
+  const [expandedOrderIds, setExpandedOrderIds] = useState<number[]>([])
+  const [filterStatus, setFilterStatus] = useState<string>('All')
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({
     remaining: false,
     in_progress: false,
     completed: true,
   })
-  const [expandedOrderIds, setExpandedOrderIds] = useState<number[]>([])
-  const [filterStatus, setFilterStatus] = useState('All')
 
-  const toggleOrderExpand = (id: number) => {
-    setExpandedOrderIds((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-    )
-  }
-
-=======
-
->>>>>>> origin/main
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -167,23 +154,57 @@ export default function Orders() {
     }
   }
 
-  const selectedClient = clients.find((c) => c.id === Number(selectedClientId))
+  const toggleOrderExpand = (id: number) => {
+    setExpandedOrderIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    )
+  }
 
-  const defaultPackSizesStr =
-    localStorage.getItem('default_packaging_sizes') || '0.5kg, 1kg, 5kg, 10kg, 20kg'
-  const defaultPackSizes = defaultPackSizesStr
-    .split(',')
-    .map((s) => parseFloat(s.replace(/kg/g, '').trim()))
-    .filter((n) => !isNaN(n))
+  const toggleGroup = (id: string) => {
+    setCollapsedGroups(prev => ({ ...prev, [id]: !prev[id] }))
+  }
 
-  const resetModal = () => {
-    setSelectedClientId('')
-    setSelectedShippingId('')
-    setNotes('')
-    setNewOrderItems([])
-    setSelectedColorId('')
-    setSelectedPackSize('')
-    setQuantity(1)
+  const getStockAvailability = (cId: number | '', pSize: number | '') => {
+    if (!cId || !pSize) return null
+    const invItem = inventory.find((i) => i.color_id === Number(cId))
+    if (!invItem) return 0
+    const invPack = invItem.packs?.find((p) => p.pack_size_kg === Number(pSize))
+    return invPack ? invPack.quantity_units : 0
+  }
+
+  const getOrderProgress = (o: ClientOrder) => {
+    if (
+      ['shipped', 'delivered', 'packed'].includes(o.shipping_status || '') ||
+      o.status === 'fulfilled'
+    ) {
+      return { ready: o.items.length, total: o.items.length }
+    }
+    let ready = 0
+    for (const item of o.items) {
+      const avail = getStockAvailability(item.color_id, item.pack_size_kg)
+      if (avail !== null && avail >= item.quantity) {
+        ready++
+      }
+    }
+    return { ready, total: o.items.length }
+  }
+
+  const getOrderGroup = (o: ClientOrder) => {
+    if (o.status === 'fulfilled') return 'completed'
+    if (o.status === 'pending') return 'remaining'
+    return 'in_progress'
+  }
+
+  const updateOrderStatus = async (orderId: number, updates: any) => {
+    try {
+      await apiRequest(`/sales/orders/${orderId}/status`, {
+        method: 'PUT',
+        body: updates,
+      })
+      fetchOrders()
+    } catch (err: any) {
+      alert(err.message || 'Failed to update status')
+    }
   }
 
   const handleCreateOrder = async (e: React.FormEvent) => {
@@ -210,18 +231,6 @@ export default function Orders() {
     }
   }
 
-  const updateOrderStatus = async (orderId: number, updates: any) => {
-    try {
-      await apiRequest(`/sales/orders/${orderId}/status`, {
-        method: 'PUT',
-        body: updates,
-      })
-      fetchOrders()
-    } catch (err: any) {
-      alert(err.message || 'Failed to update status')
-    }
-  }
-
   const handleAddItem = () => {
     if (!selectedColorId || !selectedPackSize || quantity <= 0) return
     const existingIndex = newOrderItems.findIndex(
@@ -241,44 +250,27 @@ export default function Orders() {
         },
       ])
     }
-    // UX: Do not reset selectedColorId so the user can easily add another pack size for the same color
     setSelectedPackSize('')
     setQuantity(1)
   }
 
-<<<<<<< HEAD
-
-  const getStockAvailability = (cId: number | '', pSize: number | '') => {
-    if (!cId || !pSize) return null
-    const invItem = inventory.find((i) => i.color_id === Number(cId))
-    if (!invItem) return 0
-    const invPack = invItem.packs?.find((p) => p.pack_size_kg === Number(pSize))
-    return invPack ? invPack.quantity_units : 0
+  const resetModal = () => {
+    setSelectedClientId('')
+    setSelectedShippingId('')
+    setNotes('')
+    setNewOrderItems([])
+    setSelectedColorId('')
+    setSelectedPackSize('')
+    setQuantity(1)
   }
 
-  const getOrderProgress = (o: ClientOrder) => {
-    if (
-      ['shipped', 'delivered', 'packed'].includes(o.shipping_status || '') ||
-      o.status === 'fulfilled'
-    ) {
-      return { ready: o.items.length, total: o.items.length }
-    }
-    let ready = 0
-    for (const item of o.items) {
-      const invItem = inventory.find((i) => i.color_id === item.color_id)
-      const invPack = invItem?.packs?.find((p) => p.pack_size_kg === item.pack_size_kg)
-      if (invPack && invPack.quantity_units >= item.quantity) {
-        ready++
-      }
-    }
-    return { ready, total: o.items.length }
-  }
-
-  const getOrderGroup = (o: ClientOrder) => {
-    if (o.status === 'fulfilled') return 'completed'
-    if (['pending'].includes(o.status)) return 'remaining'
-    return 'in_progress'
-  }
+  const selectedClient = clients.find((c) => c.id === Number(selectedClientId))
+  const defaultPackSizesStr =
+    localStorage.getItem('default_packaging_sizes') || '0.5kg, 1kg, 5kg, 10kg, 20kg'
+  const defaultPackSizes = defaultPackSizesStr
+    .split(',')
+    .map((s) => parseFloat(s.replace(/kg/g, '').trim()))
+    .filter((n) => !isNaN(n))
 
   const filtered = orders.filter((o) => {
     const matchSearch =
@@ -288,7 +280,9 @@ export default function Orders() {
 
     const matchStatus =
       filterStatus === 'All' ||
-      getOrderGroup(o).toLowerCase() === filterStatus.toLowerCase().replace(' ', '_')
+      (filterStatus === 'Remaining' && o.status === 'pending') ||
+      (filterStatus === 'In Progress' && o.status === 'in_progress') ||
+      (filterStatus === 'Completed' && o.status === 'fulfilled')
 
     return matchSearch && matchStatus
   })
@@ -303,17 +297,12 @@ export default function Orders() {
     { id: 'completed', title: 'Completed', orders: completedOrders },
   ]
 
-  const toggleGroup = (id: string) => {
-    setCollapsedGroups(prev => ({ ...prev, [id]: !prev[id] }))
-  }
-
   const renderOrderActions = (o: ClientOrder) => {
     const progress = getOrderProgress(o)
     const isReady = progress.ready === progress.total
 
     return (
       <div className="flex flex-wrap items-center gap-2 mt-2">
-        {/* Shipping Flow */}
         {(!o.shipping_status || o.shipping_status === 'pending') &&
           (isReady ? (
             <>
@@ -375,7 +364,6 @@ export default function Orders() {
           </button>
         )}
 
-        {/* Returns Flow */}
         {o.shipping_status === 'delivered' &&
           !o.return_status &&
           o.refund_status !== 'refund_successfully' && (
@@ -467,13 +455,9 @@ export default function Orders() {
             </div>
             <span
               className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border shrink-0 shadow-sm ${
-                ['pending'].includes(o.status)
+                o.status === 'pending'
                   ? 'bg-red-50 text-red-700 border-red-200'
-                  : ['in_progress'].includes(o.status) ||
-                      (!['fulfilled'].includes(o.status) &&
-                        (o.shipping_status === 'packed' ||
-                          o.shipping_status === 'shipped' ||
-                          o.return_status))
+                  : o.status === 'in_progress'
                     ? 'bg-amber-50 text-amber-700 border-amber-200'
                     : o.status === 'fulfilled'
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
@@ -484,7 +468,6 @@ export default function Orders() {
             </span>
           </div>
 
-          {/* Progress Bar */}
           <div className="mt-2">
             <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5">
               <span>Fulfillment Progress</span>
@@ -502,7 +485,6 @@ export default function Orders() {
             </div>
           </div>
 
-          {/* Collapsed Toggle Button */}
           <div className="mt-4 flex items-center justify-between border-t border-slate-100/50 pt-3 opacity-80 group-hover:opacity-100 transition-opacity">
             <div className="text-[11px] font-bold text-slate-500 uppercase tracking-widest bg-white px-2 py-1 rounded shadow-sm border border-slate-100 line-clamp-1 pr-4 max-w-[70%]">
               Items: {o.items.map((i) => `${i.color_name} (${i.quantity}x)`).join(', ')}
@@ -577,34 +559,6 @@ export default function Orders() {
       </div>
     )
   }
-=======
-  const isOrderInStock = (order: ClientOrder) => {
-    for (const item of order.items) {
-      const invItem = inventory.find((i) => i.color_id === item.color_id)
-      if (!invItem) return false
-      const invPack = invItem.packs?.find((p) => p.pack_size_kg === item.pack_size_kg)
-      if (!invPack || invPack.quantity_units < item.quantity) {
-        return false
-      }
-    }
-    return true
-  }
-
-  const getStockAvailability = (cId: number | '', pSize: number | '') => {
-    if (!cId || !pSize) return null
-    const invItem = inventory.find((i) => i.color_id === Number(cId))
-    if (!invItem) return 0
-    const invPack = invItem.packs?.find((p) => p.pack_size_kg === Number(pSize))
-    return invPack ? invPack.quantity_units : 0
-  }
-
-  const filtered = orders.filter(
-    (o) =>
-      (o.client_display_name || o.client_name).toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (o.notes && o.notes.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (o.gst_number && o.gst_number.toLowerCase().includes(searchTerm.toLowerCase())),
-  )
->>>>>>> origin/main
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 relative">
@@ -616,11 +570,7 @@ export default function Orders() {
             </div>
             Client Orders
           </h1>
-<<<<<<< HEAD
           <p className="text-slate-500 mt-2 font-medium text-[15px]">
-=======
-          <p className="text-slate-500 mt-2 font-medium">
->>>>>>> origin/main
             Manage and view all incoming customer orders.
           </p>
         </div>
@@ -634,37 +584,26 @@ export default function Orders() {
         )}
       </div>
 
-      {/* Quick Stats Row */}
-      <div className="flex flex-wrap gap-4">
-        <div className="bg-slate-900 text-white px-5 py-3 rounded-2xl text-[11px] font-black tracking-widest shadow-lg flex items-center justify-between min-w-[140px]">
-          <span>TOTAL</span>
-          <span className="text-xl">{orders.length}</span>
-        </div>
-        <div 
-          onClick={() => setFilterStatus('Remaining')}
-          className={`px-5 py-3 rounded-2xl text-[11px] font-black tracking-widest flex items-center justify-between min-w-[170px] shadow-sm transition-colors cursor-pointer border-2 ${filterStatus === 'Remaining' ? 'bg-red-500 text-white border-red-500' : 'bg-red-50 text-red-700 border-red-100 hover:border-red-300'}`}
-        >
-          <span>REMAINING</span>
-          <span className={`text-xl px-2.5 rounded-xl shadow-sm ${filterStatus === 'Remaining' ? 'bg-white/20' : 'bg-white'}`}>{remainingOrders.length}</span>
-        </div>
-        <div 
-          onClick={() => setFilterStatus('In Progress')}
-          className={`px-5 py-3 rounded-2xl text-[11px] font-black tracking-widest flex items-center justify-between min-w-[180px] shadow-sm transition-colors cursor-pointer border-2 ${filterStatus === 'In Progress' ? 'bg-amber-500 text-white border-amber-500' : 'bg-amber-50 text-amber-700 border-amber-100 hover:border-amber-300'}`}
-        >
-          <span>IN PROGRESS</span>
-          <span className={`text-xl px-2.5 rounded-xl shadow-sm ${filterStatus === 'In Progress' ? 'bg-white/20' : 'bg-white'}`}>{inProgressOrders.length}</span>
-        </div>
-        <div 
-          onClick={() => setFilterStatus('Completed')}
-          className={`px-5 py-3 rounded-2xl text-[11px] font-black tracking-widest flex items-center justify-between min-w-[160px] shadow-sm transition-colors cursor-pointer border-2 ${filterStatus === 'Completed' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:border-emerald-300'}`}
-        >
-          <span>COMPLETED</span>
-          <span className={`text-xl px-2.5 rounded-xl shadow-sm ${filterStatus === 'Completed' ? 'bg-white/20' : 'bg-white'}`}>{completedOrders.length}</span>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Total Orders', value: orders.length, color: 'bg-slate-100 text-slate-700', filter: 'All' },
+          { label: 'Remaining', value: remainingOrders.length, color: 'bg-red-50 text-red-700 border border-red-100', filter: 'Remaining' },
+          { label: 'In Progress', value: inProgressOrders.length, color: 'bg-amber-50 text-amber-700 border border-amber-100', filter: 'In Progress' },
+          { label: 'Completed', value: completedOrders.length, color: 'bg-emerald-50 text-emerald-700 border border-emerald-100', filter: 'Completed' },
+        ].map((stat) => (
+          <button
+            key={stat.label}
+            onClick={() => setFilterStatus(stat.filter)}
+            className={`p-4 rounded-2xl transition-all hover:shadow-md text-left group ${
+              filterStatus === stat.filter ? 'ring-2 ring-blue-500 bg-white shadow-lg' : stat.color
+            }`}
+          >
+            <p className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-1">{stat.label}</p>
+            <p className="text-2xl font-black">{stat.value}</p>
+          </button>
+        ))}
       </div>
 
-      {/* Orders list */}
-<<<<<<< HEAD
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
         <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col xl:flex-row items-center gap-4 justify-between">
           <div className="flex flex-col md:flex-row w-full xl:w-auto items-center gap-4">
@@ -709,23 +648,6 @@ export default function Orders() {
               {filtered.length} matches
             </p>
           </div>
-=======
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row items-center gap-4 justify-between">
-          <div className="relative w-full md:w-96">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search clients, GST or notes..."
-              className="w-full pl-9 pr-4 py-2 rounded-xl border-slate-200 bg-white text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-            {filtered.length} orders
-          </p>
->>>>>>> origin/main
         </div>
 
         <div className="flex flex-col">
@@ -740,7 +662,6 @@ export default function Orders() {
               <p className="text-sm font-bold">No orders found</p>
             </div>
           ) : (
-<<<<<<< HEAD
             <div className="p-6 flex flex-col gap-8">
               {groups.map(group => {
                 if (group.orders.length === 0) return null
@@ -791,13 +712,9 @@ export default function Orders() {
                                   <td className="px-4 py-3 font-bold text-slate-600">{o.items.length} items</td>
                                   <td className="px-4 py-3">
                                     <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest ${
-                                        ['pending'].includes(o.status)
+                                        o.status === 'pending'
                                           ? 'bg-red-50 text-red-700 border border-red-100'
-                                          : ['in_progress'].includes(o.status) ||
-                                              (!['fulfilled'].includes(o.status) &&
-                                                (o.shipping_status === 'packed' ||
-                                                  o.shipping_status === 'shipped' ||
-                                                  o.return_status))
+                                          : o.status === 'in_progress'
                                             ? 'bg-amber-50 text-amber-700 border border-amber-100'
                                             : o.status === 'fulfilled'
                                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
@@ -818,244 +735,17 @@ export default function Orders() {
                               ))}
                             </tbody>
                           </table>
-=======
-            filtered.map((o) => (
-              <div
-                key={o.id}
-                className="border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-shadow bg-white overflow-hidden flex flex-col group"
-              >
-                <div className="p-5 border-b border-slate-50 flex items-start justify-between bg-slate-50/50 group-hover:bg-blue-50/30 transition-colors">
-                  <div>
-                    <h3 className="font-black text-lg text-slate-900 leading-tight flex items-center gap-2">
-                      <UserRound className="w-4 h-4 text-violet-500 shrink-0" />
-                      {o.client_display_name || o.client_name}
-                    </h3>
-                    <div className="flex flex-wrap gap-3 mt-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      <span>
-                        Order #{o.id} · {formatDate(o.created_at, dateFormat)}
-                      </span>
-                      {o.gst_number && user?.role !== 'operator' && (
-                        <span className="flex items-center gap-1 text-amber-600">
-                          <Receipt className="w-3 h-3" /> {o.gst_number}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <span
-                    className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest border shrink-0 ${
-                      ['pending'].includes(o.status)
-                        ? 'bg-red-50 text-red-700 border-red-100'
-                        : ['in_progress'].includes(o.status) ||
-                            (!['fulfilled'].includes(o.status) &&
-                              (o.shipping_status === 'packed' ||
-                                o.shipping_status === 'shipped' ||
-                                o.return_status))
-                          ? 'bg-amber-50 text-amber-700 border-amber-100'
-                          : o.status === 'fulfilled'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                            : 'bg-slate-100 text-slate-600 border-slate-200'
-                    }`}
-                  >
-                    {o.status === 'fulfilled'
-                      ? 'Completed'
-                      : o.status === 'pending'
-                        ? 'Remaining'
-                        : 'In-Progress'}
-                  </span>
-                </div>
-
-                <div className="p-5 flex-1 flex flex-col gap-3">
-                  {/* Shipping address */}
-                  {o.shipping_address && (
-                    <div className="flex items-start gap-2 bg-violet-50/60 rounded-xl p-3 border border-violet-100/60">
-                      <MapPin className="w-3.5 h-3.5 text-violet-500 mt-0.5 shrink-0" />
-                      <div>
-                        <p className="text-[10px] font-black text-violet-700 uppercase tracking-wide">
-                          {o.shipping_label}
-                        </p>
-                        <p className="text-xs text-slate-600 font-medium mt-0.5">
-                          {o.shipping_address}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  {o.notes && (
-                    <p className="text-sm text-slate-600 italic bg-blue-50/30 p-3 rounded-lg border border-blue-100/50">
-                      "{o.notes}"
-                    </p>
-                  )}
-                  <div className="space-y-1.5 mt-auto">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      Order Items
-                    </p>
-                    {o.items.map((item) => (
-                      <div
-                        key={item.item_id}
-                        className="flex items-center justify-between text-sm py-1 border-b border-slate-50 last:border-0"
-                      >
-                        <div>
-                          <span className="font-bold text-slate-800">{item.color_name}</span>
-                          <span className="text-[10px] text-slate-400 font-bold uppercase ml-2">
-                            {item.business_code}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[11px] font-medium">
-                            {item.pack_size_kg}kg
-                          </span>
-                          <span className="font-black text-blue-800 bg-blue-50 px-2 py-0.5 rounded">
-                            {item.quantity}x
-                          </span>
->>>>>>> origin/main
                         </div>
                       )
                     )}
                   </div>
-<<<<<<< HEAD
                 )
               })}
             </div>
-=======
-                </div>
-
-                <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex gap-2 text-[10px] uppercase font-bold tracking-widest text-slate-500">
-                      {o.shipping_status && (
-                        <span>Ship: {o.shipping_status.replace(/_/g, ' ')}</span>
-                      )}
-                      {o.return_status && (
-                        <span className="text-red-500 bg-red-100/50 px-1 rounded">
-                          Ret: {o.return_status.replace(/_/g, ' ')}
-                        </span>
-                      )}
-                      {o.refund_status && (
-                        <span className="text-amber-600">
-                          Ref: {o.refund_status.replace(/_/g, ' ')}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {/* Shipping Flow */}
-                      {(!o.shipping_status || o.shipping_status === 'pending') &&
-                        (isOrderInStock(o) ? (
-                          <button
-                            onClick={() =>
-                              updateOrderStatus(o.id, {
-                                shipping_status: 'packed',
-                                status: 'in_progress',
-                              })
-                            }
-                            className="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm"
-                          >
-                            Pack Order
-                          </button>
-                        ) : (
-                          <div className="flex gap-2 items-center">
-                            <span className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-md text-[10px] uppercase font-black tracking-wider shadow-sm cursor-not-allowed border border-slate-200">
-                              Out of Stock
-                            </span>
-                            <a
-                              href="/production"
-                              className="px-3 py-1.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm inline-flex items-center"
-                            >
-                              Create Colour (Production)
-                            </a>
-                          </div>
-                        ))}
-                      {o.shipping_status === 'packed' && (
-                        <button
-                          onClick={() =>
-                            updateOrderStatus(o.id, {
-                              shipping_status: 'shipped',
-                            })
-                          }
-                          className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm"
-                        >
-                          Ship Order (Left to ship)
-                        </button>
-                      )}
-                      {o.shipping_status === 'shipped' && (
-                        <button
-                          onClick={() =>
-                            updateOrderStatus(o.id, {
-                              shipping_status: 'delivered',
-                            })
-                          }
-                          className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm"
-                        >
-                          Mark Delivered
-                        </button>
-                      )}
-
-                      {/* Returns Flow */}
-                      {o.shipping_status === 'delivered' &&
-                        !o.return_status &&
-                        o.refund_status !== 'refund_successfully' && (
-                          <button
-                            onClick={() =>
-                              updateOrderStatus(o.id, {
-                                return_status: 'pick_up_order',
-                                status: 'in_progress',
-                              })
-                            }
-                            className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm"
-                          >
-                            Initiate Return
-                          </button>
-                        )}
-                      {o.return_status === 'pick_up_order' && (
-                        <button
-                          onClick={() =>
-                            updateOrderStatus(o.id, {
-                              return_status: 'on_the_way',
-                            })
-                          }
-                          className="px-3 py-1.5 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm"
-                        >
-                          Pick Up (On the way)
-                        </button>
-                      )}
-                      {o.return_status === 'on_the_way' && (
-                        <button
-                          onClick={() =>
-                            updateOrderStatus(o.id, {
-                              return_status: 'delivered_to_warehouse',
-                              refund_status: 'initiated',
-                            })
-                          }
-                          className="px-3 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm"
-                        >
-                          Deliver to Warehouse
-                        </button>
-                      )}
-                      {o.refund_status === 'initiated' && (
-                        <button
-                          onClick={() =>
-                            updateOrderStatus(o.id, {
-                              refund_status: 'refund_successfully',
-                            })
-                          }
-                          className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm"
-                        >
-                          Complete Refund
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-[9px] font-bold text-slate-300 uppercase tracking-widest text-right">
-                    Has {o.items.length} item{o.items.length !== 1 ? 's' : ''}
-                  </div>
-                </div>
-              </div>
-            ))
->>>>>>> origin/main
           )}
         </div>
       </div>
 
-      {/* New Order Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-in fade-in duration-300">
           <div
@@ -1089,7 +779,6 @@ export default function Orders() {
 
             <div className="p-6 overflow-y-auto flex-1">
               <form id="order-form" onSubmit={handleCreateOrder} className="space-y-6">
-                {/* Client selector */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 block">
@@ -1136,7 +825,6 @@ export default function Orders() {
                   </div>
                 </div>
 
-                {/* Selected client info badge */}
                 {selectedClient && (
                   <div className="flex items-center gap-3 bg-violet-50 border border-violet-100 rounded-xl px-4 py-3">
                     <UserRound className="w-4 h-4 text-violet-600 shrink-0" />
@@ -1154,7 +842,6 @@ export default function Orders() {
                   </div>
                 )}
 
-                {/* Notes */}
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 block">
                     Order Notes
@@ -1168,7 +855,6 @@ export default function Orders() {
                   />
                 </div>
 
-                {/* Add Items */}
                 <div className="p-5 rounded-2xl bg-blue-50/50 border border-blue-100 shadow-inner">
                   <h3 className="text-xs font-black text-blue-800 uppercase tracking-widest mb-4 flex items-center gap-2">
                     <ShoppingCart className="w-4 h-4" /> Add Products to Order
@@ -1245,7 +931,6 @@ export default function Orders() {
                       Add
                     </button>
                   </div>
-                  {/* Realtime Stock Checker */}
                   {selectedColorId && selectedPackSize && (
                     <div className="mt-4 pt-3 border-t border-blue-100 flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
@@ -1273,7 +958,6 @@ export default function Orders() {
                   )}
                 </div>
 
-                {/* Added items */}
                 {newOrderItems.length > 0 && (
                   <div className="rounded-xl border border-slate-200 overflow-hidden shadow-sm">
                     <table className="w-full text-sm text-left bg-white">
