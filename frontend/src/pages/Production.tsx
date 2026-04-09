@@ -761,22 +761,34 @@ export default function Production() {
                           {expandedDemand == item.color_id && (
                             <div className="absolute top-[calc(100%+12px)] left-0 sm:-left-3 z-[110] w-64 sm:w-80 bg-white shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)] border border-slate-200 rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-4 duration-200">
                               <div className="bg-emerald-900 px-4 py-3 flex justify-between items-center text-white">
-                                <span className="text-[11px] font-black uppercase tracking-widest opacity-90">
-                                  Order Breakdown
-                                </span>
-                                {prodStatus &&
-                                  prodStatus !== 'planned' &&
-                                  prodStatus !== 'completed' && (
-                                    <span className="text-[10px] bg-white/20 backdrop-blur-md px-2 py-1 rounded-lg font-bold uppercase">
-                                      {prodStatus === 'running'
-                                        ? 'Running'
-                                        : prodStatus === 'paused'
-                                          ? 'Paused'
-                                          : prodStatus === 'packaging'
-                                            ? 'Package Completed'
-                                            : prodStatus}
-                                    </span>
-                                  )}
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[11px] font-black uppercase tracking-widest opacity-90">
+                                    Order Breakdown
+                                  </span>
+                                  {prodStatus &&
+                                    prodStatus !== 'planned' &&
+                                    prodStatus !== 'completed' && (
+                                      <span className="text-[10px] bg-white/20 backdrop-blur-md px-2 py-1 rounded-lg font-bold uppercase">
+                                        {prodStatus === 'running'
+                                          ? 'Running'
+                                          : prodStatus === 'paused'
+                                            ? 'Paused'
+                                            : prodStatus === 'packaging'
+                                              ? 'Package Completed'
+                                              : prodStatus}
+                                      </span>
+                                    )}
+                                </div>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setExpandedDemand(null)
+                                  }}
+                                  className="p-1 rounded-md hover:bg-white/20 transition-all active:scale-95"
+                                  title="Close Breakdown"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
                               </div>
                               <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 p-3 bg-white">
                                 {Array.isArray(item.detailed_orders) &&
