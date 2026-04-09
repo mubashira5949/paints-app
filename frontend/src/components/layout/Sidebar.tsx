@@ -1,26 +1,24 @@
-import { NavLink } from "react-router-dom";
-import { navigation, type UserRole } from "../../config/navigation";
-import { X } from "lucide-react";
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-import { useAuth } from "../../contexts/AuthContext";
+import { NavLink } from 'react-router-dom'
+import { navigation, type UserRole } from '../../config/navigation'
+import { X } from 'lucide-react'
+import { clsx, type ClassValue } from 'clsx'
+import { twMerge } from 'tailwind-merge'
+import { useAuth } from '../../contexts/AuthContext'
 
 function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+  return twMerge(clsx(inputs))
 }
 
 interface SidebarProps {
-  userRole: UserRole;
-  isOpen: boolean;
-  setIsOpen: (isOpen: boolean) => void;
+  userRole: UserRole
+  isOpen: boolean
+  setIsOpen: (isOpen: boolean) => void
 }
 
 export function Sidebar({ userRole, isOpen, setIsOpen }: SidebarProps) {
-  const { user } = useAuth();
+  const { user } = useAuth()
   // Filter navigation items based on the current user's role
-  const filteredNavigation = navigation.filter((item) =>
-    item.roles.includes(userRole),
-  );
+  const filteredNavigation = navigation.filter((item) => item.roles.includes(userRole))
 
   return (
     <>
@@ -36,8 +34,8 @@ export function Sidebar({ userRole, isOpen, setIsOpen }: SidebarProps) {
       {/* Sidebar container */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 bg-card border-r flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0",
-          isOpen ? "translate-x-0" : "-translate-x-full",
+          'fixed inset-y-0 left-0 z-50 w-64 bg-card border-r flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0',
+          isOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
         <div className="flex h-16 shrink-0 items-center justify-between px-6 border-b">
@@ -63,10 +61,10 @@ export function Sidebar({ userRole, isOpen, setIsOpen }: SidebarProps) {
               onClick={() => setIsOpen(false)}
               className={({ isActive }) =>
                 cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                   isActive
-                    ? "bg-blue-50 text-blue-600"
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+                    ? 'bg-blue-50 text-blue-600'
+                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
                 )
               }
             >
@@ -84,15 +82,13 @@ export function Sidebar({ userRole, isOpen, setIsOpen }: SidebarProps) {
             </div>
             <div className="flex flex-col overflow-hidden">
               <span className="text-sm font-medium leading-none truncate">
-                {user?.username || "User"}
+                {user?.username || 'User'}
               </span>
-              <span className="text-xs text-muted-foreground capitalize mt-1">
-                {userRole}
-              </span>
+              <span className="text-xs text-muted-foreground capitalize mt-1">{userRole}</span>
             </div>
           </div>
         </div>
       </aside>
     </>
-  );
+  )
 }

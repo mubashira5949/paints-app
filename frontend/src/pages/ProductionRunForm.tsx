@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { apiRequest } from "../services/api";
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { apiRequest } from '../services/api'
 import {
   ArrowLeft,
   AlertCircle,
@@ -8,130 +8,126 @@ import {
   CheckCircle2,
   ChevronRight,
   Loader2,
-} from "lucide-react";
+} from 'lucide-react'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface Color {
-  id: number;
-  name: string;
-  business_code: string;
-  product_type?: string;
-  available_lcs?: boolean;
-  available_std?: boolean;
-  available_opq_js?: boolean;
+  id: number
+  name: string
+  business_code: string
+  product_type?: string
+  available_lcs?: boolean
+  available_std?: boolean
+  available_opq_js?: boolean
 }
 
 interface Formula {
-  id: number;
-  name: string;
-  batch_size_kg: number;
+  id: number
+  name: string
+  batch_size_kg: number
 }
 
 interface Operator {
-  id: number;
-  username: string;
-  role: string;
+  id: number
+  username: string
+  role: string
 }
 
 interface ExpectedResource {
-  resource_id: number;
-  name: string;
-  unit: string;
-  expected_quantity: number;
+  resource_id: number
+  name: string
+  unit: string
+  expected_quantity: number
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function ProductionRunForm() {
-  const navigate = useNavigate();
+  const navigate = useNavigate()
 
   // Form options
-  const [colors, setColors] = useState<Color[]>([]);
-  const [formulas, setFormulas] = useState<Formula[]>([]);
-  const [operators, setOperators] = useState<Operator[]>([]);
+  const [colors, setColors] = useState<Color[]>([])
+  const [formulas, setFormulas] = useState<Formula[]>([])
+  const [operators, setOperators] = useState<Operator[]>([])
 
   // Form values
-  const [selectedColor, setSelectedColor] = useState<number | "">("");
-  const [selectedInkSeries, setSelectedInkSeries] = useState<string>("");
-  const [selectedFormula, setSelectedFormula] = useState<number | "">("");
-  const [targetQty, setTargetQty] = useState<string>("");
-  const [selectedOperator, setSelectedOperator] = useState<number | "">("");
+  const [selectedColor, setSelectedColor] = useState<number | ''>('')
+  const [selectedInkSeries, setSelectedInkSeries] = useState<string>('')
+  const [selectedFormula, setSelectedFormula] = useState<number | ''>('')
+  const [targetQty, setTargetQty] = useState<string>('')
+  const [selectedOperator, setSelectedOperator] = useState<number | ''>('')
 
   // Result state
-  const [expectedResources, setExpectedResources] = useState<ExpectedResource[]>([]);
-  const [successRunId, setSuccessRunId] = useState<number | null>(null);
+  const [expectedResources, setExpectedResources] = useState<ExpectedResource[]>([])
+  const [successRunId, setSuccessRunId] = useState<number | null>(null)
 
   // UI state
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingFormulas, setIsLoadingFormulas] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingFormulas, setIsLoadingFormulas] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // ── Fetch colors + operators on mount ──
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
         const [colorsData, usersData] = await Promise.all([
-          apiRequest<Color[]>("/colors"),
-          apiRequest<Operator[]>("/users"),
-        ]);
-        setColors(colorsData);
+          apiRequest<Color[]>('/colors'),
+          apiRequest<Operator[]>('/users'),
+        ])
+        setColors(colorsData)
         // Filter to operator/manager roles only
-        setOperators(
-          usersData.filter((u) =>
-            ["operator", "manager", "admin"].includes(u.role)
-          )
-        );
-      } catch (err) {
-        setError("Failed to load form data. Please refresh and try again.");
+        setOperators(usersData.filter((u) => ['operator', 'manager', 'admin'].includes(u.role)))
+      } catch {
+        setError('Failed to load form data. Please refresh and try again.')
       }
-    };
-    fetchInitialData();
-  }, []);
+    }
+    fetchInitialData()
+  }, [])
 
   // ── Fetch formulas when color changes ──
   useEffect(() => {
     if (!selectedColor) {
-      setFormulas([]);
-      setSelectedFormula("");
-      return;
+      setFormulas([])
+      setSelectedFormula('')
+      return
     }
     const fetchFormulas = async () => {
-      setIsLoadingFormulas(true);
+      setIsLoadingFormulas(true)
       try {
-        const formulasData = await apiRequest<Formula[]>(`/formulas/${selectedColor}`);
-        setFormulas(formulasData);
+        const formulasData = await apiRequest<Formula[]>(`/formulas/${selectedColor}`)
+        setFormulas(formulasData)
       } catch {
-        setFormulas([]);
+        setFormulas([])
       } finally {
-        setIsLoadingFormulas(false);
+        setIsLoadingFormulas(false)
       }
-    };
-    fetchFormulas();
-  }, [selectedColor]);
+    }
+    fetchFormulas()
+  }, [selectedColor])
 
   // ── Handle form submission ──
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
+    e.preventDefault()
+    setError(null)
 
     if (!selectedColor || !selectedFormula || !targetQty || !selectedOperator) {
-      setError("Please fill in all fields before submitting.");
-      return;
+      setError('Please fill in all fields before submitting.')
+      return
     }
     if (Number(targetQty) <= 0) {
-      setError("Target quantity must be greater than 0.");
-      return;
+      setError('Target quantity must be greater than 0.')
+      return
     }
 
-    setIsLoading(true);
+    setIsLoading(true)
     try {
       const result = await apiRequest<{
-        production_run_id: number;
-        status: string;
-        expected_resources: ExpectedResource[];
-      }>("/production-runs/plan", {
-        method: "POST",
+        production_run_id: number
+        status: string
+        expected_resources: ExpectedResource[]
+      }>('/production-runs/plan', {
+        method: 'POST',
         body: {
           formulaId: Number(selectedFormula),
           colorId: Number(selectedColor),
@@ -139,16 +135,16 @@ export default function ProductionRunForm() {
           operatorId: Number(selectedOperator),
           inkSeries: selectedInkSeries || null,
         },
-      });
+      })
 
-      setExpectedResources(result.expected_resources || []);
-      setSuccessRunId(result.production_run_id);
+      setExpectedResources(result.expected_resources || [])
+      setSuccessRunId(result.production_run_id)
     } catch (err: any) {
-      setError(err.message || "Failed to create production batch. Please try again.");
+      setError(err.message || 'Failed to create production batch. Please try again.')
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   // ── Success screen ──
   if (successRunId !== null) {
@@ -158,13 +154,10 @@ export default function ProductionRunForm() {
         <div className="rounded-2xl border border-green-200 bg-green-50 p-6 flex items-start gap-4">
           <CheckCircle2 className="w-8 h-8 text-green-600 shrink-0 mt-0.5" />
           <div>
-            <h2 className="text-lg font-bold text-green-800">
-              Batch Planned Successfully!
-            </h2>
+            <h2 className="text-lg font-bold text-green-800">Batch Planned Successfully!</h2>
             <p className="text-sm text-green-700 mt-1">
-              Production run{" "}
-              <span className="font-bold">#{successRunId}</span> has been
-              created with status{" "}
+              Production run <span className="font-bold">#{successRunId}</span> has been created
+              with status{' '}
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 uppercase tracking-wide">
                 Planned
               </span>
@@ -187,7 +180,7 @@ export default function ProductionRunForm() {
                 >
                   <span className="font-medium text-slate-800">{res.name}</span>
                   <span className="text-sm font-bold text-blue-700">
-                    {Number(res.expected_quantity).toFixed(2)}{" "}
+                    {Number(res.expected_quantity).toFixed(2)}{' '}
                     <span className="text-slate-500 font-normal">{res.unit}</span>
                   </span>
                 </div>
@@ -199,7 +192,7 @@ export default function ProductionRunForm() {
         {/* Actions */}
         <div className="flex gap-3">
           <button
-            onClick={() => navigate("/production")}
+            onClick={() => navigate('/production')}
             className="flex-1 inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl transition-colors shadow-sm"
           >
             View Production Runs
@@ -207,13 +200,13 @@ export default function ProductionRunForm() {
           </button>
           <button
             onClick={() => {
-              setSuccessRunId(null);
-              setSelectedColor("");
-              setSelectedInkSeries("");
-              setSelectedFormula("");
-              setTargetQty("");
-              setSelectedOperator("");
-              setExpectedResources([]);
+              setSuccessRunId(null)
+              setSelectedColor('')
+              setSelectedInkSeries('')
+              setSelectedFormula('')
+              setTargetQty('')
+              setSelectedOperator('')
+              setExpectedResources([])
             }}
             className="px-6 py-3 border rounded-xl font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
           >
@@ -221,7 +214,7 @@ export default function ProductionRunForm() {
           </button>
         </div>
       </div>
-    );
+    )
   }
 
   // ── Form screen ──
@@ -236,9 +229,7 @@ export default function ProductionRunForm() {
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Start New Production Batch
-          </h1>
+          <h1 className="text-2xl font-bold tracking-tight">Start New Production Batch</h1>
           <p className="text-sm text-slate-500 mt-0.5">
             Plan a new batch — status will be set to <strong>Planned</strong>.
           </p>
@@ -254,10 +245,7 @@ export default function ProductionRunForm() {
       )}
 
       {/* Form Card */}
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white rounded-2xl border shadow-sm p-6 space-y-6"
-      >
+      <form onSubmit={handleSubmit} className="bg-white rounded-2xl border shadow-sm p-6 space-y-6">
         {/* Row 1: Color + Formula */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           {/* Select Color */}
@@ -268,10 +256,10 @@ export default function ProductionRunForm() {
             <select
               value={selectedColor}
               onChange={(e) => {
-                const colorId = e.target.value ? Number(e.target.value) : "";
-                setSelectedColor(colorId);
-                setSelectedInkSeries("");
-                setSelectedFormula("");
+                const colorId = e.target.value ? Number(e.target.value) : ''
+                setSelectedColor(colorId)
+                setSelectedInkSeries('')
+                setSelectedFormula('')
               }}
               required
               className="w-full p-2.5 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm transition-shadow"
@@ -279,7 +267,7 @@ export default function ProductionRunForm() {
               <option value="">— Select Color —</option>
               {colors.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name} ({c.business_code}) {c.product_type ? `[${c.product_type}]` : ""}
+                  {c.name} ({c.business_code}) {c.product_type ? `[${c.product_type}]` : ''}
                 </option>
               ))}
             </select>
@@ -293,19 +281,17 @@ export default function ProductionRunForm() {
             <div className="relative">
               <select
                 value={selectedFormula}
-                onChange={(e) =>
-                  setSelectedFormula(e.target.value ? Number(e.target.value) : "")
-                }
+                onChange={(e) => setSelectedFormula(e.target.value ? Number(e.target.value) : '')}
                 disabled={!selectedColor || isLoadingFormulas}
                 required
                 className="w-full p-2.5 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm transition-shadow disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <option value="">
                   {isLoadingFormulas
-                    ? "Loading formulas..."
+                    ? 'Loading formulas...'
                     : selectedColor
-                    ? "— Select Formula —"
-                    : "— Select a color first —"}
+                      ? '— Select Formula —'
+                      : '— Select a color first —'}
                 </option>
                 {formulas.map((r) => (
                   <option key={r.id} value={r.id}>
@@ -318,9 +304,7 @@ export default function ProductionRunForm() {
               )}
             </div>
             {selectedColor && !isLoadingFormulas && formulas.length === 0 && (
-              <p className="text-xs text-amber-600">
-                No formulas found for this color.
-              </p>
+              <p className="text-xs text-amber-600">No formulas found for this color.</p>
             )}
           </div>
 
@@ -337,18 +321,15 @@ export default function ProductionRunForm() {
               className="w-full p-2.5 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm transition-shadow disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <option value="">— Select Series —</option>
-              {selectedColor &&
-                colors.find((c) => c.id === selectedColor)?.available_lcs && (
-                  <option value="LCS">LCS (Low Crocking Series)</option>
-                )}
-              {selectedColor &&
-                colors.find((c) => c.id === selectedColor)?.available_std && (
-                  <option value="STD">STD (Standard Series)</option>
-                )}
-              {selectedColor &&
-                colors.find((c) => c.id === selectedColor)?.available_opq_js && (
-                  <option value="JS">JS / OPQ (Opacity Series)</option>
-                )}
+              {selectedColor && colors.find((c) => c.id === selectedColor)?.available_lcs && (
+                <option value="LCS">LCS (Low Crocking Series)</option>
+              )}
+              {selectedColor && colors.find((c) => c.id === selectedColor)?.available_std && (
+                <option value="STD">STD (Standard Series)</option>
+              )}
+              {selectedColor && colors.find((c) => c.id === selectedColor)?.available_opq_js && (
+                <option value="JS">JS / OPQ (Opacity Series)</option>
+              )}
             </select>
             {!selectedColor && (
               <p className="text-xs text-slate-400">Select a color to see available series.</p>
@@ -375,10 +356,9 @@ export default function ProductionRunForm() {
             />
             {selectedFormula && formulas.length > 0 && (
               <p className="text-xs text-slate-500">
-                Standard batch size:{" "}
+                Standard batch size:{' '}
                 <strong>
-                  {formulas.find((r) => r.id === Number(selectedFormula))
-                    ?.batch_size_kg ?? "—"}
+                  {formulas.find((r) => r.id === Number(selectedFormula))?.batch_size_kg ?? '—'}
                   kg
                 </strong>
               </p>
@@ -392,9 +372,7 @@ export default function ProductionRunForm() {
             </label>
             <select
               value={selectedOperator}
-              onChange={(e) =>
-                setSelectedOperator(e.target.value ? Number(e.target.value) : "")
-              }
+              onChange={(e) => setSelectedOperator(e.target.value ? Number(e.target.value) : '')}
               required
               className="w-full p-2.5 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm transition-shadow"
             >
@@ -410,8 +388,8 @@ export default function ProductionRunForm() {
 
         {/* Hint */}
         <p className="text-xs text-slate-400 border-t pt-4">
-          Expected material requirements will be calculated automatically from
-          the selected formula and shown after submission.
+          Expected material requirements will be calculated automatically from the selected formula
+          and shown after submission.
         </p>
 
         {/* Submit */}
@@ -441,5 +419,5 @@ export default function ProductionRunForm() {
         </button>
       </form>
     </div>
-  );
+  )
 }

@@ -1,74 +1,69 @@
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  type ReactNode,
-} from "react";
-import { jwtDecode } from "jwt-decode";
-import type { UserRole } from "../config/navigation";
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { jwtDecode } from 'jwt-decode'
+import type { UserRole } from '../config/navigation'
 
 interface User {
-  id: number;
-  username: string;
-  email: string;
-  role: UserRole;
+  id: number
+  username: string
+  email: string
+  role: UserRole
 }
 
 interface AuthContextType {
-  user: User | null;
-  role: UserRole | null;
-  isAuthenticated: boolean;
-  login: (token: string) => void;
-  logout: () => void;
-  isLoading: boolean;
+  user: User | null
+  role: UserRole | null
+  isAuthenticated: boolean
+  login: (token: string) => void
+  logout: () => void
+  isLoading: boolean
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
   const initAuth = () => {
     try {
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem('token')
       if (token) {
-        const decoded = jwtDecode<User & { exp?: number }>(token);
-        
+        const decoded = jwtDecode<User & { exp?: number }>(token)
+
         // Check if token is expired
         if (decoded.exp && decoded.exp * 1000 < Date.now()) {
-          console.warn("Token expired, logging out");
-          localStorage.removeItem("token");
-          setUser(null);
+          console.warn('Token expired, logging out')
+          localStorage.removeItem('token')
+          setUser(null)
         } else {
-          setUser(decoded);
+          setUser(decoded)
         }
       } else {
-        setUser(null);
+        setUser(null)
       }
     } catch (error) {
-      console.error("Failed to decode token", error);
-      localStorage.removeItem("token");
-      setUser(null);
+      console.error('Failed to decode token', error)
+      localStorage.removeItem('token')
+      setUser(null)
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   useEffect(() => {
-    initAuth();
-  }, []);
+    initAuth()
+  }, [])
 
   const login = (token: string) => {
-    localStorage.setItem("token", token);
-    initAuth();
-  };
+    localStorage.setItem('token', token)
+    initAuth()
+  }
 
   const logout = () => {
-    localStorage.removeItem("token");
-    setUser(null);
-  };
+    localStorage.removeItem('token')
+    setUser(null)
+  }
 
   return (
     <AuthContext.Provider
@@ -83,13 +78,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     >
       {children}
     </AuthContext.Provider>
-  );
+  )
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
+  const context = useContext(AuthContext)
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    throw new Error('useAuth must be used within an AuthProvider')
   }
-  return context;
+  return context
 }

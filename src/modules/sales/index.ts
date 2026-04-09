@@ -319,9 +319,18 @@ export default async function (fastifyRaw: FastifyInstance) {
                         c.name as color_name,
                         c.business_code,
                         SUM(i.quantity * i.pack_size_kg) as total_qty_kg,
-
                         COUNT(DISTINCT o.id) as order_count,
-                        ARRAY_AGG(DISTINCT cl.name) as client_names,
+                        ARRAY_AGG(DISTINCT COALESCE(cl.name, o.client_name)) as client_names,
+                        COALESCE(json_agg(
+                            json_build_object(
+                                'order_id', o.id,
+                                'client_name', COALESCE(cl.name, o.client_name),
+                                'order_date', o.created_at,
+                                'quantity_kg', i.quantity * i.pack_size_kg,
+                                'pack_size_kg', i.pack_size_kg,
+                                'quantity', i.quantity
+                            )
+                        ) FILTER (WHERE o.id IS NOT NULL), '[]'::json) as detailed_orders,
                         json_agg(
                             json_build_object(
                                 'pack_size_kg', i.pack_size_kg,
@@ -340,16 +349,24 @@ export default async function (fastifyRaw: FastifyInstance) {
                 const transformed = result.rows.map(row => {
                     const packMap: Record<number, number> = {};
                     (row.raw_packs || []).forEach((p: any) => {
-                        packMap[p.pack_size_kg] = (packMap[p.pack_size_kg] || 0) + p.quantity;
+                        if (p && p.pack_size_kg) {
+                            packMap[p.pack_size_kg] = (packMap[p.pack_size_kg] || 0) + (p.quantity || 0);
+                        }
                     });
+                    
                     const groupedPacks = Object.keys(packMap).map(k => ({
                         pack_size_kg: Number(k),
                         quantity: packMap[Number(k)]
                     }));
                     
-                    const { raw_packs, ...rest } = row;
                     return {
-                        ...rest,
+                        color_id: row.color_id,
+                        color_name: row.color_name,
+                        business_code: row.business_code,
+                        total_qty_kg: row.total_qty_kg,
+                        order_count: row.order_count,
+                        client_names: row.client_names,
+                        detailed_orders: typeof row.detailed_orders === 'string' ? JSON.parse(row.detailed_orders) : (row.detailed_orders || []),
                         required_packs: groupedPacks
                     };
                 });

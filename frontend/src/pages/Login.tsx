@@ -1,82 +1,72 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  Loader2,
-  Mail,
-  Lock,
-  AlertCircle,
-  ArrowRight,
-  Eye,
-  EyeOff,
-} from "lucide-react";
-import { useAuth } from "../contexts/AuthContext";
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Loader2, Mail, Lock, AlertCircle, ArrowRight, Eye, EyeOff } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function Login() {
   // Navigation hook to programmatically change routes
-  const navigate = useNavigate();
-  const { login } = useAuth();
+  const navigate = useNavigate()
+  const { login } = useAuth()
 
   // State variables for form inputs
-  const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [identifier, setIdentifier] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
 
   // UI State for handling loading indicators and error messages
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
 
   // Handler for form submission
   const handleSubmit = async (e: React.FormEvent) => {
     // Prevent default form browser submission behavior
-    e.preventDefault();
+    e.preventDefault()
 
     // Reset state before making the request
-    setIsLoading(true);
-    setError("");
+    setIsLoading(true)
+    setError('')
 
     try {
       // Make a POST request to the backend auth API
-      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
       const response = await fetch(`${apiUrl}/auth/login`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({ identifier, password }),
-      });
+      })
 
-      const data = await response.json();
+      const data = await response.json()
 
       // Handle non-200 responses sent from fastify/auth logic
       if (!response.ok) {
         // If the error seems related to credentials, use the user's preferred message
         const isAuthError =
           response.status === 401 ||
-          (data.message && data.message.toLowerCase().includes("password"));
+          (data.message && data.message.toLowerCase().includes('password'))
         throw new Error(
           isAuthError
-            ? "Please enter correct password"
-            : data.message || data.error || "Invalid email or password.",
-        );
+            ? 'Please enter correct password'
+            : data.message || data.error || 'Invalid email or password.',
+        )
       }
 
       // Store the JWT token in AuthContext sequentially linking it globally
       if (data.token) {
-        login(data.token);
+        login(data.token)
       }
 
       // If the login resolves successfully, route the user to the dashboard
-      navigate("/dashboard");
+      navigate('/dashboard')
     } catch (err: any) {
       // If the request fails, display the error to the user
-      setError(
-        err.message || "An unexpected error occurred. Please try again.",
-      );
+      setError(err.message || 'An unexpected error occurred. Please try again.')
     } finally {
       // Ensure the loading indicator is stopped whether successful or rejected
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   return (
     // Container that handles the full-screen layout and centers the login card
@@ -86,9 +76,9 @@ export default function Login() {
         className="absolute inset-0 z-0 opacity-[0.06] grayscale pointer-events-none"
         style={{
           backgroundImage: 'url("/factory-bg.png")',
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          filter: "blur(1px)",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          filter: 'blur(1px)',
         }}
       />
 
@@ -103,11 +93,7 @@ export default function Login() {
         {/* Header Section (Logo, Title and subtitle text) */}
         <div className="mb-10 text-center">
           <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-white p-2 shadow-sm border border-slate-100">
-            <img
-              src="/logo.png"
-              alt="Logo"
-              className="h-full w-full object-contain"
-            />
+            <img src="/logo.png" alt="Logo" className="h-full w-full object-contain" />
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-foreground">
             Welcome Back
@@ -174,18 +160,18 @@ export default function Login() {
                 <Lock className="h-5 w-5" />
               </div>
               <input
-                type={showPassword ? "text" : "password"}
+                type={showPassword ? 'text' : 'password'}
                 required
                 disabled={isLoading}
                 placeholder="••••••••"
                 className="w-full rounded-xl border border-slate-200 dark:border-input bg-white dark:bg-background/50 py-2.5 pl-10 pr-10 text-slate-900 dark:text-foreground placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20 transition-all disabled:opacity-50"
                 value={password}
                 onChange={(e) => {
-                  setPassword(e.target.value);
-                  e.target.setCustomValidity(""); // Reset custom validity on input
+                  setPassword(e.target.value)
+                  e.target.setCustomValidity('') // Reset custom validity on input
                 }}
                 onInvalid={(e: any) => {
-                  e.target.setCustomValidity("Please enter password");
+                  e.target.setCustomValidity('Please enter password')
                 }}
               />
               <button
@@ -193,11 +179,7 @@ export default function Login() {
                 className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-blue-600 transition-colors"
                 onClick={() => setShowPassword(!showPassword)}
               >
-                {showPassword ? (
-                  <EyeOff className="h-5 w-5" />
-                ) : (
-                  <Eye className="h-5 w-5" />
-                )}
+                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
               </button>
             </div>
           </div>
@@ -231,15 +213,12 @@ export default function Login() {
 
         {/* Support Footer link */}
         <div className="mt-4 text-center text-sm text-slate-500 dark:text-muted-foreground">
-          Need help? Contact{" "}
-          <a
-            href="#"
-            className="font-semibold text-blue-600 hover:underline underline-offset-4"
-          >
+          Need help? Contact{' '}
+          <a href="#" className="font-semibold text-blue-600 hover:underline underline-offset-4">
             IT Support
           </a>
         </div>
       </div>
     </div>
-  );
+  )
 }

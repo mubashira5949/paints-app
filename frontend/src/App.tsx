@@ -1,26 +1,26 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "./contexts/AuthContext";
-import { ProtectedRoute } from "./components/auth/ProtectedRoute";
-import { MainLayout } from "./layouts/MainLayout";
-import Dashboard from "./pages/Dashboard";
-import Inventory from "./pages/Inventory";
-import Production from "./pages/Production";
-import ProductionDetail from "./pages/ProductionDetail";
-import ProductionPackaging from "./pages/ProductionPackaging";
-import ProductionRunForm from "./pages/ProductionRunForm";
-import Users from "./pages/Users";
-import Settings from "./pages/Settings";
-import Login from "./pages/Login";
-import Formulas from "./pages/Formulas";
-import Sales from "./pages/Sales";
-import SalesHistory from "./pages/SalesHistory";
-import Orders from "./pages/Orders";
-import Clients from "./pages/Clients";
-import Losses from "./pages/Losses";
-import RawMaterials from "./pages/RawMaterials";
-import Suppliers from "./pages/Suppliers";
-import PurchaseOrders from "./pages/PurchaseOrders";
-import Trends from "./pages/Trends";
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider } from './contexts/AuthContext'
+import { ProtectedRoute } from './components/auth/ProtectedRoute'
+import { MainLayout } from './layouts/MainLayout'
+import Dashboard from './pages/Dashboard'
+import Inventory from './pages/Inventory'
+import Production from './pages/Production'
+import ProductionDetail from './pages/ProductionDetail'
+import ProductionPackaging from './pages/ProductionPackaging'
+import ProductionRunForm from './pages/ProductionRunForm'
+import Users from './pages/Users'
+import Settings from './pages/Settings'
+import Login from './pages/Login'
+import Formulas from './pages/Formulas'
+import Sales from './pages/Sales'
+import SalesHistory from './pages/SalesHistory'
+import Orders from './pages/Orders'
+import Clients from './pages/Clients'
+import Losses from './pages/Losses'
+import RawMaterials from './pages/RawMaterials'
+import Suppliers from './pages/Suppliers'
+import PurchaseOrders from './pages/PurchaseOrders'
+import Trends from './pages/Trends'
 
 function App() {
   return (
@@ -53,7 +53,7 @@ function App() {
               <Route path="purchase-orders" element={<PurchaseOrders />} />
 
               {/* Manager and Admin routes */}
-              <Route element={<ProtectedRoute allowedRoles={["manager", "admin"]} />}>
+              <Route element={<ProtectedRoute allowedRoles={['manager', 'admin']} />}>
                 <Route path="users" element={<Users />} />
                 <Route path="settings" element={<Settings />} />
               </Route>
@@ -62,7 +62,7 @@ function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
-  );
+  )
 }
 
-export default App;
+export default App
