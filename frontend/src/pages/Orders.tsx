@@ -15,7 +15,6 @@ import {
   Plus,
   Loader2,
   ClipboardList,
-  ArrowRight,
   X,
   UserRound,
   ShoppingCart,
@@ -84,6 +83,11 @@ export default function Orders() {
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card')
   const [expandedOrderIds, setExpandedOrderIds] = useState<number[]>([])
   const [filterStatus, setFilterStatus] = useState<string>('All')
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({
+    remaining: false,
+    in_progress: false,
+    completed: true,
+  })
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -150,23 +154,57 @@ export default function Orders() {
     }
   }
 
-  const selectedClient = clients.find((c) => c.id === Number(selectedClientId))
+  const toggleOrderExpand = (id: number) => {
+    setExpandedOrderIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    )
+  }
 
-  const defaultPackSizesStr =
-    localStorage.getItem('default_packaging_sizes') || '0.5kg, 1kg, 5kg, 10kg, 20kg'
-  const defaultPackSizes = defaultPackSizesStr
-    .split(',')
-    .map((s) => parseFloat(s.replace(/kg/g, '').trim()))
-    .filter((n) => !isNaN(n))
+  const toggleGroup = (id: string) => {
+    setCollapsedGroups(prev => ({ ...prev, [id]: !prev[id] }))
+  }
 
-  const resetModal = () => {
-    setSelectedClientId('')
-    setSelectedShippingId('')
-    setNotes('')
-    setNewOrderItems([])
-    setSelectedColorId('')
-    setSelectedPackSize('')
-    setQuantity(1)
+  const getStockAvailability = (cId: number | '', pSize: number | '') => {
+    if (!cId || !pSize) return null
+    const invItem = inventory.find((i) => i.color_id === Number(cId))
+    if (!invItem) return 0
+    const invPack = invItem.packs?.find((p) => p.pack_size_kg === Number(pSize))
+    return invPack ? invPack.quantity_units : 0
+  }
+
+  const getOrderProgress = (o: ClientOrder) => {
+    if (
+      ['shipped', 'delivered', 'packed'].includes(o.shipping_status || '') ||
+      o.status === 'fulfilled'
+    ) {
+      return { ready: o.items.length, total: o.items.length }
+    }
+    let ready = 0
+    for (const item of o.items) {
+      const avail = getStockAvailability(item.color_id, item.pack_size_kg)
+      if (avail !== null && avail >= item.quantity) {
+        ready++
+      }
+    }
+    return { ready, total: o.items.length }
+  }
+
+  const getOrderGroup = (o: ClientOrder) => {
+    if (o.status === 'fulfilled') return 'completed'
+    if (o.status === 'pending') return 'remaining'
+    return 'in_progress'
+  }
+
+  const updateOrderStatus = async (orderId: number, updates: any) => {
+    try {
+      await apiRequest(`/sales/orders/${orderId}/status`, {
+        method: 'PUT',
+        body: updates,
+      })
+      fetchOrders()
+    } catch (err: any) {
+      alert(err.message || 'Failed to update status')
+    }
   }
 
   const handleCreateOrder = async (e: React.FormEvent) => {
@@ -193,18 +231,6 @@ export default function Orders() {
     }
   }
 
-  const updateOrderStatus = async (orderId: number, updates: any) => {
-    try {
-      await apiRequest(`/sales/orders/${orderId}/status`, {
-        method: 'PUT',
-        body: updates,
-      })
-      fetchOrders()
-    } catch (err: any) {
-      alert(err.message || 'Failed to update status')
-    }
-  }
-
   const handleAddItem = () => {
     if (!selectedColorId || !selectedPackSize || quantity <= 0) return
     const existingIndex = newOrderItems.findIndex(
@@ -224,83 +250,65 @@ export default function Orders() {
         },
       ])
     }
-    // UX: Do not reset selectedColorId so the user can easily add another pack size for the same color
     setSelectedPackSize('')
     setQuantity(1)
   }
 
-
-
-  const getStockAvailability = (cId: number | '', pSize: number | '') => {
-    if (!cId || !pSize) return null
-    const invItem = inventory.find((i) => i.color_id === Number(cId))
-    if (!invItem) return 0
-    const invPack = invItem.packs?.find((p) => p.pack_size_kg === Number(pSize))
-    return invPack ? invPack.quantity_units : 0
+  const resetModal = () => {
+    setSelectedClientId('')
+    setSelectedShippingId('')
+    setNotes('')
+    setNewOrderItems([])
+    setSelectedColorId('')
+    setSelectedPackSize('')
+    setQuantity(1)
   }
 
-  const toggleOrderExpand = (id: number) => {
-    setExpandedOrderIds((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-    )
-  }
-
-  const getOrderProgress = (order: ClientOrder) => {
-    let ready = 0
-    let total = order.items.length
-    for (const item of order.items) {
-      const invItem = inventory.find((i) => i.color_id === item.color_id)
-      if (invItem) {
-        const invPack = invItem.packs?.find((p) => p.pack_size_kg === item.pack_size_kg)
-        if (invPack && invPack.quantity_units >= item.quantity) {
-          ready++
-        }
-      }
-    }
-    return { ready, total }
-  }
-
-  const remainingOrders = orders.filter((o) => o.status === 'pending')
-  const inProgressOrders = orders.filter((o) => 
-    o.status !== 'fulfilled' && (o.shipping_status || o.return_status)
-  )
-  const completedOrders = orders.filter((o) => o.status === 'fulfilled')
+  const selectedClient = clients.find((c) => c.id === Number(selectedClientId))
+  const defaultPackSizesStr =
+    localStorage.getItem('default_packaging_sizes') || '0.5kg, 1kg, 5kg, 10kg, 20kg'
+  const defaultPackSizes = defaultPackSizesStr
+    .split(',')
+    .map((s) => parseFloat(s.replace(/kg/g, '').trim()))
+    .filter((n) => !isNaN(n))
 
   const filtered = orders.filter((o) => {
-    const matchesSearch = 
+    const matchSearch =
       (o.client_display_name || o.client_name).toLowerCase().includes(searchTerm.toLowerCase()) ||
       (o.notes && o.notes.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (o.gst_number && o.gst_number.toLowerCase().includes(searchTerm.toLowerCase()))
-    
-    if (!matchesSearch) return false
-    if (filterStatus === 'All') return true
-    if (filterStatus === 'Remaining') return o.status === 'pending'
-    if (filterStatus === 'In Progress') return o.status !== 'fulfilled' && (o.shipping_status || o.return_status)
-    if (filterStatus === 'Completed') return o.status === 'fulfilled'
-    return true
+
+    const matchStatus =
+      filterStatus === 'All' ||
+      (filterStatus === 'Remaining' && o.status === 'pending') ||
+      (filterStatus === 'In Progress' && o.status === 'in_progress') ||
+      (filterStatus === 'Completed' && o.status === 'fulfilled')
+
+    return matchSearch && matchStatus
   })
+
+  const remainingOrders = filtered.filter(o => getOrderGroup(o) === 'remaining')
+  const inProgressOrders = filtered.filter(o => getOrderGroup(o) === 'in_progress')
+  const completedOrders = filtered.filter(o => getOrderGroup(o) === 'completed')
+
+  const groups = [
+    { id: 'remaining', title: 'Remaining', orders: remainingOrders },
+    { id: 'in_progress', title: 'In Progress', orders: inProgressOrders },
+    { id: 'completed', title: 'Completed', orders: completedOrders },
+  ]
 
   const renderOrderActions = (o: ClientOrder) => {
     const progress = getOrderProgress(o)
     const isReady = progress.ready === progress.total
 
     return (
-      <div className="flex flex-wrap gap-2 mt-1">
-        {/* Fulfillment Flow */}
-        {(!o.shipping_status || o.shipping_status === 'pending') && (
-          <div className="flex items-center gap-2">
-            {!isReady && (
-              <span className="px-2 py-1 bg-red-100 text-red-600 rounded text-[9px] font-black uppercase tracking-tight flex items-center gap-1 border border-red-200">
-                <AlertCircle className="w-3 h-3" /> Requires Production
+      <div className="flex flex-wrap items-center gap-2 mt-2">
+        {(!o.shipping_status || o.shipping_status === 'pending') &&
+          (isReady ? (
+            <>
+              <span className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-xs uppercase font-black tracking-wider border border-emerald-200 shadow-sm">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Ready to Pack
               </span>
-            )}
-            {isReady && (
-              <span className="px-2 py-1 bg-emerald-100 text-emerald-600 rounded text-[9px] font-black uppercase tracking-tight flex items-center gap-1 border border-emerald-200">
-                <CheckCircle2 className="w-3 h-3" /> Ready to Pack
-              </span>
-            )}
-            
-            {isReady ? (
               <button
                 onClick={() =>
                   updateOrderStatus(o.id, {
@@ -308,34 +316,41 @@ export default function Orders() {
                     status: 'in_progress',
                   })
                 }
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs uppercase font-black tracking-wider transition-all shadow-md active:scale-95 flex items-center gap-2"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs uppercase font-black tracking-wider transition-colors shadow-md shadow-blue-200/50"
               >
-                Pack Order <ChevronRight className="w-4 h-4" />
+                Pack Order
               </button>
-            ) : (
+            </>
+          ) : (
+            <>
+              <span className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-700 rounded-lg text-xs uppercase font-black tracking-wider border border-red-200 shadow-sm">
+                <AlertCircle className="w-3.5 h-3.5" /> Requires Production
+              </span>
               <a
                 href="/production"
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs uppercase font-black tracking-wider transition-all shadow-md active:scale-95 flex items-center gap-2"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs uppercase font-black tracking-wider transition-colors shadow-md shadow-blue-200/50 inline-flex items-center"
               >
-                Queue Production <ArrowRight className="w-4 h-4" />
+                Queue Production
               </a>
-            )}
-          </div>
-        )}
-
+            </>
+          ))}
         {o.shipping_status === 'packed' && (
-          <button
-            onClick={() =>
-              updateOrderStatus(o.id, {
-                shipping_status: 'shipped',
-              })
-            }
-            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs uppercase font-black tracking-wider transition-all shadow-md active:scale-95 flex items-center gap-2"
-          >
-            Ship Now <CheckCircle2 className="w-4 h-4" />
-          </button>
+          <>
+            <span className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-xs uppercase font-black tracking-wider border border-emerald-200 shadow-sm">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Ready to Ship
+            </span>
+            <button
+              onClick={() =>
+                updateOrderStatus(o.id, {
+                  shipping_status: 'shipped',
+                })
+              }
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs uppercase font-black tracking-wider transition-colors shadow-md shadow-blue-200/50"
+            >
+              Ship Now
+            </button>
+          </>
         )}
-
         {o.shipping_status === 'shipped' && (
           <button
             onClick={() =>
@@ -343,26 +358,27 @@ export default function Orders() {
                 shipping_status: 'delivered',
               })
             }
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs uppercase font-black tracking-wider transition-all shadow-md active:scale-95 flex items-center gap-2"
+            className="px-4 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-200 rounded-lg text-xs uppercase font-black tracking-wider transition-colors shadow-sm"
           >
             Mark Delivered
           </button>
         )}
 
-        {/* Returns Flow */}
-        {o.shipping_status === 'delivered' && !o.return_status && o.refund_status !== 'refund_successfully' && (
-          <button
-            onClick={() =>
-              updateOrderStatus(o.id, {
-                return_status: 'pick_up_order',
-                status: 'in_progress',
-              })
-            }
-            className="px-4 py-2 bg-rose-100 hover:bg-rose-200 text-rose-700 border border-rose-200 rounded-lg text-xs uppercase font-black tracking-wider transition-colors shadow-sm"
-          >
-            Initiate Return
-          </button>
-        )}
+        {o.shipping_status === 'delivered' &&
+          !o.return_status &&
+          o.refund_status !== 'refund_successfully' && (
+            <button
+              onClick={() =>
+                updateOrderStatus(o.id, {
+                  return_status: 'pick_up_order',
+                  status: 'in_progress',
+                })
+              }
+              className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-800 border border-red-200 rounded-lg text-xs uppercase font-black tracking-wider transition-colors shadow-sm"
+            >
+              Initiate Return
+            </button>
+          )}
         {o.return_status === 'pick_up_order' && (
           <button
             onClick={() =>
@@ -370,9 +386,9 @@ export default function Orders() {
                 return_status: 'on_the_way',
               })
             }
-            className="px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-700 border border-amber-200 rounded-lg text-xs uppercase font-black tracking-wider transition-colors shadow-sm"
+            className="px-4 py-2 bg-orange-100 hover:bg-orange-200 text-orange-800 border border-orange-200 rounded-lg text-xs uppercase font-black tracking-wider transition-colors shadow-sm"
           >
-            Pick Up (In Transit)
+            Pick Up (On the way)
           </button>
         )}
         {o.return_status === 'on_the_way' && (
@@ -439,13 +455,9 @@ export default function Orders() {
             </div>
             <span
               className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border shrink-0 shadow-sm ${
-                ['pending'].includes(o.status)
+                o.status === 'pending'
                   ? 'bg-red-50 text-red-700 border-red-200'
-                  : ['in_progress'].includes(o.status) ||
-                      (!['fulfilled'].includes(o.status) &&
-                        (o.shipping_status === 'packed' ||
-                          o.shipping_status === 'shipped' ||
-                          o.return_status))
+                  : o.status === 'in_progress'
                     ? 'bg-amber-50 text-amber-700 border-amber-200'
                     : o.status === 'fulfilled'
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
@@ -456,7 +468,6 @@ export default function Orders() {
             </span>
           </div>
 
-          {/* Progress Bar */}
           <div className="mt-2">
             <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5">
               <span>Fulfillment Progress</span>
@@ -474,7 +485,6 @@ export default function Orders() {
             </div>
           </div>
 
-          {/* Collapsed Toggle Button */}
           <div className="mt-4 flex items-center justify-between border-t border-slate-100/50 pt-3 opacity-80 group-hover:opacity-100 transition-opacity">
             <div className="text-[11px] font-bold text-slate-500 uppercase tracking-widest bg-white px-2 py-1 rounded shadow-sm border border-slate-100 line-clamp-1 pr-4 max-w-[70%]">
               Items: {o.items.map((i) => `${i.color_name} (${i.quantity}x)`).join(', ')}
@@ -552,29 +562,28 @@ export default function Orders() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 relative">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h1 className="text-3xl font-black tracking-tight flex items-center gap-3 text-slate-900">
-            <div className="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-200">
+            <div className="bg-blue-600 p-2.5 rounded-2xl shadow-lg shadow-blue-200">
               <ClipboardList className="h-6 w-6 text-white" />
             </div>
             Client Orders
           </h1>
-          <p className="text-slate-500 mt-2 font-medium">
+          <p className="text-slate-500 mt-2 font-medium text-[15px]">
             Manage and view all incoming customer orders.
           </p>
         </div>
         {user?.role !== 'operator' && (
           <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 bg-slate-900 text-white px-5 py-3 rounded-xl font-bold uppercase tracking-widest text-sm shadow-xl shadow-slate-200 hover:bg-slate-800 transition-all active:scale-95"
+            className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3.5 rounded-xl font-black uppercase tracking-widest text-sm shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95 group border border-blue-500"
           >
-            <Plus className="w-5 h-5" /> New Order
+            <Plus className="w-5 h-5 group-hover:scale-110 transition-transform" /> New Order
           </button>
         )}
       </div>
 
-      {/* Quick Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Total Orders', value: orders.length, color: 'bg-slate-100 text-slate-700', filter: 'All' },
@@ -595,110 +604,148 @@ export default function Orders() {
         ))}
       </div>
 
-      {/* Filters and View Toggle */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-4 justify-between">
-        <div className="flex items-center gap-4 w-full md:w-auto">
-          <div className="relative flex-1 md:w-80">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search clients, GST or notes..."
-              className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+        <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col xl:flex-row items-center gap-4 justify-between">
+          <div className="flex flex-col md:flex-row w-full xl:w-auto items-center gap-4">
+            <div className="relative w-full md:w-80">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search clients, GST or notes..."
+                className="w-full pl-11 pr-4 py-3 rounded-xl border-slate-200 bg-white text-sm font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none shadow-sm"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <div className="relative w-full md:w-48">
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="w-full pl-4 pr-10 py-3 rounded-xl border border-slate-200 bg-white text-sm font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none appearance-none shadow-sm text-slate-700"
+                >
+                  <option value="All">All Status</option>
+                  <option value="Remaining">Remaining</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Completed">Completed</option>
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+              </div>
+            </div>
           </div>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
-          >
-            <option value="All">All Status</option>
-            <option value="Remaining">Remaining</option>
-            <option value="In Progress">In Progress</option>
-            <option value="Completed">Completed</option>
-          </select>
+
+          <div className="flex items-center gap-4 w-full xl:w-auto justify-between xl:justify-end">
+            <div className="flex items-center bg-slate-200/50 rounded-xl p-1 shadow-inner">
+              <button onClick={() => setViewMode('card')} className={`px-4 py-2 flex items-center gap-2 rounded-lg font-black text-[10px] sm:text-xs uppercase tracking-widest transition-all ${viewMode === 'card' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>
+                <LayoutGrid className="w-4 h-4" /> Card
+              </button>
+              <button onClick={() => setViewMode('table')} className={`px-4 py-2 flex items-center gap-2 rounded-lg font-black text-[10px] sm:text-xs uppercase tracking-widest transition-all ${viewMode === 'table' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>
+                <Table className="w-4 h-4" /> Table
+              </button>
+            </div>
+            <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 lg:block">
+              {filtered.length} matches
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200/50">
-          <button
-            onClick={() => setViewMode('card')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${
-              viewMode === 'card' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <LayoutGrid className="w-4 h-4" /> Card
-          </button>
-          <button
-            onClick={() => setViewMode('table')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${
-              viewMode === 'table' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <Table className="w-4 h-4" /> Table
-          </button>
+        <div className="flex flex-col">
+          {isLoading ? (
+            <div className="py-12 text-center text-slate-400">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-500 mb-3" />
+              <p className="text-xs font-bold uppercase tracking-widest">Loading orders...</p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="py-12 text-center text-slate-400">
+              <ClipboardList className="w-10 h-10 mx-auto text-slate-200 mb-3" />
+              <p className="text-sm font-bold">No orders found</p>
+            </div>
+          ) : (
+            <div className="p-6 flex flex-col gap-8">
+              {groups.map(group => {
+                if (group.orders.length === 0) return null
+                const isCollapsed = collapsedGroups[group.id]
+
+                return (
+                  <div key={group.id} className="flex flex-col gap-4">
+                    <button
+                      onClick={() => toggleGroup(group.id)}
+                      className="flex items-center gap-3 w-full text-left"
+                    >
+                      {isCollapsed ? (
+                        <ChevronRight className="w-5 h-5 text-slate-400" />
+                      ) : (
+                        <ChevronDown className="w-5 h-5 text-slate-400" />
+                      )}
+                      <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                        {group.title} Orders
+                        <span className="flex items-center justify-center bg-slate-100 text-slate-500 text-xs rounded-full px-2 py-0.5 min-w-[24px]">
+                          {group.orders.length}
+                        </span>
+                      </h2>
+                      <div className="flex-1 h-px bg-slate-100 ml-4"></div>
+                    </button>
+
+                    {!isCollapsed && (
+                      viewMode === 'card' ? (
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 pl-8">
+                          {group.orders.map(o => renderCardView(o))}
+                        </div>
+                      ) : (
+                        <div className="pl-8 overflow-x-auto">
+                          <table className="w-full text-sm text-left whitespace-nowrap bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                            <thead className="bg-slate-50 text-[10px] uppercase font-black text-slate-400 tracking-widest border-b border-slate-200">
+                              <tr>
+                                <th className="px-4 py-3">Order ID</th>
+                                <th className="px-4 py-3">Client</th>
+                                <th className="px-4 py-3">Items</th>
+                                <th className="px-4 py-3">Status</th>
+                                <th className="px-4 py-3">Ship / Action</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {group.orders.map(o => (
+                                <tr key={o.id} className="hover:bg-slate-50/50 transition-colors">
+                                  <td className="px-4 py-3 font-mono font-bold text-slate-500">#{o.id}</td>
+                                  <td className="px-4 py-3 font-bold text-slate-800">{o.client_display_name || o.client_name}</td>
+                                  <td className="px-4 py-3 font-bold text-slate-600">{o.items.length} items</td>
+                                  <td className="px-4 py-3">
+                                    <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest ${
+                                        o.status === 'pending'
+                                          ? 'bg-red-50 text-red-700 border border-red-100'
+                                          : o.status === 'in_progress'
+                                            ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                                            : o.status === 'fulfilled'
+                                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                              : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                      }`}>
+                                       {o.status === 'fulfilled' ? 'Completed' : o.status === 'pending' ? 'Remaining' : 'In-Progress'}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 flex gap-2 flex-col items-start min-w-[200px] whitespace-normal">
+                                    <div className="flex gap-2 text-[10px] uppercase font-bold tracking-widest text-slate-500 mb-1">
+                                      {o.shipping_status && <span>Ship: {o.shipping_status.replace(/_/g, ' ')}</span>}
+                                      {o.return_status && <span className="text-red-500 bg-red-100/50 px-1 rounded">Ret: {o.return_status.replace(/_/g, ' ')}</span>}
+                                      {o.refund_status && <span className="text-amber-600">Ref: {o.refund_status.replace(/_/g, ' ')}</span>}
+                                    </div>
+                                    {renderOrderActions(o)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-        {isLoading ? (
-          <div className="py-12 text-center text-slate-400">
-            <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-500 mb-3" />
-            <p className="text-xs font-black uppercase tracking-widest">Loading orders...</p>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="py-12 text-center text-slate-400">
-            <ClipboardList className="w-10 h-10 mx-auto text-slate-200 mb-3" />
-            <p className="text-sm font-bold">No orders found</p>
-          </div>
-        ) : viewMode === 'card' ? (
-          <div className="p-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {filtered.map((o) => renderCardView(o))}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-100">
-                  <th className="px-6 py-4 text-left">Order Details</th>
-                  <th className="px-6 py-4 text-left">Items</th>
-                  <th className="px-6 py-4 text-left">Status</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {filtered.map((o) => (
-                  <tr key={o.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-slate-900">{o.client_display_name || o.client_name}</div>
-                      <div className="text-[10px] font-bold text-slate-400 mt-0.5">#{o.id} • {formatDate(o.created_at, dateFormat)}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-xs font-medium text-slate-600">
-                        {o.items.map(i => `${i.color_name} (${i.quantity}x)`).join(', ')}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest border ${
-                        o.status === 'fulfilled' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 
-                        o.status === 'pending' ? 'bg-red-50 text-red-700 border-red-100' : 
-                        'bg-amber-50 text-amber-700 border-amber-100'
-                      }`}>
-                        {o.status === 'fulfilled' ? 'Completed' : o.status === 'pending' ? 'Remaining' : 'In Progress'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {renderOrderActions(o)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* New Order Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-in fade-in duration-300">
           <div
@@ -732,7 +779,6 @@ export default function Orders() {
 
             <div className="p-6 overflow-y-auto flex-1">
               <form id="order-form" onSubmit={handleCreateOrder} className="space-y-6">
-                {/* Client selector */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 block">
@@ -779,7 +825,6 @@ export default function Orders() {
                   </div>
                 </div>
 
-                {/* Selected client info badge */}
                 {selectedClient && (
                   <div className="flex items-center gap-3 bg-violet-50 border border-violet-100 rounded-xl px-4 py-3">
                     <UserRound className="w-4 h-4 text-violet-600 shrink-0" />
@@ -797,7 +842,6 @@ export default function Orders() {
                   </div>
                 )}
 
-                {/* Notes */}
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 block">
                     Order Notes
@@ -811,7 +855,6 @@ export default function Orders() {
                   />
                 </div>
 
-                {/* Add Items */}
                 <div className="p-5 rounded-2xl bg-blue-50/50 border border-blue-100 shadow-inner">
                   <h3 className="text-xs font-black text-blue-800 uppercase tracking-widest mb-4 flex items-center gap-2">
                     <ShoppingCart className="w-4 h-4" /> Add Products to Order
@@ -888,7 +931,6 @@ export default function Orders() {
                       Add
                     </button>
                   </div>
-                  {/* Realtime Stock Checker */}
                   {selectedColorId && selectedPackSize && (
                     <div className="mt-4 pt-3 border-t border-blue-100 flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
@@ -916,7 +958,6 @@ export default function Orders() {
                   )}
                 </div>
 
-                {/* Added items */}
                 {newOrderItems.length > 0 && (
                   <div className="rounded-xl border border-slate-200 overflow-hidden shadow-sm">
                     <table className="w-full text-sm text-left bg-white">
