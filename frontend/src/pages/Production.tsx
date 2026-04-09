@@ -269,7 +269,16 @@ export default function Production() {
     setIsDemandLoading(true)
     try {
       const data = await apiRequest<ProductDemand[]>('/sales/orders/demand')
-      setDemand(data)
+      
+      const sortedData = data.sort((a, b) => {
+        const getLatestDate = (demand: ProductDemand) => {
+          if (!demand.detailed_orders || demand.detailed_orders.length === 0) return 0
+          return Math.max(...demand.detailed_orders.map(o => new Date(o.order_date).getTime()))
+        }
+        return getLatestDate(b) - getLatestDate(a)
+      })
+
+      setDemand(sortedData)
     } catch (err) {
       console.error('Failed to fetch demand', err)
     } finally {

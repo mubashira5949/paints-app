@@ -1,15 +1,24 @@
 import { useState, useEffect } from 'react'
 import { apiRequest } from '../services/api'
 import {
-  ClipboardList,
-  Plus,
-  Loader2,
-  Search,
-  X,
-  ShoppingCart,
-  UserRound,
+  LayoutGrid,
+  Table,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  AlertCircle,
+  CheckCircle2,
+  Calendar,
   MapPin,
   Receipt,
+  Search,
+  Plus,
+  Loader2,
+  ClipboardList,
+  ArrowRight,
+  X,
+  UserRound,
+  ShoppingCart,
 } from 'lucide-react'
 import { useDateFormatPreference, formatDate } from '../utils/dateFormatter'
 import { useAuth } from '../contexts/AuthContext'
@@ -72,6 +81,9 @@ export default function Orders() {
   const [orders, setOrders] = useState<ClientOrder[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const [viewMode, setViewMode] = useState<'card' | 'table'>('card')
+  const [expandedOrderIds, setExpandedOrderIds] = useState<number[]>([])
+  const [filterStatus, setFilterStatus] = useState<string>('All')
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -217,17 +229,7 @@ export default function Orders() {
     setQuantity(1)
   }
 
-  const isOrderInStock = (order: ClientOrder) => {
-    for (const item of order.items) {
-      const invItem = inventory.find((i) => i.color_id === item.color_id)
-      if (!invItem) return false
-      const invPack = invItem.packs?.find((p) => p.pack_size_kg === item.pack_size_kg)
-      if (!invPack || invPack.quantity_units < item.quantity) {
-        return false
-      }
-    }
-    return true
-  }
+
 
   const getStockAvailability = (cId: number | '', pSize: number | '') => {
     if (!cId || !pSize) return null
@@ -237,12 +239,316 @@ export default function Orders() {
     return invPack ? invPack.quantity_units : 0
   }
 
-  const filtered = orders.filter(
-    (o) =>
+  const toggleOrderExpand = (id: number) => {
+    setExpandedOrderIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    )
+  }
+
+  const getOrderProgress = (order: ClientOrder) => {
+    let ready = 0
+    let total = order.items.length
+    for (const item of order.items) {
+      const invItem = inventory.find((i) => i.color_id === item.color_id)
+      if (invItem) {
+        const invPack = invItem.packs?.find((p) => p.pack_size_kg === item.pack_size_kg)
+        if (invPack && invPack.quantity_units >= item.quantity) {
+          ready++
+        }
+      }
+    }
+    return { ready, total }
+  }
+
+  const remainingOrders = orders.filter((o) => o.status === 'pending')
+  const inProgressOrders = orders.filter((o) => 
+    o.status !== 'fulfilled' && (o.shipping_status || o.return_status)
+  )
+  const completedOrders = orders.filter((o) => o.status === 'fulfilled')
+
+  const filtered = orders.filter((o) => {
+    const matchesSearch = 
       (o.client_display_name || o.client_name).toLowerCase().includes(searchTerm.toLowerCase()) ||
       (o.notes && o.notes.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (o.gst_number && o.gst_number.toLowerCase().includes(searchTerm.toLowerCase())),
-  )
+      (o.gst_number && o.gst_number.toLowerCase().includes(searchTerm.toLowerCase()))
+    
+    if (!matchesSearch) return false
+    if (filterStatus === 'All') return true
+    if (filterStatus === 'Remaining') return o.status === 'pending'
+    if (filterStatus === 'In Progress') return o.status !== 'fulfilled' && (o.shipping_status || o.return_status)
+    if (filterStatus === 'Completed') return o.status === 'fulfilled'
+    return true
+  })
+
+  const renderOrderActions = (o: ClientOrder) => {
+    const progress = getOrderProgress(o)
+    const isReady = progress.ready === progress.total
+
+    return (
+      <div className="flex flex-wrap gap-2 mt-1">
+        {/* Fulfillment Flow */}
+        {(!o.shipping_status || o.shipping_status === 'pending') && (
+          <div className="flex items-center gap-2">
+            {!isReady && (
+              <span className="px-2 py-1 bg-red-100 text-red-600 rounded text-[9px] font-black uppercase tracking-tight flex items-center gap-1 border border-red-200">
+                <AlertCircle className="w-3 h-3" /> Requires Production
+              </span>
+            )}
+            {isReady && (
+              <span className="px-2 py-1 bg-emerald-100 text-emerald-600 rounded text-[9px] font-black uppercase tracking-tight flex items-center gap-1 border border-emerald-200">
+                <CheckCircle2 className="w-3 h-3" /> Ready to Pack
+              </span>
+            )}
+            
+            {isReady ? (
+              <button
+                onClick={() =>
+                  updateOrderStatus(o.id, {
+                    shipping_status: 'packed',
+                    status: 'in_progress',
+                  })
+                }
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs uppercase font-black tracking-wider transition-all shadow-md active:scale-95 flex items-center gap-2"
+              >
+                Pack Order <ChevronRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <a
+                href="/production"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs uppercase font-black tracking-wider transition-all shadow-md active:scale-95 flex items-center gap-2"
+              >
+                Queue Production <ArrowRight className="w-4 h-4" />
+              </a>
+            )}
+          </div>
+        )}
+
+        {o.shipping_status === 'packed' && (
+          <button
+            onClick={() =>
+              updateOrderStatus(o.id, {
+                shipping_status: 'shipped',
+              })
+            }
+            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs uppercase font-black tracking-wider transition-all shadow-md active:scale-95 flex items-center gap-2"
+          >
+            Ship Now <CheckCircle2 className="w-4 h-4" />
+          </button>
+        )}
+
+        {o.shipping_status === 'shipped' && (
+          <button
+            onClick={() =>
+              updateOrderStatus(o.id, {
+                shipping_status: 'delivered',
+              })
+            }
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs uppercase font-black tracking-wider transition-all shadow-md active:scale-95 flex items-center gap-2"
+          >
+            Mark Delivered
+          </button>
+        )}
+
+        {/* Returns Flow */}
+        {o.shipping_status === 'delivered' && !o.return_status && o.refund_status !== 'refund_successfully' && (
+          <button
+            onClick={() =>
+              updateOrderStatus(o.id, {
+                return_status: 'pick_up_order',
+                status: 'in_progress',
+              })
+            }
+            className="px-4 py-2 bg-rose-100 hover:bg-rose-200 text-rose-700 border border-rose-200 rounded-lg text-xs uppercase font-black tracking-wider transition-colors shadow-sm"
+          >
+            Initiate Return
+          </button>
+        )}
+        {o.return_status === 'pick_up_order' && (
+          <button
+            onClick={() =>
+              updateOrderStatus(o.id, {
+                return_status: 'on_the_way',
+              })
+            }
+            className="px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-700 border border-amber-200 rounded-lg text-xs uppercase font-black tracking-wider transition-colors shadow-sm"
+          >
+            Pick Up (In Transit)
+          </button>
+        )}
+        {o.return_status === 'on_the_way' && (
+          <button
+            onClick={() =>
+              updateOrderStatus(o.id, {
+                return_status: 'delivered_to_warehouse',
+                refund_status: 'initiated',
+              })
+            }
+            className="px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-800 border border-purple-200 rounded-lg text-xs uppercase font-black tracking-wider transition-colors shadow-sm"
+          >
+            Deliver to Warehouse
+          </button>
+        )}
+        {o.refund_status === 'initiated' && (
+          <button
+            onClick={() =>
+              updateOrderStatus(o.id, {
+                refund_status: 'refund_successfully',
+              })
+            }
+            className="px-4 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-200 rounded-lg text-xs uppercase font-black tracking-wider transition-colors shadow-sm"
+          >
+            Complete Refund
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  const renderCardView = (o: ClientOrder) => {
+    const progress = getOrderProgress(o)
+    const pct = progress.total > 0 ? (progress.ready / progress.total) * 100 : 0
+    const isExpanded = expandedOrderIds.includes(o.id)
+
+    return (
+      <div
+        key={o.id}
+        className="border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-shadow bg-white overflow-hidden flex flex-col group"
+      >
+        <div 
+          onClick={() => toggleOrderExpand(o.id)}
+          className={`p-6 relative bg-slate-50/30 hover:bg-slate-50 transition-colors cursor-pointer ${isExpanded ? 'border-b border-slate-100' : ''}`}
+        >
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex-1 pr-4">
+              <h3 className="font-black text-xl text-slate-900 leading-tight">
+                {o.client_display_name || o.client_name}
+              </h3>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                <span className="bg-white px-2 py-0.5 rounded border border-slate-200 shadow-sm text-slate-600">Order #{o.id}</span>
+                <span>•</span>
+                <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {formatDate(o.created_at, dateFormat)}</span>
+                {o.gst_number && user?.role !== 'operator' && (
+                  <>
+                    <span>•</span>
+                    <span className="text-amber-600 flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
+                      <Receipt className="w-3 h-3" /> GST: {o.gst_number}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+            <span
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border shrink-0 shadow-sm ${
+                ['pending'].includes(o.status)
+                  ? 'bg-red-50 text-red-700 border-red-200'
+                  : ['in_progress'].includes(o.status) ||
+                      (!['fulfilled'].includes(o.status) &&
+                        (o.shipping_status === 'packed' ||
+                          o.shipping_status === 'shipped' ||
+                          o.return_status))
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : o.status === 'fulfilled'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-slate-100 text-slate-600 border-slate-200'
+              }`}
+            >
+              {o.status === 'fulfilled' ? 'Completed' : o.status === 'pending' ? 'Remaining' : 'In Progress'}
+            </span>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="mt-2">
+            <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5">
+              <span>Fulfillment Progress</span>
+              <span className={pct === 100 ? 'text-emerald-600' : 'text-slate-600'}>
+                {progress.ready} / {progress.total} items ready
+              </span>
+            </div>
+            <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden shadow-inner">
+              <div
+                className={`h-full rounded-full transition-all duration-1000 ${
+                  pct === 100 ? 'bg-emerald-500' : pct > 0 ? 'bg-blue-500' : 'bg-slate-300'
+                }`}
+                style={{ width: `${pct}%` }}
+              ></div>
+            </div>
+          </div>
+
+          {/* Collapsed Toggle Button */}
+          <div className="mt-4 flex items-center justify-between border-t border-slate-100/50 pt-3 opacity-80 group-hover:opacity-100 transition-opacity">
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-widest bg-white px-2 py-1 rounded shadow-sm border border-slate-100 line-clamp-1 pr-4 max-w-[70%]">
+              Items: {o.items.map((i) => `${i.color_name} (${i.quantity}x)`).join(', ')}
+            </div>
+            <div className="text-[10px] font-black text-blue-600 uppercase tracking-widest shrink-0 flex items-center gap-1.5">
+              {isExpanded ? 'Hide Details' : 'Expand'}
+              {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </div>
+          </div>
+        </div>
+
+        {isExpanded && (
+          <>
+            <div className="p-6 flex-1 flex flex-col gap-4 animate-in slide-in-from-top-4 duration-300">
+              {o.shipping_address && (
+                <div className="flex items-start gap-3 bg-violet-50/60 rounded-xl p-4 border border-violet-100/60 shadow-sm">
+                  <MapPin className="w-4 h-4 text-violet-500 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-[10px] font-black text-violet-700 uppercase tracking-widest mb-0.5">
+                      {o.shipping_label}
+                    </p>
+                    <p className="text-sm text-slate-700 font-medium">
+                      {o.shipping_address}
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              {o.notes && (
+                <p className="text-sm text-slate-600 italic bg-blue-50/30 p-4 rounded-xl border border-blue-100/50 shadow-sm">
+                  "{o.notes}"
+                </p>
+              )}
+              
+              <div className="mt-auto">
+                <div className="space-y-1 mt-3 border border-slate-100 rounded-xl overflow-hidden shadow-inner">
+                  {o.items.map((item) => (
+                    <div
+                      key={item.item_id}
+                      className="flex justify-between items-center text-sm p-3 bg-slate-50 border-b border-slate-100 last:border-0"
+                    >
+                      <div>
+                        <span className="font-bold text-slate-800">{item.color_name}</span>
+                        <span className="text-[10px] text-slate-400 font-black uppercase ml-2 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                          {item.business_code}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="bg-white text-slate-500 border border-slate-200 shadow-sm px-2 py-0.5 rounded text-xs font-bold">
+                          {item.pack_size_kg}kg
+                        </span>
+                        <span className="font-black text-blue-800 bg-blue-100 px-2 py-0.5 rounded">
+                          {item.quantity}x
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80">
+              <div className="flex gap-2 text-[10px] uppercase font-bold tracking-widest text-slate-500 mb-2">
+                 {o.shipping_status && <span>Ship: {o.shipping_status.replace(/_/g, ' ')}</span>}
+                 {o.return_status && <span className="text-red-500 bg-red-100/50 px-1 rounded">Ret: {o.return_status.replace(/_/g, ' ')}</span>}
+                 {o.refund_status && <span className="text-amber-600">Ref: {o.refund_status.replace(/_/g, ' ')}</span>}
+              </div>
+              {renderOrderActions(o)}
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 relative">
@@ -268,263 +574,128 @@ export default function Orders() {
         )}
       </div>
 
-      {/* Orders list */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row items-center gap-4 justify-between">
-          <div className="relative w-full md:w-96">
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Total Orders', value: orders.length, color: 'bg-slate-100 text-slate-700', filter: 'All' },
+          { label: 'Remaining', value: remainingOrders.length, color: 'bg-red-50 text-red-700 border border-red-100', filter: 'Remaining' },
+          { label: 'In Progress', value: inProgressOrders.length, color: 'bg-amber-50 text-amber-700 border border-amber-100', filter: 'In Progress' },
+          { label: 'Completed', value: completedOrders.length, color: 'bg-emerald-50 text-emerald-700 border border-emerald-100', filter: 'Completed' },
+        ].map((stat) => (
+          <button
+            key={stat.label}
+            onClick={() => setFilterStatus(stat.filter)}
+            className={`p-4 rounded-2xl transition-all hover:shadow-md text-left group ${
+              filterStatus === stat.filter ? 'ring-2 ring-blue-500 bg-white shadow-lg' : stat.color
+            }`}
+          >
+            <p className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-1">{stat.label}</p>
+            <p className="text-2xl font-black">{stat.value}</p>
+          </button>
+        ))}
+      </div>
+
+      {/* Filters and View Toggle */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-4 justify-between">
+        <div className="flex items-center gap-4 w-full md:w-auto">
+          <div className="relative flex-1 md:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               type="text"
               placeholder="Search clients, GST or notes..."
-              className="w-full pl-9 pr-4 py-2 rounded-xl border-slate-200 bg-white text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-            {filtered.length} orders
-          </p>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+          >
+            <option value="All">All Status</option>
+            <option value="Remaining">Remaining</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Completed">Completed</option>
+          </select>
         </div>
 
-        <div className="p-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
-          {isLoading ? (
-            <div className="col-span-full py-12 text-center text-slate-400">
-              <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-500 mb-3" />
-              <p className="text-xs font-bold uppercase tracking-widest">Loading orders...</p>
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="col-span-full py-12 text-center text-slate-400">
-              <ClipboardList className="w-10 h-10 mx-auto text-slate-200 mb-3" />
-              <p className="text-sm font-bold">No orders found</p>
-            </div>
-          ) : (
-            filtered.map((o) => (
-              <div
-                key={o.id}
-                className="border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-shadow bg-white overflow-hidden flex flex-col group"
-              >
-                <div className="p-5 border-b border-slate-50 flex items-start justify-between bg-slate-50/50 group-hover:bg-blue-50/30 transition-colors">
-                  <div>
-                    <h3 className="font-black text-lg text-slate-900 leading-tight flex items-center gap-2">
-                      <UserRound className="w-4 h-4 text-violet-500 shrink-0" />
-                      {o.client_display_name || o.client_name}
-                    </h3>
-                    <div className="flex flex-wrap gap-3 mt-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      <span>
-                        Order #{o.id} · {formatDate(o.created_at, dateFormat)}
+        <div className="flex items-center bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200/50">
+          <button
+            onClick={() => setViewMode('card')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${
+              viewMode === 'card' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <LayoutGrid className="w-4 h-4" /> Card
+          </button>
+          <button
+            onClick={() => setViewMode('table')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${
+              viewMode === 'table' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <Table className="w-4 h-4" /> Table
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+        {isLoading ? (
+          <div className="py-12 text-center text-slate-400">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-500 mb-3" />
+            <p className="text-xs font-black uppercase tracking-widest">Loading orders...</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-12 text-center text-slate-400">
+            <ClipboardList className="w-10 h-10 mx-auto text-slate-200 mb-3" />
+            <p className="text-sm font-bold">No orders found</p>
+          </div>
+        ) : viewMode === 'card' ? (
+          <div className="p-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
+            {filtered.map((o) => renderCardView(o))}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-100">
+                  <th className="px-6 py-4 text-left">Order Details</th>
+                  <th className="px-6 py-4 text-left">Items</th>
+                  <th className="px-6 py-4 text-left">Status</th>
+                  <th className="px-6 py-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {filtered.map((o) => (
+                  <tr key={o.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="font-bold text-slate-900">{o.client_display_name || o.client_name}</div>
+                      <div className="text-[10px] font-bold text-slate-400 mt-0.5">#{o.id} • {formatDate(o.created_at, dateFormat)}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-xs font-medium text-slate-600">
+                        {o.items.map(i => `${i.color_name} (${i.quantity}x)`).join(', ')}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest border ${
+                        o.status === 'fulfilled' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 
+                        o.status === 'pending' ? 'bg-red-50 text-red-700 border-red-100' : 
+                        'bg-amber-50 text-amber-700 border-amber-100'
+                      }`}>
+                        {o.status === 'fulfilled' ? 'Completed' : o.status === 'pending' ? 'Remaining' : 'In Progress'}
                       </span>
-                      {o.gst_number && user?.role !== 'operator' && (
-                        <span className="flex items-center gap-1 text-amber-600">
-                          <Receipt className="w-3 h-3" /> {o.gst_number}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <span
-                    className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest border shrink-0 ${
-                      ['pending'].includes(o.status)
-                        ? 'bg-red-50 text-red-700 border-red-100'
-                        : ['in_progress'].includes(o.status) ||
-                            (!['fulfilled'].includes(o.status) &&
-                              (o.shipping_status === 'packed' ||
-                                o.shipping_status === 'shipped' ||
-                                o.return_status))
-                          ? 'bg-amber-50 text-amber-700 border-amber-100'
-                          : o.status === 'fulfilled'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                            : 'bg-slate-100 text-slate-600 border-slate-200'
-                    }`}
-                  >
-                    {o.status === 'fulfilled'
-                      ? 'Completed'
-                      : o.status === 'pending'
-                        ? 'Remaining'
-                        : 'In-Progress'}
-                  </span>
-                </div>
-
-                <div className="p-5 flex-1 flex flex-col gap-3">
-                  {/* Shipping address */}
-                  {o.shipping_address && (
-                    <div className="flex items-start gap-2 bg-violet-50/60 rounded-xl p-3 border border-violet-100/60">
-                      <MapPin className="w-3.5 h-3.5 text-violet-500 mt-0.5 shrink-0" />
-                      <div>
-                        <p className="text-[10px] font-black text-violet-700 uppercase tracking-wide">
-                          {o.shipping_label}
-                        </p>
-                        <p className="text-xs text-slate-600 font-medium mt-0.5">
-                          {o.shipping_address}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  {o.notes && (
-                    <p className="text-sm text-slate-600 italic bg-blue-50/30 p-3 rounded-lg border border-blue-100/50">
-                      "{o.notes}"
-                    </p>
-                  )}
-                  <div className="space-y-1.5 mt-auto">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      Order Items
-                    </p>
-                    {o.items.map((item) => (
-                      <div
-                        key={item.item_id}
-                        className="flex items-center justify-between text-sm py-1 border-b border-slate-50 last:border-0"
-                      >
-                        <div>
-                          <span className="font-bold text-slate-800">{item.color_name}</span>
-                          <span className="text-[10px] text-slate-400 font-bold uppercase ml-2">
-                            {item.business_code}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[11px] font-medium">
-                            {item.pack_size_kg}kg
-                          </span>
-                          <span className="font-black text-blue-800 bg-blue-50 px-2 py-0.5 rounded">
-                            {item.quantity}x
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex gap-2 text-[10px] uppercase font-bold tracking-widest text-slate-500">
-                      {o.shipping_status && (
-                        <span>Ship: {o.shipping_status.replace(/_/g, ' ')}</span>
-                      )}
-                      {o.return_status && (
-                        <span className="text-red-500 bg-red-100/50 px-1 rounded">
-                          Ret: {o.return_status.replace(/_/g, ' ')}
-                        </span>
-                      )}
-                      {o.refund_status && (
-                        <span className="text-amber-600">
-                          Ref: {o.refund_status.replace(/_/g, ' ')}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {/* Shipping Flow */}
-                      {(!o.shipping_status || o.shipping_status === 'pending') &&
-                        (isOrderInStock(o) ? (
-                          <button
-                            onClick={() =>
-                              updateOrderStatus(o.id, {
-                                shipping_status: 'packed',
-                                status: 'in_progress',
-                              })
-                            }
-                            className="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm"
-                          >
-                            Pack Order
-                          </button>
-                        ) : (
-                          <div className="flex gap-2 items-center">
-                            <span className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-md text-[10px] uppercase font-black tracking-wider shadow-sm cursor-not-allowed border border-slate-200">
-                              Out of Stock
-                            </span>
-                            <a
-                              href="/production"
-                              className="px-3 py-1.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm inline-flex items-center"
-                            >
-                              Create Colour (Production)
-                            </a>
-                          </div>
-                        ))}
-                      {o.shipping_status === 'packed' && (
-                        <button
-                          onClick={() =>
-                            updateOrderStatus(o.id, {
-                              shipping_status: 'shipped',
-                            })
-                          }
-                          className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm"
-                        >
-                          Ship Order (Left to ship)
-                        </button>
-                      )}
-                      {o.shipping_status === 'shipped' && (
-                        <button
-                          onClick={() =>
-                            updateOrderStatus(o.id, {
-                              shipping_status: 'delivered',
-                            })
-                          }
-                          className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm"
-                        >
-                          Mark Delivered
-                        </button>
-                      )}
-
-                      {/* Returns Flow */}
-                      {o.shipping_status === 'delivered' &&
-                        !o.return_status &&
-                        o.refund_status !== 'refund_successfully' && (
-                          <button
-                            onClick={() =>
-                              updateOrderStatus(o.id, {
-                                return_status: 'pick_up_order',
-                                status: 'in_progress',
-                              })
-                            }
-                            className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm"
-                          >
-                            Initiate Return
-                          </button>
-                        )}
-                      {o.return_status === 'pick_up_order' && (
-                        <button
-                          onClick={() =>
-                            updateOrderStatus(o.id, {
-                              return_status: 'on_the_way',
-                            })
-                          }
-                          className="px-3 py-1.5 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm"
-                        >
-                          Pick Up (On the way)
-                        </button>
-                      )}
-                      {o.return_status === 'on_the_way' && (
-                        <button
-                          onClick={() =>
-                            updateOrderStatus(o.id, {
-                              return_status: 'delivered_to_warehouse',
-                              refund_status: 'initiated',
-                            })
-                          }
-                          className="px-3 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm"
-                        >
-                          Deliver to Warehouse
-                        </button>
-                      )}
-                      {o.refund_status === 'initiated' && (
-                        <button
-                          onClick={() =>
-                            updateOrderStatus(o.id, {
-                              refund_status: 'refund_successfully',
-                            })
-                          }
-                          className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-md text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm"
-                        >
-                          Complete Refund
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-[9px] font-bold text-slate-300 uppercase tracking-widest text-right">
-                    Has {o.items.length} item{o.items.length !== 1 ? 's' : ''}
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      {renderOrderActions(o)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* New Order Modal */}
