@@ -725,18 +725,43 @@ export default function Production() {
                               {item.color_name}
                             </h4>
                             {/* Info details toggle */}
-                            <div
-                              className="bg-emerald-50 text-emerald-600 rounded-lg p-1.5 cursor-pointer hover:bg-emerald-100 hover:text-emerald-700 transition-colors"
-                              title="Order Details"
-                              onClick={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                setExpandedDemand(
-                                  expandedDemand === item.color_id ? null : item.color_id,
-                                )
-                              }}
-                            >
-                              <Eye className="h-3.5 w-3.5" />
+                            <div className="flex items-center gap-1.5 ml-auto">
+                              <span
+                                className={`text-[8px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded-md border shadow-sm ${
+                                  !prodStatus
+                                    ? 'bg-amber-50 text-amber-600 border-amber-100'
+                                    : prodStatus === 'running'
+                                      ? 'bg-blue-50 text-blue-600 border-blue-100'
+                                      : prodStatus === 'paused'
+                                        ? 'bg-slate-50 text-slate-500 border-slate-200'
+                                        : prodStatus === 'packaging'
+                                          ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                          : 'bg-slate-50 text-slate-600 border-slate-100'
+                                }`}
+                              >
+                                {!prodStatus
+                                  ? 'Pending'
+                                  : prodStatus === 'running'
+                                    ? 'Running'
+                                    : prodStatus === 'paused'
+                                      ? 'Paused'
+                                      : prodStatus === 'packaging'
+                                        ? 'Packed'
+                                        : prodStatus}
+                              </span>
+                              <div
+                                className="bg-emerald-50 text-emerald-600 rounded-lg p-1.5 cursor-pointer hover:bg-emerald-100 hover:text-emerald-700 transition-colors"
+                                title="Order Details"
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  setExpandedDemand(
+                                    expandedDemand === item.color_id ? null : item.color_id,
+                                  )
+                                }}
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                              </div>
                             </div>
                           </div>
                           {/* Qty + orders */}
