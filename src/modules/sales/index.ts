@@ -319,9 +319,8 @@ export default async function (fastifyRaw: FastifyInstance) {
                         c.name as color_name,
                         c.business_code,
                         SUM(i.quantity * i.pack_size_kg) as total_qty_kg,
-
                         COUNT(DISTINCT o.id) as order_count,
-                        ARRAY_AGG(DISTINCT cl.name) as client_names,
+                        ARRAY_AGG(DISTINCT COALESCE(cl.name, o.client_name)) as client_names,
                         COALESCE(json_agg(
                             json_build_object(
                                 'order_id', o.id,
@@ -331,7 +330,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                                 'pack_size_kg', i.pack_size_kg,
                                 'quantity', i.quantity
                             )
-                        ), '[]'::json) as detailed_orders,
+                        ) FILTER (WHERE o.id IS NOT NULL), '[]'::json) as detailed_orders,
                         json_agg(
                             json_build_object(
                                 'pack_size_kg', i.pack_size_kg,
