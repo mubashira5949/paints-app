@@ -23,6 +23,7 @@ import {
   Box,
   ShoppingBag,
   ArrowRight,
+  Building2,
 } from 'lucide-react'
 import { useUnitPreference, formatUnit, toDisplayValue, fromDisplayValue } from '../utils/units'
 import { useDateFormatPreference, formatDate } from '../utils/dateFormatter'
@@ -742,9 +743,33 @@ export default function Production() {
                           <div className="text-lg font-black text-slate-900 leading-none mb-1">
                             {formatUnit(item.total_qty_kg, unitPref)}
                           </div>
-                          <div className="text-[10px] font-bold text-emerald-600 mb-3">
-                            {item.order_count} order
-                            {item.order_count !== 1 ? 's' : ''}
+                          <div className="flex flex-col gap-1 mb-3">
+                            <div className="text-[10px] font-bold text-emerald-600">
+                              {item.order_count} order{item.order_count !== 1 ? 's' : ''}
+                            </div>
+                            {item.detailed_orders && item.detailed_orders.length > 0 && (
+                              <div className="flex flex-col gap-0.5">
+                                <div className="text-[9px] font-black text-slate-500 uppercase flex items-center gap-1.5 line-clamp-1">
+                                  <Building2 className="w-2.5 h-2.5 text-slate-400" />
+                                  <span className="truncate">
+                                    {item.detailed_orders[0].client_name}
+                                    {item.detailed_orders.length > 1 &&
+                                      ` + ${item.detailed_orders.length - 1} more`}
+                                  </span>
+                                </div>
+                                <div className="text-[9px] font-bold text-slate-400 flex items-center gap-1.5 mt-0.5">
+                                  <Calendar className="w-2.5 h-2.5" />
+                                  <span>
+                                    {item.detailed_orders[0].order_date
+                                      ? formatDate(
+                                          item.detailed_orders[0].order_date,
+                                          dateFormat,
+                                        )
+                                      : '—'}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
                           </div>
                           {/* Action */}
                           <button
