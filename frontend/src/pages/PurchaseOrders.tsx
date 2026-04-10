@@ -4,12 +4,14 @@ import {
   Mail,
   Link as LinkIcon,
   ChevronDown,
-  ChevronUp,
   Loader2,
   PencilLine,
-  Printer,
   UserCheck,
   XCircle,
+  Search,
+  Filter,
+  Calendar,
+  Download,
 } from 'lucide-react'
 
 interface PurchaseOrderPOC {
@@ -149,6 +151,38 @@ export default function PurchaseOrders() {
         </div>
       </div>
 
+      {/* Filters Bar */}
+      <div className="flex flex-col md:flex-row gap-4 mb-8 no-print">
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search Purchase Order..."
+            className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all text-sm font-bold placeholder:text-slate-400"
+          />
+        </div>
+        <div className="flex gap-4">
+          <div className="relative">
+            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+            <select className="pl-10 pr-8 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 appearance-none text-sm font-bold text-slate-600 bg-white min-w-[140px] cursor-pointer">
+              <option value="">All Statuses</option>
+              <option value="pending">Pending</option>
+              <option value="ordered">Ordered</option>
+              <option value="received">Received</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+          </div>
+          <div className="relative">
+            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+            <input
+              type="date"
+              className="pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 text-sm font-bold text-slate-600 bg-white min-w-[140px] cursor-pointer"
+            />
+          </div>
+        </div>
+      </div>
+
       {isLoading && !orders.length ? (
         <div className="flex flex-col items-center justify-center py-40 gap-6">
           <Loader2 className="h-10 w-10 animate-spin text-orange-500" />
@@ -157,62 +191,113 @@ export default function PurchaseOrders() {
           </p>
         </div>
       ) : (
-        <div className="space-y-12">
+        <div className="space-y-6">
           {orders.map((order) => (
             <div
               key={order.id}
-              className={`group bg-white overflow-hidden transition-all duration-500 ${expandedId === order.id ? 'no-shadow print:shadow-none' : 'rounded-[40px] border border-slate-100 shadow-xl shadow-slate-100/50 hover:shadow-2xl'}`}
+              className={`group bg-white overflow-hidden transition-all duration-300 ${expandedId === order.id ? 'no-shadow print:shadow-none' : 'rounded-[24px] border border-slate-100 shadow-sm hover:shadow-md'}`}
             >
               {/* Summary Bar - Hidden for printing when expanded */}
               <div
-                className={`p-10 flex flex-col md:flex-row items-center justify-between gap-8 cursor-pointer no-print ${expandedId === order.id ? 'border-b border-orange-100 bg-orange-50/30' : ''}`}
+                className={`px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 cursor-pointer hover:bg-slate-50 transition-colors no-print ${expandedId === order.id ? 'border-b border-orange-100 bg-orange-50/30' : ''}`}
                 onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}
               >
-                <div className="flex items-center gap-10">
+                <div className="flex items-center gap-6">
                   <div className="flex flex-col">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
-                      Purchase Order
-                    </span>
                     <span className="text-2xl font-black text-slate-900">
                       {generateUniquePONumber(order.id, order.created_at)}
                     </span>
                   </div>
-                  <div className="h-10 w-px bg-slate-200" />
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
-                      Commercial Partner
-                    </span>
-                    <span className="text-xl font-black text-slate-900">{order.supplier_name}</span>
+                  <div className="h-8 w-px bg-slate-200" />
+                  <div className="flex flex-col flex-1">
+                    <span className="text-sm font-bold text-slate-500">{order.supplier_name}</span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-6 justify-end">
                   <div
-                    className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${
+                    className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${
                       order.status === 'received'
-                        ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                        : order.status === 'ordered'
-                          ? 'bg-blue-50 text-blue-600 border border-blue-100'
-                          : 'bg-orange-50 text-orange-600 border border-orange-100'
+                        ? 'bg-green-100 text-green-700'
+                        : order.status === 'cancelled'
+                          ? 'bg-red-100 text-red-700'
+                          : order.status === 'ordered'
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-orange-100 text-orange-700'
                     }`}
                   >
-                    {order.status}
+                    {order.status === 'received' 
+                      ? '✅' 
+                      : order.status === 'cancelled' 
+                        ? '❌'
+                        : order.status === 'ordered' 
+                          ? '📦' 
+                          : '⏳'}
+                    <span className="uppercase tracking-widest text-[10px]">{order.status}</span>
                   </div>
-                  {expandedId === order.id ? (
-                    <ChevronUp className="h-6 w-6 text-orange-500" />
-                  ) : (
-                    <ChevronDown className="h-6 w-6 text-slate-300" />
-                  )}
+                  <ChevronDown 
+                    className={`h-6 w-6 transition-transform duration-300 ${expandedId === order.id ? 'rotate-180 text-orange-500' : 'text-slate-400'}`} 
+                  />
                 </div>
               </div>
 
               {expandedId === order.id && (
-                <div className="relative p-12 lg:p-20 bg-white print:p-0">
-                  {/* Main Title */}
-                  <h2 className="text-center text-[54px] font-black text-orange-500 uppercase tracking-tight mb-20">
-                    Purchase Order
-                  </h2>
-                  <div className="grid grid-cols-2 gap-20 mb-20">
+                <div className="relative bg-white print:p-0">
+                  {/* Sticky Header with Actions */}
+                  <div className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex flex-col md:flex-row items-center justify-between gap-4 no-print shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Document</span>
+                      <span className="text-lg font-black text-slate-900">{generateUniquePONumber(order.id, order.created_at)}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        onClick={() => handleUpdateStatus(order.id, 'ordered')}
+                        className="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-[11px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-md"
+                      >
+                        Confirm Dispatch
+                      </button>
+                      <button
+                        onClick={() => handleUpdateStatus(order.id, 'received')}
+                        className="px-5 py-2.5 rounded-xl border-2 border-orange-500 text-orange-600 text-[11px] font-black uppercase tracking-widest hover:bg-orange-50 transition-all bg-white"
+                      >
+                        Certify Receipt
+                      </button>
+                      <div className="h-6 w-px bg-slate-200 mx-1 hidden md:block" />
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(
+                            window.location.host + '/po/' + order.share_token,
+                          )
+                          alert('PO URL Copied!')
+                        }}
+                        className="p-2.5 rounded-xl border border-slate-200 text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition-all bg-white"
+                        title="Share Link"
+                      >
+                        <LinkIcon className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => (window.location.href = `mailto:${order.supplier_email}`)}
+                        className="p-2.5 rounded-xl border border-slate-200 text-slate-400 hover:text-orange-500 hover:bg-orange-50 transition-all bg-white"
+                        title="Email Partner"
+                      >
+                        <Mail className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => window.print()}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-50 text-orange-600 text-[11px] font-black uppercase tracking-widest hover:bg-orange-100 transition-all ml-1"
+                      >
+                        <Download className="h-4 w-4" />
+                        Download PDF
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-8 lg:p-12">
+                    {/* Main Title */}
+                    <h2 className="text-center text-4xl font-black text-orange-500 uppercase tracking-widest mb-12">
+                      Purchase Order
+                    </h2>
+                  <div className="grid grid-cols-2 gap-12 mb-12">
                     {/* Top Left: Company Details */}
                     <div className="space-y-6">
                       <div className="text-sm font-bold text-slate-500 space-y-1">
@@ -248,9 +333,9 @@ export default function PurchaseOrders() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-20 mb-16">
+                  <div className="grid grid-cols-2 gap-12 items-start mb-12">
                     {/* Middle Left: Bill To */}
-                    <div className="space-y-6">
+                    <div className="space-y-4">
                       <h4 className="text-lg font-black text-slate-900">Bill To</h4>
                       <div className="text-sm font-bold text-slate-500 space-y-1">
                         <p className="text-slate-800 font-black">{order.supplier_name}</p>
@@ -289,7 +374,7 @@ export default function PurchaseOrders() {
                     </div>
 
                     {/* Middle Right: Delivery Address */}
-                    <div className="space-y-6">
+                    <div className="space-y-4">
                       <h4 className="text-lg font-black text-slate-900">Delivery Address</h4>
                       <div className="text-sm font-bold text-slate-500 space-y-1">
                         <p className="text-slate-800">{BUYER_INFO.name}</p>
@@ -302,35 +387,35 @@ export default function PurchaseOrders() {
                   </div>
 
                   {/* Order Details Table */}
-                  <div className="mb-12">
-                    <h4 className="text-lg font-black text-slate-900 mb-6">Order Details</h4>
-                    <table className="w-full border-collapse border-b-2 border-orange-500">
-                      <thead>
-                        <tr className="bg-white border-t-2 border-orange-500">
-                          <th className="px-6 py-4 text-xs font-black text-slate-900 uppercase border-r border-orange-100">
+                  <div className="mb-10">
+                    <h4 className="text-lg font-black text-slate-900 mb-4">Order Details</h4>
+                    <table className="w-full border-collapse">
+                      <thead className="bg-slate-100">
+                        <tr className="border-y border-slate-300">
+                          <th className="px-6 py-3 text-xs font-black text-slate-700 uppercase">
                             Item No.
                           </th>
-                          <th className="px-6 py-4 text-xs font-black text-slate-900 uppercase text-left border-r border-orange-100">
+                          <th className="px-6 py-3 text-xs font-black text-slate-700 uppercase text-left">
                             Item Description
                           </th>
-                          <th className="px-6 py-4 text-xs font-black text-slate-900 uppercase text-center border-r border-orange-100">
+                          <th className="px-6 py-3 text-xs font-black text-slate-700 uppercase text-center">
                             Quantity
                           </th>
-                          <th className="px-6 py-4 text-xs font-black text-slate-900 uppercase text-center border-r border-orange-100">
+                          <th className="px-6 py-3 text-xs font-black text-slate-700 uppercase text-center">
                             Unit Price
                           </th>
-                          <th className="px-6 py-4 text-xs font-black text-slate-900 uppercase text-right">
+                          <th className="px-6 py-3 text-xs font-black text-slate-700 uppercase text-right">
                             Total Price
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y-2 divide-orange-50">
+                      <tbody>
                         {order.items?.map((item, index) => (
-                          <tr key={item.id}>
-                            <td className="px-6 py-6 text-center border-r border-orange-100 font-bold text-slate-500">
+                          <tr key={item.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                            <td className="px-6 py-4 text-center font-bold text-slate-500">
                               {index + 1}.
                             </td>
-                            <td className="px-6 py-6 border-r border-orange-100">
+                            <td className="px-6 py-4">
                               <div className="flex flex-col">
                                 <span className="font-black text-slate-900 uppercase tracking-tight">
                                   {item.resource_name}
@@ -343,13 +428,13 @@ export default function PurchaseOrders() {
                                 </span>
                               </div>
                             </td>
-                            <td className="px-6 py-6 text-center border-r border-orange-100 font-bold text-slate-600">
+                            <td className="px-6 py-4 text-center font-bold text-slate-600">
                               {item.quantity}
                             </td>
-                            <td className="px-6 py-6 text-center border-r border-orange-100 font-bold text-slate-600">
+                            <td className="px-6 py-4 text-center font-bold text-slate-600">
                               ₹{item.unit_price.toFixed(2)}
                             </td>
-                            <td className="px-6 py-6 text-right font-black text-slate-900 tracking-tight">
+                            <td className="px-6 py-4 text-right font-black text-slate-900 tracking-tight">
                               ₹{(item.quantity * item.unit_price).toFixed(2)}
                             </td>
                           </tr>
@@ -359,8 +444,8 @@ export default function PurchaseOrders() {
                   </div>
 
                   {/* Totals Section */}
-                  <div className="flex justify-end mb-24">
-                    <div className="w-full max-w-[320px] rounded-2xl bg-orange-50/50 border-2 border-orange-100 overflow-hidden shadow-2xl shadow-orange-100/50">
+                  <div className="flex justify-end mb-16">
+                    <div className="w-full max-w-[320px] rounded-2xl bg-orange-50 border border-orange-200 overflow-hidden shadow-sm">
                       <div className="p-6 space-y-4 font-bold text-sm">
                         <div className="flex justify-between text-slate-500">
                           <span>Sub Total</span>
@@ -395,7 +480,7 @@ export default function PurchaseOrders() {
                   </div>
 
                   {/* Footer */}
-                  <div className="flex items-center justify-between pt-10 border-t-2 border-slate-100">
+                  <div className="flex items-center justify-between pt-10 border-t border-slate-200">
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-2 text-slate-900 font-black">
                         <UserCheck className="h-5 w-5 text-orange-500" /> Authorized By: Alex Mercer
@@ -413,50 +498,7 @@ export default function PurchaseOrders() {
                       })}
                     </div>
                   </div>
-
-                  {/* Document Actions Bar (Floating/Fixed) */}
-                  <div className="mt-20 no-print flex items-center justify-between bg-slate-50 p-6 rounded-[32px] border border-slate-200">
-                    <div className="flex gap-4">
-                      <button
-                        onClick={() => handleUpdateStatus(order.id, 'ordered')}
-                        className="px-6 py-3 rounded-2xl bg-slate-900 text-white text-[11px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-xl shadow-slate-200"
-                      >
-                        Confirm Dispatch
-                      </button>
-                      <button
-                        onClick={() => handleUpdateStatus(order.id, 'received')}
-                        className="px-6 py-3 rounded-2xl bg-orange-500 text-white text-[11px] font-black uppercase tracking-widest hover:bg-orange-600 transition-all shadow-xl shadow-orange-100"
-                      >
-                        Certify Receipt
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => window.print()}
-                        className="p-3 rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-orange-500 transition-all shadow-sm"
-                      >
-                        <Printer className="h-5 w-5" />
-                      </button>
-                      <div className="h-8 w-px bg-slate-200" />
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(
-                            window.location.host + '/po/' + order.share_token,
-                          )
-                          alert('PO URL Copied!')
-                        }}
-                        className="p-3 rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-blue-500 transition-all shadow-sm"
-                      >
-                        <LinkIcon className="h-5 w-5" />
-                      </button>
-                      <button
-                        onClick={() => (window.location.href = `mailto:${order.supplier_email}`)}
-                        className="px-6 py-3 rounded-2xl bg-blue-50 text-blue-600 text-[11px] font-black uppercase tracking-widest hover:bg-blue-100 transition-all"
-                      >
-                        <Mail className="h-4 w-4 inline mr-2" /> Dispatch Email
-                      </button>
-                    </div>
-                  </div>
+                </div>
                 </div>
               )}
             </div>

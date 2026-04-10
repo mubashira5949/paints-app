@@ -34,7 +34,7 @@ export function Sidebar({ userRole, isOpen, setIsOpen }: SidebarProps) {
       {/* Sidebar container */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-64 bg-card border-r flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 w-56 bg-card border-r flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0',
           isOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
@@ -61,7 +61,7 @@ export function Sidebar({ userRole, isOpen, setIsOpen }: SidebarProps) {
               onClick={() => setIsOpen(false)}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                  'flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                   isActive
                     ? 'bg-blue-50 text-blue-600'
                     : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
