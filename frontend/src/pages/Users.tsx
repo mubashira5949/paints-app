@@ -18,6 +18,8 @@ import {
   MapPin,
   AlertTriangle,
   UserX,
+  MoreHorizontal,
+  ChevronDown,
 } from 'lucide-react'
 
 interface User {
@@ -26,7 +28,21 @@ interface User {
   email: string
   role: string
   is_active: boolean
+  last_login?: string | null
   created_at: string
+}
+
+function getActiveStatus(lastLogin?: string | null) {
+  if (!lastLogin) return { text: 'Never logged in', color: 'bg-slate-300' }
+  const diff = Date.now() - new Date(lastLogin).getTime()
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 15) return { text: 'Active now', color: 'bg-green-500' }
+  if (minutes < 60) return { text: `Last seen ${minutes}m ago`, color: 'bg-amber-500' }
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return { text: `Last seen ${hours}h ago`, color: 'bg-slate-400' }
+  const days = Math.floor(hours / 24)
+  if (days === 1) return { text: 'Last seen yesterday', color: 'bg-slate-400' }
+  return { text: `Last seen ${days}d ago`, color: 'bg-slate-400' }
 }
 
 interface UserSummary {
@@ -63,6 +79,7 @@ export default function Users() {
   const [isResetModalOpen, setIsResetModalOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [resetTargetUser, setResetTargetUser] = useState<User | null>(null)
+  const [userToToggle, setUserToToggle] = useState<User | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showAllUsers, setShowAllUsers] = useState(false)
   const [showAllRequests, setShowAllRequests] = useState(false)
@@ -80,6 +97,7 @@ export default function Users() {
   })
   const [resetPassword, setResetPassword] = useState('')
   const [resetConfirmPassword, setResetConfirmPassword] = useState('')
+  const [actionMenuOpenId, setActionMenuOpenId] = useState<number | null>(null)
 
   const fetchUsers = async () => {
     const data = await apiRequest<User[]>('/users')
@@ -125,6 +143,19 @@ export default function Users() {
         body: { is_active: !user.is_active },
       })
       await Promise.allSettled([fetchUsers(), fetchSummary()])
+      setUserToToggle(null)
+    } catch (err: any) {
+      alert(err.message)
+    }
+  }
+
+  const handleRoleChange = async (userId: number, newRole: string) => {
+    try {
+      await apiRequest(`/users/${userId}`, {
+        method: 'PATCH',
+        body: { role: newRole },
+      })
+      fetchUsers()
     } catch (err: any) {
       alert(err.message)
     }
@@ -230,23 +261,6 @@ export default function Users() {
     setIsModalOpen(true)
   }
 
-  const getRoleBadge = (role: string) => {
-    switch (role.toLowerCase()) {
-      case 'manager':
-        return 'bg-purple-100 text-purple-700 border-purple-200'
-      case 'operator':
-        return 'bg-blue-100 text-blue-700 border-blue-200'
-      case 'sales':
-        return 'bg-emerald-100 text-emerald-700 border-emerald-200'
-      case 'client':
-        return 'bg-amber-100 text-amber-700 border-amber-200'
-      case 'admin':
-        return 'bg-red-100 text-red-700 border-red-200'
-      default:
-        return 'bg-slate-100 text-slate-700 border-slate-200'
-    }
-  }
-
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -278,110 +292,115 @@ export default function Users() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-5">
-        <div className="rounded-2xl border border-t-4 border-t-blue-500 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Total Users
-            </span>
-            <UsersIcon className="h-5 w-5 text-blue-400" />
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="rounded-xl border bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Users</span>
+            <UsersIcon className="h-4 w-4 text-blue-500" />
           </div>
-          <div className="text-3xl font-bold text-slate-900">{summary?.total_users ?? 0}</div>
+          <div className="flex items-end justify-between">
+            <div className="text-3xl font-black text-slate-900">{summary?.total_users ?? 0}</div>
+            <div className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md mb-1">+3 this week ↑</div>
+          </div>
         </div>
-        <div className="rounded-2xl border border-t-4 border-t-purple-500 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Managers
-            </span>
-            <ShieldCheck className="h-5 w-5 text-purple-400" />
+        <div className="rounded-xl border bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Managers</span>
+            <ShieldCheck className="h-4 w-4 text-purple-500" />
           </div>
-          <div className="text-3xl font-bold text-slate-900">{summary?.managers ?? 0}</div>
+          <div className="flex items-end justify-between">
+            <div className="text-3xl font-black text-slate-900">{summary?.managers ?? 0}</div>
+            <div className="text-xs font-bold text-slate-400 mb-1">active roles</div>
+          </div>
         </div>
-        <div className="rounded-2xl border border-t-4 border-t-sky-500 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Operators
-            </span>
-            <HardHat className="h-5 w-5 text-sky-400" />
+        <div className="rounded-xl border bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Operators</span>
+            <HardHat className="h-4 w-4 text-sky-500" />
           </div>
-          <div className="text-3xl font-bold text-slate-900">{summary?.operators ?? 0}</div>
+          <div className="flex items-end justify-between">
+            <div className="text-3xl font-black text-slate-900">{summary?.operators ?? 0}</div>
+            <div className="text-xs font-bold text-slate-400 mb-1">active roles</div>
+          </div>
         </div>
-        <div className="rounded-2xl border border-t-4 border-t-emerald-500 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Sales
-            </span>
-            <BadgeDollarSign className="h-5 w-5 text-emerald-400" />
+        <div className="rounded-xl border bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Sales</span>
+            <BadgeDollarSign className="h-4 w-4 text-emerald-500" />
           </div>
-          <div className="text-3xl font-bold text-slate-900">{summary?.sales ?? 0}</div>
+          <div className="flex items-end justify-between">
+            <div className="text-3xl font-black text-slate-900">{summary?.sales ?? 0}</div>
+            <div className="text-xs font-bold text-slate-400 mb-1">active roles</div>
+          </div>
         </div>
-        <div className="rounded-2xl border border-t-4 border-t-amber-500 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Clients
-            </span>
-            <UsersIcon className="h-5 w-5 text-amber-400" />
+        <div className="rounded-xl border bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Clients</span>
+            <UsersIcon className="h-4 w-4 text-amber-500" />
           </div>
-          <div className="text-3xl font-bold text-slate-900">{summary?.client ?? 0}</div>
+          <div className="flex items-end justify-between">
+            <div className="text-3xl font-black text-slate-900">{summary?.client ?? 0}</div>
+            <div className="text-xs font-bold text-slate-400 mb-1">active roles</div>
+          </div>
         </div>
       </div>
 
       {/* Users Table */}
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
         {/* Table toolbar */}
-        <div className="p-5 border-b bg-slate-50 space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-4">
-              <h2 className="text-base font-bold text-slate-800">System Users</h2>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-                  {showAllUsers
-                    ? `Showing all ${filteredUsers.length}`
-                    : `Showing ${Math.min(10, filteredUsers.length)} of ${filteredUsers.length}`}
-                </span>
-                {filteredUsers.length > 10 && (
-                  <button
-                    onClick={() => setShowAllUsers(!showAllUsers)}
-                    className="text-xs text-blue-600 hover:text-blue-700 font-bold uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded border border-blue-100"
-                  >
-                    {showAllUsers ? 'View Less' : 'View All'}
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="relative">
+        <div className="p-4 border-b bg-white flex flex-col md:flex-row gap-4 justify-between items-center">
+          <div className="flex items-center gap-4 w-full md:w-auto flex-1">
+            <div className="relative w-full max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search by name or email..."
+                placeholder="Search users by name or email..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 pr-4 py-2 text-sm rounded-lg border border-slate-200 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none w-64"
+                className="w-full pl-9 pr-4 py-2.5 text-sm rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400"
               />
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-slate-400 uppercase">Role:</span>
-            {['all', 'manager', 'operator', 'sales', 'client', 'admin'].map((r) => (
-              <button
-                key={r}
-                onClick={() => setRoleFilter(r)}
-                className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${roleFilter === r ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'}`}
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="relative">
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="pl-3 pr-8 py-2.5 text-sm font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-lg outline-none appearance-none cursor-pointer hover:bg-slate-100 transition-colors"
               >
-                {r === 'all' ? 'All' : r.charAt(0).toUpperCase() + r.slice(1)}
-              </button>
-            ))}
-            <span className="text-slate-300 mx-1">|</span>
-            <span className="text-xs font-semibold text-slate-400 uppercase">Status:</span>
-            {['all', 'active', 'disabled'].map((s) => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${statusFilter === s ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'}`}
+                <option value="all">Role: All</option>
+                <option value="manager">Manager</option>
+                <option value="operator">Operator</option>
+                <option value="sales">Sales</option>
+                <option value="client">Client</option>
+                <option value="admin">Admin</option>
+              </select>
+              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 pointer-events-none" />
+            </div>
+            <div className="relative">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="pl-3 pr-8 py-2.5 text-sm font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-lg outline-none appearance-none cursor-pointer hover:bg-slate-100 transition-colors"
               >
-                {s.charAt(0).toUpperCase() + s.slice(1)}
+                <option value="all">Status: All</option>
+                <option value="active">Active</option>
+                <option value="disabled">Disabled</option>
+              </select>
+              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 pointer-events-none" />
+            </div>
+            {(searchQuery || roleFilter !== 'all' || statusFilter !== 'all') && (
+              <button
+                onClick={() => {
+                  setSearchQuery('')
+                  setRoleFilter('all')
+                  setStatusFilter('all')
+                }}
+                className="text-xs font-semibold text-slate-500 hover:text-slate-700 px-2 uppercase tracking-wide"
+              >
+                Clear Filters
               </button>
-            ))}
+            )}
           </div>
         </div>
 
@@ -447,72 +466,94 @@ export default function Users() {
                 </tr>
               ) : (
                 (showAllUsers ? filteredUsers : filteredUsers.slice(0, 10)).map((user) => (
-                  <tr key={user.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4">
+                  <tr key={user.id} className="hover:bg-slate-50 transition-colors h-20 border-b border-slate-100 last:border-none">
+                    <td className="px-6 py-3">
                       <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm shrink-0">
+                        <div className="h-10 w-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 font-bold text-sm shrink-0">
                           {user.username.charAt(0).toUpperCase()}
                         </div>
-                        <div>
-                          <div className="font-semibold text-slate-900 text-sm">
+                        <div className="flex flex-col justify-center">
+                          <div className="font-medium text-gray-900 text-[15px] leading-tight">
                             {user.username}
                           </div>
-                          <div className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
-                            <Mail className="h-3 w-3" />
+                          <div className="text-sm text-gray-400 mt-0.5">
                             {user.email}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1.5">
+                            <span className={`h-2 w-2 rounded-full ${getActiveStatus(user.last_login).color}`} />
+                            <span className="text-[10px] text-slate-500 font-medium">
+                              {getActiveStatus(user.last_login).text}
+                            </span>
                           </div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold border ${getRoleBadge(user.role)}`}
-                      >
-                        {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
-                      </span>
+                    <td className="px-6 py-3">
+                      <div className="relative inline-block">
+                        <select
+                          className="appearance-none bg-blue-50 text-blue-700 font-bold uppercase tracking-wider text-[11px] pl-3 pr-7 py-1.5 rounded-md border border-transparent hover:border-blue-200 cursor-pointer outline-none transition-all"
+                          value={user.role.toLowerCase()}
+                          onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                        >
+                          <option value="manager">Manager</option>
+                          <option value="operator">Operator</option>
+                          <option value="sales">Sales</option>
+                          <option value="client">Client</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-blue-600 pointer-events-none" />
+                      </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-3">
                       <span
-                        className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold ${user.is_active ? 'text-emerald-700 bg-emerald-50' : 'text-slate-500 bg-slate-100'}`}
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] uppercase tracking-wider font-bold w-fit ${user.is_active ? 'text-green-700 bg-green-100' : 'text-red-700 bg-red-100'}`}
                       >
-                        {user.is_active ? (
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                        ) : (
-                          <XCircle className="h-3.5 w-3.5" />
-                        )}
                         {user.is_active ? 'Active' : 'Disabled'}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex justify-end items-center gap-1.5">
+                    <td className="px-6 py-3 text-right">
+                      <div className="relative inline-flex items-center gap-2">
                         <button
                           onClick={() => handleEditClick(user)}
-                          title="Edit"
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-100 transition-colors"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 transition-colors shadow-sm"
                         >
                           <Edit className="h-3.5 w-3.5" /> Edit
                         </button>
-                        <button
-                          onClick={() => handleResetPasswordClick(user)}
-                          title="Reset Password"
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-100 transition-colors"
-                        >
-                          <KeyRound className="h-3.5 w-3.5" /> Reset
-                        </button>
-                        <button
-                          onClick={() => handleToggleStatus(user)}
-                          className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${user.is_active ? 'text-orange-700 bg-orange-50 hover:bg-orange-100 border-orange-100' : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-100'}`}
-                        >
-                          {user.is_active ? (
-                            <>
-                              <UserX className="h-3.5 w-3.5" /> Disable
-                            </>
-                          ) : (
-                            <>
-                              <Power className="h-3.5 w-3.5" /> Enable
-                            </>
+                        <div className="relative">
+                          <button
+                            onClick={() => setActionMenuOpenId(actionMenuOpenId === user.id ? null : user.id)}
+                            onBlur={() => setTimeout(() => setActionMenuOpenId(null), 150)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                          >
+                            <MoreHorizontal className="h-5 w-5" />
+                          </button>
+                          {actionMenuOpenId === user.id && (
+                            <div className="absolute right-0 top-full mt-1 w-40 rounded-xl bg-white shadow-xl border border-slate-100 z-50 overflow-hidden text-left animate-in fade-in zoom-in-95 duration-100">
+                              <button
+                                onClick={() => handleResetPasswordClick(user)}
+                                className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                              >
+                                <KeyRound className="h-4 w-4" /> Reset Password
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setActionMenuOpenId(null)
+                                  if (user.is_active) setUserToToggle(user)
+                                  else handleToggleStatus(user)
+                                }}
+                                className={`w-full flex items-center gap-2 px-4 py-2.5 text-xs font-medium transition-colors border-t border-slate-50 ${
+                                  user.is_active ? 'text-red-600 hover:bg-red-50' : 'text-green-600 hover:bg-green-50'
+                                }`}
+                              >
+                                {user.is_active ? (
+                                  <><UserX className="h-4 w-4" /> Disable User</>
+                                ) : (
+                                  <><Power className="h-4 w-4" /> Enable User</>
+                                )}
+                              </button>
+                            </div>
                           )}
-                        </button>
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -521,42 +562,61 @@ export default function Users() {
             </tbody>
           </table>
         </div>
+        <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between no-print text-sm">
+          <span className="font-medium text-slate-500">
+            Showing {Math.min(10, filteredUsers.length)} of {filteredUsers.length} users
+          </span>
+          {filteredUsers.length > 10 && (
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setShowAllUsers(false)} 
+                disabled={!showAllUsers}
+                className="px-3 py-1.5 rounded bg-white border border-slate-200 text-slate-600 font-semibold disabled:opacity-50 hover:bg-slate-50 transition-colors"
+              >
+                Prev
+              </button>
+              <button 
+                onClick={() => setShowAllUsers(true)} 
+                disabled={showAllUsers}
+                className="px-3 py-1.5 rounded bg-white border border-slate-200 text-slate-600 font-semibold disabled:opacity-50 hover:bg-slate-50 transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Device Enrollment Requests */}
-      <div className="rounded-xl border bg-white shadow-sm hover:bg-gray-50 transition-colors overflow-hidden">
-        <div className="p-5 border-b bg-slate-50 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-amber-50 text-amber-600">
-              <Monitor className="h-5 w-5" />
+      <div className="rounded-2xl border-2 border-slate-100 bg-white shadow-lg overflow-hidden mt-12 mb-12 relative">
+        <div className="absolute top-0 left-0 w-1.5 h-full bg-amber-500" />
+        <div className="p-6 border-b border-slate-100 bg-gradient-to-r from-amber-50/50 to-white flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4 pl-2">
+            <div className="p-3 rounded-xl bg-amber-100 text-amber-600 shadow-inner">
+              <Monitor className="h-6 w-6" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-800">Device Enrollment Requests</h2>
-              <div className="flex items-center gap-2">
-                <p className="text-xs text-slate-500">
-                  Approve or reject new device login requests
-                </p>
-                <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
-                  {showAllRequests
-                    ? `Showing all ${deviceRequests.length}`
-                    : `Showing ${Math.min(10, deviceRequests.length)} of ${deviceRequests.length}`}
-                </span>
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-black text-slate-900 tracking-tight">Device Access Requests</h2>
+                {deviceRequests.length > 0 && (
+                  <span className="px-2.5 py-1 rounded-full text-xs font-black uppercase tracking-widest bg-red-100 text-red-600 border border-red-200 animate-pulse">
+                    Priority: {deviceRequests.length} Pending
+                  </span>
+                )}
               </div>
+              <p className="text-sm font-medium text-slate-500 mt-1">
+                Approve or reject recent unrecognized device logins
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-4">
             {deviceRequests.length > 10 && (
               <button
                 onClick={() => setShowAllRequests(!showAllRequests)}
-                className="text-xs text-amber-600 hover:text-amber-700 font-bold uppercase tracking-wider bg-amber-50 px-2 py-0.5 rounded border border-amber-100"
+                className="text-xs text-amber-700 hover:text-amber-800 font-bold uppercase tracking-wider bg-amber-50 hover:bg-amber-100 px-4 py-2 rounded-lg border border-amber-200 transition-colors"
               >
                 {showAllRequests ? 'View Less' : 'View All'}
               </button>
-            )}
-            {deviceRequests.length > 0 && (
-              <span className="px-2 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
-                {deviceRequests.length} Pending
-              </span>
             )}
           </div>
         </div>
@@ -629,7 +689,7 @@ export default function Users() {
                               alert(err.message)
                             }
                           }}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors"
+                          className="px-4 py-2 rounded-lg bg-green-600 text-white text-xs font-bold hover:bg-green-700 transition-colors shadow-sm"
                         >
                           Approve
                         </button>
@@ -648,7 +708,7 @@ export default function Users() {
                               alert(err.message)
                             }
                           }}
-                          className="px-3 py-1.5 rounded-lg bg-white text-red-700 border border-red-100 text-xs font-semibold hover:bg-red-50 transition-colors"
+                          className="px-4 py-2 rounded-lg bg-white text-red-500 border border-red-300 text-xs font-bold hover:bg-red-50 transition-colors shadow-sm"
                         >
                           Reject
                         </button>
@@ -786,6 +846,39 @@ export default function Users() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Disable Confirmation Modal */}
+      {userToToggle && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-sm rounded-[24px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 mb-6">
+                <AlertTriangle className="h-8 w-8 text-red-600" aria-hidden="true" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">Are you sure?</h3>
+              <p className="text-sm text-slate-500">
+                This user (<strong className="text-slate-700">{userToToggle.username}</strong>) will immediately lose access to the system if you disable them.
+              </p>
+            </div>
+            <div className="bg-slate-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-slate-100">
+              <button
+                type="button"
+                className="px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"
+                onClick={() => setUserToToggle(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="px-5 py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-md transition-colors"
+                onClick={() => handleToggleStatus(userToToggle)}
+              >
+                Disable
+              </button>
+            </div>
           </div>
         </div>
       )}
