@@ -9,8 +9,6 @@ import {
   Edit,
   X,
   CheckCircle2,
-  XCircle,
-  Mail,
   Power,
   KeyRound,
   Search,
