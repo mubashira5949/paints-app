@@ -69,3 +69,6 @@ setup-ssl:
 	@echo "### Reloading Nginx..."
 	docker --context beautyflex-production-server compose -f docker-compose.prod.yml exec nginx nginx -s reload
 	@echo
+
+setup-db:
+	docker --context beautyflex-production-server compose -f docker-compose.prod.yml run --rm backend node dist/scripts/setup-db.js
