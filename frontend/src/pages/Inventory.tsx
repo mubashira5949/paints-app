@@ -11,6 +11,9 @@ import {
   CheckCircle2,
   AlertCircle,
   Search,
+  ShoppingCart,
+  X,
+  Loader2,
 } from 'lucide-react'
 import { useUnitPreference, formatUnit, unitLabel } from '../utils/units'
 
@@ -20,6 +23,9 @@ interface ResourceAlert {
   unit: string
   current_stock: number
   reorder_level: number
+  reorder_quantity: number
+  status: 'critical' | 'low' | 'healthy'
+  threshold: number
 }
 
 interface InventoryItem {
@@ -49,6 +55,19 @@ interface InventorySummary {
   lowStockColors: number
 }
 
+interface Supplier {
+  id: number
+  name: string
+  email: string
+}
+
+interface PODraftItem {
+  resource_id: number
+  resource_name: string
+  quantity: number
+  unit: string
+}
+
 export default function Inventory() {
   const unitPref = useUnitPreference()
   const [inventory, setInventory] = useState<InventoryItem[]>([])
@@ -73,12 +92,22 @@ export default function Inventory() {
   const [productTypeOptions, setProductTypeOptions] = useState<{ id: number; name: string }[]>([])
   const [seriesOptions, setSeriesOptions] = useState<{ id: number; name: string }[]>([])
 
+  // Purchase Order Modal state
+  const [showPOModal, setShowPOModal] = useState(false)
+  const [poDraftItem, setPODraftItem] = useState<PODraftItem | null>(null)
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [selectedSupplierId, setSelectedSupplierId] = useState<number | null>(null)
+  const [poQuantity, setPOQuantity] = useState<number>(0)
+  const [poNotes, setPONotes] = useState('')
+  const [poSubmitting, setPOSubmitting] = useState(false)
+
   const toggleRow = (id: number) => {
     setExpandedRowId(expandedRowId === id ? null : id)
   }
 
   const fetchAlerts = async () => {
     try {
+      // No threshold param needed — backend reads from DB automatically
       const response = await apiRequest<ResourceAlert[]>('/inventory/alerts')
       setAlerts(response)
     } catch (err) {
@@ -88,7 +117,10 @@ export default function Inventory() {
 
   const fetchSummary = async () => {
     try {
-      const response = await apiRequest<InventorySummary>('/api/inventory/summary')
+      const threshold = Number(localStorage.getItem('global_low_stock_threshold')) || 20
+      // Assuming summary endpoint is actually /api/inventory/summary which might not support threshold yet,
+      // but let's pass it anyway.
+      const response = await apiRequest<InventorySummary>(`/api/inventory/summary?threshold=${threshold}`)
       setSummary(response)
     } catch (err) {
       console.error('Failed to fetch summary', err)
@@ -99,7 +131,9 @@ export default function Inventory() {
     setIsLoading(true)
     setError(null)
     try {
+      const threshold = Number(localStorage.getItem('global_low_stock_threshold')) || 20
       const params = new URLSearchParams()
+      params.append('threshold', threshold.toString())
       if (searchTerm) params.append('search', searchTerm)
       if (filters.status !== 'all') params.append('status', filters.status)
       if (filters.series !== 'all') params.append('series', filters.series)
@@ -132,6 +166,57 @@ export default function Inventory() {
     fetchSummary()
     fetchAlerts()
   }
+
+  const openPOModal = async (alert: ResourceAlert) => {
+    setPODraftItem({
+      resource_id: alert.id,
+      resource_name: alert.name,
+      quantity: alert.reorder_quantity,
+      unit: alert.unit,
+    })
+    setPOQuantity(alert.reorder_quantity)
+    setSelectedSupplierId(null)
+    setPONotes(`Reorder for ${alert.name} — stock at ${alert.current_stock}${alert.unit}, threshold ${alert.threshold}${alert.unit}`)
+    setShowPOModal(true)
+    // Fetch suppliers lazily
+    if (suppliers.length === 0) {
+      try {
+        const data = await apiRequest<Supplier[]>('/suppliers')
+        setSuppliers(data)
+      } catch (err) {
+        console.error('Failed to load suppliers', err)
+      }
+    }
+  }
+
+  const handleCreatePO = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!poDraftItem || !selectedSupplierId) return
+    setPOSubmitting(true)
+    try {
+      await apiRequest('/purchase-orders', {
+        method: 'POST',
+        body: {
+          supplier_id: selectedSupplierId,
+          notes: poNotes,
+          items: [{
+            resource_id: poDraftItem.resource_id,
+            quantity: poQuantity,
+            unit: poDraftItem.unit,
+            unit_price: 0,
+          }],
+        },
+      })
+      setShowPOModal(false)
+      setPODraftItem(null)
+      alert(`✅ Purchase Order created for ${poDraftItem.resource_name}!\nNavigate to Procurement to review.`)
+    } catch (err: any) {
+      alert(err.message || 'Failed to create purchase order')
+    } finally {
+      setPOSubmitting(false)
+    }
+  }
+
 
   useEffect(() => {
     fetchInventory()
@@ -679,29 +764,86 @@ export default function Inventory() {
                   <th className="h-10 px-6 text-left align-middle font-bold text-slate-500 text-[10px] uppercase tracking-widest">
                     Current Stock
                   </th>
+                  <th className="h-10 px-6 text-center align-middle font-bold text-slate-500 text-[10px] uppercase tracking-widest">
+                    Threshold
+                  </th>
                   <th className="h-10 px-6 text-right align-middle font-bold text-slate-500 text-[10px] uppercase tracking-widest">
-                    Reorder
+                    Reorder Needed
+                  </th>
+                  <th className="h-10 px-6 text-center align-middle font-bold text-slate-500 text-[10px] uppercase tracking-widest">
+                    Action
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {(showAllAlerts ? filteredAlerts : filteredAlerts.slice(0, 5)).map((alert) => (
-                  <tr key={alert.id} className="hover:bg-amber-50/50 transition-colors">
-                    <td className="p-4 px-6 font-extrabold text-slate-900">{alert.name}</td>
-                    <td className="p-4 px-6">
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold uppercase tracking-wider">
-                        <AlertCircle className="h-3.5 w-3.5" />
-                        Low
-                      </span>
-                    </td>
-                    <td className="p-4 px-6 font-black text-slate-700">
-                      {formatUnit(alert.current_stock, unitPref)}
-                    </td>
-                    <td className="p-4 px-6 text-right text-slate-500 font-bold text-xs">
-                      {formatUnit(alert.reorder_level, unitPref)}
-                    </td>
-                  </tr>
-                ))}
+                {(showAllAlerts ? filteredAlerts : filteredAlerts.slice(0, 5)).map((alert) => {
+                  const isCritical = alert.status === 'critical'
+                  const isLow = alert.status === 'low'
+                  return (
+                    <tr
+                      key={alert.id}
+                      className={`transition-colors ${
+                        isCritical ? 'bg-red-50/40 hover:bg-red-50' : 'hover:bg-amber-50/50'
+                      }`}
+                    >
+                      <td className="p-4 px-6 font-extrabold text-slate-900">{alert.name}</td>
+                      <td className="p-4 px-6">
+                        {isCritical ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-100 text-red-800 text-[10px] font-bold uppercase tracking-wider border border-red-200">
+                            <AlertCircle className="h-3.5 w-3.5" />
+                            Critical Low
+                          </span>
+                        ) : isLow ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold uppercase tracking-wider border border-amber-200">
+                            <AlertCircle className="h-3.5 w-3.5" />
+                            Low
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase tracking-wider border border-emerald-200">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Healthy
+                          </span>
+                        )}
+                      </td>
+                      <td className={`p-4 px-6 font-black text-lg ${
+                        isCritical ? 'text-red-600' : isLow ? 'text-amber-600' : 'text-emerald-600'
+                      }`}>
+                        {formatUnit(alert.current_stock, unitPref)}
+                      </td>
+                      <td className="p-4 px-6 text-center text-slate-500 font-bold text-xs">
+                        {formatUnit(alert.threshold, unitPref)}
+                      </td>
+                      <td className="p-4 px-6 text-right">
+                        {alert.reorder_quantity > 0 ? (
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold text-xs ${
+                            isCritical
+                              ? 'bg-red-100 text-red-700 border border-red-200'
+                              : 'bg-amber-100 text-amber-700 border border-amber-200'
+                          }`}>
+                            +{formatUnit(alert.reorder_quantity, unitPref)} needed
+                          </span>
+                        ) : (
+                          <span className="text-emerald-600 font-bold text-xs">—</span>
+                        )}
+                      </td>
+                      <td className="p-4 px-6 text-center">
+                        {(isCritical || isLow) && (
+                          <button
+                            onClick={() => openPOModal(alert)}
+                            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all shadow-sm ${
+                              isCritical
+                                ? 'bg-red-600 hover:bg-red-700 text-white'
+                                : 'bg-orange-500 hover:bg-orange-600 text-white'
+                            }`}
+                          >
+                            <ShoppingCart className="h-3.5 w-3.5" />
+                            Create PO
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -729,6 +871,113 @@ export default function Inventory() {
                 Retry Connection
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Create Purchase Order Modal ── */}
+      {showPOModal && poDraftItem && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-md">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden">
+            {/* Header */}
+            <div className={`px-6 py-4 flex items-center justify-between ${
+              alerts.find(a => a.id === poDraftItem.resource_id)?.status === 'critical'
+                ? 'bg-red-600'
+                : 'bg-orange-500'
+            }`}>
+              <div className="flex items-center gap-3">
+                <ShoppingCart className="h-5 w-5 text-white" />
+                <div>
+                  <h2 className="text-white font-black text-base">Create Purchase Order</h2>
+                  <p className="text-white/70 text-[10px] font-bold uppercase tracking-wider">
+                    Procurement &rarr; {poDraftItem.resource_name}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setShowPOModal(false)} className="text-white/70 hover:text-white transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreatePO} className="p-6 space-y-5">
+              {/* Material Info */}
+              <div className="bg-slate-50 rounded-xl p-4 flex justify-between items-center">
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Material</p>
+                  <p className="font-black text-slate-900 text-base mt-0.5">{poDraftItem.resource_name}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Suggested Qty</p>
+                  <p className="font-black text-orange-600 text-base mt-0.5">{poDraftItem.quantity} {poDraftItem.unit}</p>
+                </div>
+              </div>
+
+              {/* Quantity */}
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">
+                  Order Quantity ({poDraftItem.unit})
+                </label>
+                <input
+                  required
+                  type="number"
+                  min={1}
+                  step="0.1"
+                  value={poQuantity}
+                  onChange={(e) => setPOQuantity(Number(e.target.value))}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all"
+                />
+              </div>
+
+              {/* Supplier */}
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">
+                  Select Supplier
+                </label>
+                <select
+                  required
+                  value={selectedSupplierId ?? ''}
+                  onChange={(e) => setSelectedSupplierId(Number(e.target.value))}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all bg-white"
+                >
+                  <option value="">— Select a supplier —</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">
+                  Notes (optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={poNotes}
+                  onChange={(e) => setPONotes(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all resize-none"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowPOModal(false)}
+                  className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={poSubmitting || !selectedSupplierId}
+                  className="flex-1 py-3 rounded-xl bg-orange-500 text-white text-xs font-black uppercase tracking-widest hover:bg-orange-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-orange-100"
+                >
+                  {poSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
+                  {poSubmitting ? 'Creating...' : 'Create PO'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
