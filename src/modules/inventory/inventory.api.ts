@@ -45,7 +45,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                 const totalsResult = await fastify.db.query(totalsQuery);
                 const totals = totalsResult.rows[0];
 
-                const { threshold } = request.query as any;
+                const threshold = (request.query as any)?.threshold;
                 // Low Stock Colors Count
                 let lowStockQuery;
                 let paramVals: any[] = [];

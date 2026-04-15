@@ -24,7 +24,7 @@ export default async function (fastifyRaw: FastifyInstance) {
             })
         },
         handler: async (request, reply) => {
-            const { threshold } = request.query as any;
+            const threshold = (request.query as any)?.threshold;
             let client
             try {
                 // Retrieve a connection from the database pool
@@ -126,7 +126,7 @@ export default async function (fastifyRaw: FastifyInstance) {
             })
         },
         handler: async (request, reply) => {
-            const queryParam = (request.query as any).threshold
+            const queryParam = (request.query as any)?.threshold
             try {
                 // Resolve threshold: prefer query param, fallback to DB setting, fallback to 20
                 let threshold: number
