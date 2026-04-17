@@ -6,17 +6,25 @@
 import fp from 'fastify-plugin'
 import { Pool } from 'pg'
 import { FastifyInstance } from 'fastify'
+import fs from 'fs'
+import path from 'path'
 
 async function dbConnector(fastify: FastifyInstance) {
     /**
      * Create a new PostgreSQL connection pool.
      * Configuration is pulled from the DATABASE_URL environment variable.
      */
+    let sslOptions: any = { rejectUnauthorized: false }
+    if (process.env.DB_SSL_ROOT_CERT) {
+        sslOptions = {
+            rejectUnauthorized: true,
+            ca: fs.readFileSync(path.resolve(process.env.DB_SSL_ROOT_CERT)).toString()
+        }
+    }
+
     const pool = new Pool({
         connectionString: process.env.DATABASE_URL,
-        ssl: {
-            rejectUnauthorized: false
-        }
+        ssl: sslOptions
     })
 
     // Verify the database connection on startup in the background (non-blocking).
