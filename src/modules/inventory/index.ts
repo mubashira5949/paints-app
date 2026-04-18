@@ -18,7 +18,13 @@ export default async function (fastifyRaw: FastifyInstance) {
      */
     fastify.get('/finished-stock', {
         preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'sales', 'client'])],
+        schema: {
+            querystring: Type.Object({
+                threshold: Type.Optional(Type.Number())
+            })
+        },
         handler: async (request, reply) => {
+            const threshold = (request.query as any)?.threshold;
             let client
             try {
                 // Retrieve a connection from the database pool
@@ -38,7 +44,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                             c.business_code,
                             c.hsn_code,
                             c.tags,
-                            c.min_threshold_kg,
+                            ${threshold !== undefined ? `${threshold}::numeric` : 'c.min_threshold_kg'} AS active_threshold,
                             COALESCE(SUM(fs.quantity_units), 0)::integer AS total_quantity_units,
                             COALESCE(SUM(fs.quantity_units * fs.pack_size_kg), 0)::numeric AS total_mass_kg,
                             json_agg(
@@ -76,9 +82,9 @@ export default async function (fastifyRaw: FastifyInstance) {
                         ls.last_sale_units,
                         ls.last_sale_at,
                         CASE 
-                            WHEN i.total_mass_kg = 0 AND i.min_threshold_kg > 0 THEN 'critical'
-                            WHEN i.total_mass_kg < (i.min_threshold_kg * 0.2) AND i.min_threshold_kg > 0 THEN 'critical'
-                            WHEN i.total_mass_kg < i.min_threshold_kg THEN 'low'
+                            WHEN i.total_mass_kg = 0 AND i.active_threshold > 0 THEN 'critical'
+                            WHEN i.total_mass_kg < (i.active_threshold * 0.2) AND i.active_threshold > 0 THEN 'critical'
+                            WHEN i.total_mass_kg < i.active_threshold THEN 'low'
                             ELSE 'healthy'
                         END AS stock_status
                     FROM inventory_summary i
@@ -114,16 +120,62 @@ export default async function (fastifyRaw: FastifyInstance) {
      */
     fastify.get('/alerts', {
         preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
+        schema: {
+            querystring: Type.Object({
+                threshold: Type.Optional(Type.Number())
+            })
+        },
         handler: async (request, reply) => {
+            const queryParam = (request.query as any)?.threshold
             try {
-                const query = `
+                // Resolve threshold: prefer query param, fallback to DB setting, fallback to 20
+                let threshold: number
+                if (queryParam !== undefined) {
+                    threshold = Number(queryParam)
+                } else {
+                    const settingRes = await fastify.db.query(
+                        "SELECT value FROM app_settings WHERE key = 'low_stock_threshold'"
+                    )
+                    threshold = settingRes.rows.length > 0 ? Number(settingRes.rows[0].value) : 20
+                }
+
+                // Fetch all raw materials and compute status + reorder dynamically
+                const result = await fastify.db.query(`
                     SELECT id, name, unit, current_stock, reorder_level
                     FROM resources
-                    WHERE current_stock <= reorder_level
-                    ORDER BY name ASC;
-                `
-                const result = await fastify.db.query(query)
-                return reply.send(result.rows)
+                    ORDER BY name ASC
+                `)
+
+                const rows = result.rows.map((r: any) => {
+                    const stock = Number(r.current_stock)
+                    const reorder_quantity = Math.max(0, threshold - stock)
+
+                    let status: string
+                    if (stock === 0) {
+                        status = 'critical'
+                    } else if (stock < threshold) {
+                        status = 'low'
+                    } else if (stock === threshold) {
+                        status = 'low'
+                    } else {
+                        status = 'healthy'
+                    }
+
+                    return {
+                        id: r.id,
+                        name: r.name,
+                        unit: r.unit,
+                        current_stock: stock,
+                        reorder_level: Number(r.reorder_level),
+                        reorder_quantity,
+                        status,
+                        threshold
+                    }
+                })
+
+                // Only return rows that need attention (not healthy) for the alerts section
+                const alertRows = rows.filter((r: any) => r.status !== 'healthy')
+                return reply.send(alertRows)
             } catch (err: any) {
                 fastify.log.error(err)
                 return reply.status(500).send({

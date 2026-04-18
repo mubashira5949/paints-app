@@ -46,6 +46,12 @@ export default function Settings() {
   const [packagingSizes, setPackagingSizes] = useState<string>(
     localStorage.getItem(PACKAGING_SIZES_KEY) || '0.5kg, 1kg, 5kg, 10kg, 20kg',
   )
+  
+  const LOW_STOCK_THRESHOLD_KEY = 'global_low_stock_threshold'
+  const [lowStockThreshold, setLowStockThreshold] = useState<number>(
+    Number(localStorage.getItem(LOW_STOCK_THRESHOLD_KEY)) || 20
+  )
+  const [thresholdLoading, setThresholdLoading] = useState(false)
 
   const fetchProductTypes = async () => {
     setIsLoadingTypes(true)
@@ -59,8 +65,22 @@ export default function Settings() {
     }
   }
 
+  const fetchThreshold = async () => {
+    setThresholdLoading(true)
+    try {
+      const data = await apiRequest<{ threshold: number }>('/settings/threshold')
+      setLowStockThreshold(data.threshold)
+      localStorage.setItem(LOW_STOCK_THRESHOLD_KEY, data.threshold.toString())
+    } catch (err) {
+      console.error('Failed to fetch threshold from server, using local value', err)
+    } finally {
+      setThresholdLoading(false)
+    }
+  }
+
   useEffect(() => {
     fetchProductTypes()
+    fetchThreshold()
   }, [])
 
   const addProductType = async () => {
@@ -100,8 +120,21 @@ export default function Settings() {
     setHasUnsavedChanges(true)
   }
 
-  const handleSave = (requiresRestart = false) => {
+  const handleSave = async (requiresRestart = false) => {
     localStorage.setItem(PACKAGING_SIZES_KEY, packagingSizes)
+    localStorage.setItem(LOW_STOCK_THRESHOLD_KEY, lowStockThreshold.toString())
+
+    // Persist threshold to backend DB
+    try {
+      await apiRequest('/settings/threshold', {
+        method: 'PUT',
+        body: { threshold: lowStockThreshold }
+      })
+    } catch (err: any) {
+      alert(err.message || 'Failed to save threshold to server')
+      return
+    }
+
     setSaveStatus(requiresRestart ? 'restart' : 'success')
     setHasUnsavedChanges(false)
 
@@ -444,10 +477,13 @@ export default function Settings() {
                   </div>
                   <div className="flex items-center gap-2 w-full">
                     <input
-                      onChange={handleChange}
+                      value={lowStockThreshold}
+                      onChange={(e) => {
+                        setLowStockThreshold(Number(e.target.value))
+                        handleChange()
+                      }}
                       type="number"
                       className="border border-gray-300 rounded-lg px-3 py-2 text-sm flex-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm"
-                      defaultValue="20"
                     />
                     <span className="text-sm text-gray-500 font-medium">units</span>
                   </div>

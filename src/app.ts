@@ -305,6 +305,18 @@ const start = async () => {
 
                         -- 12. Add loss_reason to production_runs for yield documentation
                         ALTER TABLE production_runs ADD COLUMN IF NOT EXISTS loss_reason TEXT;
+
+                        -- 13. App-wide settings table (key-value store)
+                        CREATE TABLE IF NOT EXISTS app_settings (
+                            key VARCHAR(100) PRIMARY KEY,
+                            value TEXT NOT NULL,
+                            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                        );
+
+                        -- Seed default low stock threshold
+                        INSERT INTO app_settings (key, value)
+                        VALUES ('low_stock_threshold', '20')
+                        ON CONFLICT (key) DO NOTHING;
                     `)
                     return;
                 } catch (err) {

@@ -27,6 +27,9 @@ export default async function (fastifyRaw: FastifyInstance) {
                     message: Type.String()
                 })
             },
+            querystring: Type.Object({
+                threshold: Type.Optional(Type.Number())
+            }),
             security: [{ bearerAuth: [] }]
         },
         preHandler: [fastify.authenticate],
@@ -42,18 +45,36 @@ export default async function (fastifyRaw: FastifyInstance) {
                 const totalsResult = await fastify.db.query(totalsQuery);
                 const totals = totalsResult.rows[0];
 
+                const threshold = (request.query as any)?.threshold;
                 // Low Stock Colors Count
-                const lowStockQuery = `
-                    SELECT COUNT(*) as "lowStockColors"
-                    FROM (
-                        SELECT c.id
-                        FROM colors c
-                        LEFT JOIN finished_stock fs ON c.id = fs.color_id
-                        GROUP BY c.id, c.min_threshold_kg
-                        HAVING COALESCE(SUM(fs.quantity_units * fs.pack_size_kg), 0) < c.min_threshold_kg
-                    ) AS low_stock_colors
-                `;
-                const lowStockResult = await fastify.db.query(lowStockQuery);
+                let lowStockQuery;
+                let paramVals: any[] = [];
+                if (threshold !== undefined) {
+                    lowStockQuery = `
+                        SELECT COUNT(*) as "lowStockColors"
+                        FROM (
+                            SELECT c.id
+                            FROM colors c
+                            LEFT JOIN finished_stock fs ON c.id = fs.color_id
+                            GROUP BY c.id
+                            HAVING COALESCE(SUM(fs.quantity_units * fs.pack_size_kg), 0) < $1::numeric
+                        ) AS low_stock_colors
+                    `;
+                    paramVals = [threshold];
+                } else {
+                    lowStockQuery = `
+                        SELECT COUNT(*) as "lowStockColors"
+                        FROM (
+                            SELECT c.id
+                            FROM colors c
+                            LEFT JOIN finished_stock fs ON c.id = fs.color_id
+                            GROUP BY c.id, c.min_threshold_kg
+                            HAVING COALESCE(SUM(fs.quantity_units * fs.pack_size_kg), 0) < c.min_threshold_kg
+                        ) AS low_stock_colors
+                    `;
+                }
+                
+                const lowStockResult = await fastify.db.query(lowStockQuery, paramVals);
                 const lowStockColors = parseInt(lowStockResult.rows[0].lowStockColors);
 
                 return reply.status(200).send({
@@ -82,7 +103,8 @@ export default async function (fastifyRaw: FastifyInstance) {
                 status: Type.Optional(Type.String()),
                 packSize: Type.Optional(Type.String()),
                 series: Type.Optional(Type.String()),
-                productType: Type.Optional(Type.String())
+                productType: Type.Optional(Type.String()),
+                threshold: Type.Optional(Type.Number())
             }),
             security: [{ bearerAuth: [] }],
             response: {
@@ -120,7 +142,7 @@ export default async function (fastifyRaw: FastifyInstance) {
             let query = '';
             let params: any[] = [];
             try {
-                const { search, status, packSize, series, productType } = request.query as any;
+                const { search, status, packSize, series, productType, threshold } = request.query as any;
 
                 query = `
                     WITH color_stock AS (
@@ -133,6 +155,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                             c.description,
                             c.tags,
                             c.min_threshold_kg,
+                            ${threshold !== undefined ? `${threshold}::numeric` : 'c.min_threshold_kg'} as active_threshold,
                             COALESCE(json_agg(DISTINCT pt.name) FILTER (WHERE pt.name IS NOT NULL), '[]'::json) as product_types,
                             COALESCE(json_agg(DISTINCT psc.name) FILTER (WHERE psc.name IS NOT NULL), '[]'::json) as product_series,
                             COALESCE(json_agg(DISTINCT ig.name) FILTER (WHERE ig.name IS NOT NULL), '[]'::json) as ink_grades,
@@ -159,7 +182,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                     )
                     SELECT *,
                            CASE 
-                               WHEN mass < min_threshold_kg THEN 'low'
+                               WHEN mass < active_threshold THEN 'low'
                                ELSE 'healthy'
                            END as status
                     FROM color_stock
@@ -176,7 +199,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                 }
 
                 if (status) {
-                    query += ` AND (CASE WHEN mass < min_threshold_kg THEN 'low' ELSE 'healthy' END) = $${paramIndex++}`;
+                    query += ` AND (CASE WHEN mass < active_threshold THEN 'low' ELSE 'healthy' END) = $${paramIndex++}`;
                     params.push(status);
                 }
 

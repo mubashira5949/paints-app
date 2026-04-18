@@ -176,4 +176,50 @@ export default async function (fastifyRaw: FastifyInstance) {
             }
         }
     })
+
+    /**
+     * GET /settings/threshold
+     * Returns the global low stock alert threshold.
+     */
+    fastify.get('/threshold', {
+        preHandler: [fastify.authenticate],
+        handler: async (request, reply) => {
+            try {
+                const result = await fastify.db.query(
+                    "SELECT value FROM app_settings WHERE key = 'low_stock_threshold'"
+                )
+                const threshold = result.rows.length > 0 ? Number(result.rows[0].value) : 20
+                return reply.send({ threshold })
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to fetch threshold' })
+            }
+        }
+    })
+
+    /**
+     * PUT /settings/threshold
+     * Updates the global low stock alert threshold.
+     */
+    fastify.put('/threshold', {
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
+        schema: {
+            body: Type.Object({ threshold: Type.Number({ minimum: 0 }) })
+        },
+        handler: async (request, reply) => {
+            const { threshold } = request.body
+            try {
+                await fastify.db.query(
+                    `INSERT INTO app_settings (key, value, updated_at)
+                     VALUES ('low_stock_threshold', $1, NOW())
+                     ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
+                    [threshold.toString()]
+                )
+                return reply.send({ threshold, message: 'Threshold updated successfully' })
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to update threshold' })
+            }
+        }
+    })
 }
