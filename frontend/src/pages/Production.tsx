@@ -988,9 +988,26 @@ export default function Production() {
                 <div className="space-y-1"><label className="text-xs font-black uppercase text-slate-400">Actual Yield</label><input type="number" step="0.01" className="w-full p-4 text-2xl font-black border rounded-xl text-emerald-600" value={actualYield} onChange={(e) => setActualYield(e.target.value)} /></div>
                 <div className="space-y-1"><label className="text-xs font-black uppercase text-slate-400">Yield Loss</label><div className="w-full p-4 text-2xl font-black border rounded-xl bg-slate-50 text-slate-400">{Math.max(0, toDisplayValue(completingRun.targetQty, unitPref) - (Number(actualYield) || 0)).toFixed(2)}</div></div>
               </div>
-              <div className="space-y-1"><label className="text-xs font-black uppercase text-slate-400">Loss Reason</label><select className="w-full p-2 border rounded-lg" value={lossReason} onChange={(e) => setLossReason(e.target.value)}><option value="Filter Loss">Filter Loss</option><option value="Spillage">Spillage</option><option value="Other">Other</option></select></div>
-              {lossReason === 'Other' && <input type="text" className="w-full p-2 border rounded-lg" placeholder="Specify reason..." value={customLossReason} onChange={(e) => setCustomLossReason(e.target.value)} required />}
-              <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setIsCompletionModalOpen(false)} className="px-6 py-2 border rounded font-bold">Cancel</button><button type="button" onClick={() => handleConfirmCompletion()} disabled={isCompleting || actualYield === ''} className="px-8 py-2 bg-emerald-600 text-white rounded font-bold">Confirm</button></div>
+              <div className="space-y-1">
+                <label className="text-xs font-black uppercase text-slate-400">Loss Reason</label>
+                <select className="w-full p-2 border rounded-lg" value={lossReason} onChange={(e) => setLossReason(e.target.value)}>
+                  <option value="Filter Loss">Filter Loss</option>
+                  <option value="Spillage">Spillage</option>
+                  <option value="Machine Breakdown">Machine Breakdown</option>
+                  <option value="Operator Error">Operator Error</option>
+                  <option value="Quality Rejection">Quality Rejection</option>
+                  <option value="Evaporation">Evaporation</option>
+                  <option value="Transfer Loss">Transfer Loss</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-black uppercase text-slate-400">
+                  {lossReason === 'Other' ? 'Custom Reason (Required)' : 'Additional Details (Optional)'}
+                </label>
+                <input type="text" className="w-full p-2 border rounded-lg" placeholder={lossReason === 'Other' ? "Specify exact reason here..." : "Add any specific context or notes..."} value={customLossReason} onChange={(e) => setCustomLossReason(e.target.value)} required={lossReason === 'Other'} />
+              </div>
+              <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setIsCompletionModalOpen(false)} className="px-6 py-2 border rounded font-bold">Cancel</button><button type="button" onClick={() => handleConfirmCompletion()} disabled={isCompleting || actualYield === '' || (lossReason === 'Other' && !customLossReason)} className="px-8 py-2 bg-emerald-600 text-white rounded font-bold">Confirm</button></div>
             </form>
           </div>
         </div>
