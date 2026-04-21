@@ -460,11 +460,14 @@ export default function Production() {
     const formula = formulas.find((r) => r.id === Number(formulaId)) || null
     setSelectedFormula(formula)
     if (formula && Array.isArray(formula.resources)) {
-      setPlannedQuantityKg(toDisplayValue(Number(formula.batch_size_kg || 0), unitPref))
+      const initialQty = prefilledOrder && prefilledOrder.targetQty ? prefilledOrder.targetQty : Number(formula.batch_size_kg || 0)
+      setPlannedQuantityKg(toDisplayValue(initialQty, unitPref))
+      
+      const scaleFactor = initialQty / Number(formula.batch_size_kg || 1)
       setActualResources(
         formula.resources.map((res) => ({
           resource_id: res.resource_id,
-          actual_quantity_used: res.quantity_required || 0,
+          actual_quantity_used: Number((res.quantity_required * scaleFactor).toFixed(4)),
         })),
       )
     }
@@ -898,18 +901,38 @@ export default function Production() {
                 <div className="space-y-1"><label className="text-sm font-medium">Color</label><select className="w-full border rounded p-2 text-sm" value={selectedColor} onChange={(e) => setSelectedColor(Number(e.target.value))} required><option value="">Choose color...</option>{colors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                 <div className="space-y-1"><label className="text-sm font-medium">Formula</label><select className="w-full border rounded p-2 text-sm" disabled={!selectedColor} value={selectedFormula?.id || ''} onChange={(e) => handleFormulaSelect(e.target.value)} required><option value="">Choose formula...</option>{formulas.map(f => <option key={f.id} value={f.id}>{f.name} v{f.version}</option>)}</select></div>
               </div>
-              {selectedFormula && (
-                <div className="space-y-4 pt-4 border-t">
-                  <div className="flex justify-between items-center"><label className="text-sm font-bold">Planned Quantity ({unitPref})</label><input type="number" step="0.1" className="w-24 border rounded p-1 text-right font-mono" value={planned_quantity_kg} onChange={(e) => handleQuantityChange(Number(e.target.value))} /></div>
-                  <div className="max-h-48 overflow-y-auto space-y-2 text-xs">
-                    {actualResources.map((r, idx) => {
-                      const refRes = selectedFormula.resources.find(ref => ref.resource_id === r.resource_id);
-                      return (<div key={r.resource_id} className="flex justify-between items-center py-1 border-b border-dashed"><span>{refRes?.name}</span><div className="flex items-center gap-2"><input type="number" step="0.0001" className="w-20 border rounded p-1 text-right font-mono" value={r.actual_quantity_used} onChange={(e) => { const n = [...actualResources]; n[idx].actual_quantity_used = Number(e.target.value); setActualResources(n); }} /> <span className="text-slate-400 w-6">{refRes?.unit}</span></div></div>);
-                    })}
+              {selectedFormula && (() => {
+                const parsedPlannedQuantity = fromDisplayValue(planned_quantity_kg, unitPref);
+                const totalRawMaterial = actualResources.reduce((sum, r) => sum + (Number(r.actual_quantity_used) || 0), 0);
+                const rawMaterialMismatch = Math.abs(totalRawMaterial - parsedPlannedQuantity) >= 0.01;
+                return (
+                  <div className="space-y-4 pt-4 border-t">
+                    <div className="flex justify-between items-center"><label className="text-sm font-bold">Planned Quantity ({unitPref})</label><input type="number" step="0.1" className="w-24 border rounded p-1 text-right font-mono" value={planned_quantity_kg} onChange={(e) => handleQuantityChange(Number(e.target.value))} /></div>
+                    <div className="max-h-48 overflow-y-auto space-y-2 text-xs">
+                      {actualResources.map((r, idx) => {
+                        const refRes = selectedFormula.resources.find(ref => ref.resource_id === r.resource_id);
+                        return (<div key={r.resource_id} className="flex justify-between items-center py-1 border-b border-dashed"><span>{refRes?.name}</span><div className="flex items-center gap-2"><input type="number" step="0.0001" className="w-20 border rounded p-1 text-right font-mono" value={r.actual_quantity_used} onChange={(e) => { const n = [...actualResources]; n[idx].actual_quantity_used = Number(e.target.value); setActualResources(n); }} /> <span className="text-slate-400 w-6">{refRes?.unit}</span></div></div>);
+                      })}
+                    </div>
+                    {rawMaterialMismatch && (
+                      <div className="text-red-500 text-sm font-bold mt-2">
+                        Warning: Total raw material quantity ({totalRawMaterial.toFixed(2)} kg) does not match planned quantity ({parsedPlannedQuantity.toFixed(2)} kg).
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
-              <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border rounded font-bold">Cancel</button><button type="submit" disabled={!selectedFormula} className="px-6 py-2 bg-blue-600 text-white rounded font-bold flex items-center gap-2"><Play className="w-4 h-4" /> Start</button></div>
+                );
+              })()}
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border rounded font-bold">Cancel</button>
+                {(() => {
+                  const parsedPlannedQuantity = fromDisplayValue(planned_quantity_kg, unitPref);
+                  const totalRawMaterial = actualResources.reduce((sum, r) => sum + (Number(r.actual_quantity_used) || 0), 0);
+                  const rawMaterialMismatch = Math.abs(totalRawMaterial - parsedPlannedQuantity) >= 0.01;
+                  return (
+                    <button type="submit" disabled={!selectedFormula || !!(selectedFormula && rawMaterialMismatch)} className={`px-6 py-2 text-white rounded font-bold flex items-center gap-2 ${!selectedFormula || (selectedFormula && rawMaterialMismatch) ? 'bg-blue-300' : 'bg-blue-600 hover:bg-blue-700'}`}><Play className="w-4 h-4" /> Start</button>
+                  );
+                })()}
+              </div>
             </form>
           </div>
         </div>
