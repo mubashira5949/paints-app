@@ -51,7 +51,7 @@ export default function Settings() {
   const [lowStockThreshold, setLowStockThreshold] = useState<number>(
     Number(localStorage.getItem(LOW_STOCK_THRESHOLD_KEY)) || 20
   )
-  const [thresholdLoading, setThresholdLoading] = useState(false)
+
 
   const fetchProductTypes = async () => {
     setIsLoadingTypes(true)
@@ -66,15 +66,12 @@ export default function Settings() {
   }
 
   const fetchThreshold = async () => {
-    setThresholdLoading(true)
     try {
       const data = await apiRequest<{ threshold: number }>('/settings/threshold')
       setLowStockThreshold(data.threshold)
       localStorage.setItem(LOW_STOCK_THRESHOLD_KEY, data.threshold.toString())
     } catch (err) {
       console.error('Failed to fetch threshold from server, using local value', err)
-    } finally {
-      setThresholdLoading(false)
     }
   }
 
