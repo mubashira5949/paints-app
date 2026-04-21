@@ -321,8 +321,14 @@ export default function Production() {
     if (e) e.preventDefault()
     if (!completingRun) return
 
-    const finalReason =
-      lossReason === 'Other'
+    const parsedYield = Number(actualYield) || 0
+    const targetQtyDisplay = toDisplayValue(completingRun.targetQty, unitPref)
+    const computedWaste = Math.max(0, targetQtyDisplay - parsedYield)
+    const hasLoss = computedWaste > 0.001
+
+    const finalReason = !hasLoss
+      ? 'None (No Loss)'
+      : lossReason === 'Other'
         ? customLossReason || 'Custom Reason (Not specified)'
         : customLossReason
           ? `${lossReason}: ${customLossReason}`
@@ -330,9 +336,6 @@ export default function Production() {
 
     setIsCompleting(true)
     try {
-      const parsedYield = Number(actualYield) || 0
-      const targetQtyDisplay = toDisplayValue(completingRun.targetQty, unitPref)
-      const computedWaste = Math.max(0, targetQtyDisplay - parsedYield)
       await updateStatus(completingRun.id, 'completed', {
         actual_quantity_kg: fromDisplayValue(parsedYield, unitPref),
         waste_kg: fromDisplayValue(computedWaste, unitPref),
@@ -911,7 +914,7 @@ export default function Production() {
                     <div className="max-h-48 overflow-y-auto space-y-2 text-xs">
                       {actualResources.map((r, idx) => {
                         const refRes = selectedFormula.resources.find(ref => ref.resource_id === r.resource_id);
-                        return (<div key={r.resource_id} className="flex justify-between items-center py-1 border-b border-dashed"><span>{refRes?.name}</span><div className="flex items-center gap-2"><input type="number" step="0.0001" className="w-20 border rounded p-1 text-right font-mono" value={r.actual_quantity_used} onChange={(e) => { const n = [...actualResources]; n[idx].actual_quantity_used = Number(e.target.value); setActualResources(n); }} /> <span className="text-slate-400 w-6">{refRes?.unit}</span></div></div>);
+                        return (<div key={r.resource_id} className="flex justify-between items-center py-1 border-b border-dashed"><span>{refRes?.name}</span><div className="flex items-center gap-2"><input type="number" step="any" className="w-20 border rounded p-1 text-right font-mono" value={r.actual_quantity_used} onChange={(e) => { const n = [...actualResources]; n[idx].actual_quantity_used = Number(e.target.value); setActualResources(n); }} /> <span className="text-slate-400 w-6">{refRes?.unit}</span></div></div>);
                       })}
                     </div>
                     {rawMaterialMismatch && (
@@ -950,7 +953,7 @@ export default function Production() {
                 <div className="space-y-2 max-h-64 overflow-y-auto border rounded-xl p-4 bg-slate-50">
                   <p className="text-[10px] font-black uppercase text-slate-400 mb-2">Raw Material Correction</p>
                   {editActualResources.map((res, idx) => (
-                    <div key={res.resource_id} className="flex justify-between items-center border-b border-dashed py-2 last:border-0"><div className="flex flex-col"><span className="text-sm font-bold truncate max-w-[150px]">{res.name}</span><span className="text-[9px] text-slate-400 uppercase">{res.unit}</span></div><input type="number" step="0.0001" className="w-24 border rounded p-1.5 text-right font-mono" value={res.actual_quantity_used} onChange={(e) => { const n = [...editActualResources]; n[idx].actual_quantity_used = Number(e.target.value); setEditActualResources(n); }} /></div>
+                    <div key={res.resource_id} className="flex justify-between items-center border-b border-dashed py-2 last:border-0"><div className="flex flex-col"><span className="text-sm font-bold truncate max-w-[150px]">{res.name}</span><span className="text-[9px] text-slate-400 uppercase">{res.unit}</span></div><input type="number" step="any" className="w-24 border rounded p-1.5 text-right font-mono" value={res.actual_quantity_used} onChange={(e) => { const n = [...editActualResources]; n[idx].actual_quantity_used = Number(e.target.value); setEditActualResources(n); }} /></div>
                   ))}
                 </div>
               )}
@@ -984,30 +987,50 @@ export default function Production() {
           <div className="bg-white w-full max-w-lg rounded-xl shadow-2xl border relative z-10 p-8">
             <div className="flex items-center justify-between mb-6"><h3 className="text-xl font-bold">Complete Run</h3><button onClick={() => setIsCompletionModalOpen(false)}><X className="h-6 w-6" /></button></div>
             <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1"><label className="text-xs font-black uppercase text-slate-400">Actual Yield</label><input type="number" step="0.01" className="w-full p-4 text-2xl font-black border rounded-xl text-emerald-600" value={actualYield} onChange={(e) => setActualYield(e.target.value)} /></div>
-                <div className="space-y-1"><label className="text-xs font-black uppercase text-slate-400">Yield Loss</label><div className="w-full p-4 text-2xl font-black border rounded-xl bg-slate-50 text-slate-400">{Math.max(0, toDisplayValue(completingRun.targetQty, unitPref) - (Number(actualYield) || 0)).toFixed(2)}</div></div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-black uppercase text-slate-400">Loss Reason</label>
-                <select className="w-full p-2 border rounded-lg" value={lossReason} onChange={(e) => setLossReason(e.target.value)}>
-                  <option value="Filter Loss">Filter Loss</option>
-                  <option value="Spillage">Spillage</option>
-                  <option value="Machine Breakdown">Machine Breakdown</option>
-                  <option value="Operator Error">Operator Error</option>
-                  <option value="Quality Rejection">Quality Rejection</option>
-                  <option value="Evaporation">Evaporation</option>
-                  <option value="Transfer Loss">Transfer Loss</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-black uppercase text-slate-400">
-                  {lossReason === 'Other' ? 'Custom Reason (Required)' : 'Additional Details (Optional)'}
-                </label>
-                <input type="text" className="w-full p-2 border rounded-lg" placeholder={lossReason === 'Other' ? "Specify exact reason here..." : "Add any specific context or notes..."} value={customLossReason} onChange={(e) => setCustomLossReason(e.target.value)} required={lossReason === 'Other'} />
-              </div>
-              <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setIsCompletionModalOpen(false)} className="px-6 py-2 border rounded font-bold">Cancel</button><button type="button" onClick={() => handleConfirmCompletion()} disabled={isCompleting || actualYield === '' || (lossReason === 'Other' && !customLossReason)} className="px-8 py-2 bg-emerald-600 text-white rounded font-bold">Confirm</button></div>
+              {(() => {
+                const computedYieldLoss = Math.max(0, toDisplayValue(completingRun.targetQty, unitPref) - (Number(actualYield) || 0));
+                const hasLoss = computedYieldLoss > 0.001;
+                
+                return (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1"><label className="text-xs font-black uppercase text-slate-400">Actual Yield</label><input type="number" step="any" className="w-full p-4 text-2xl font-black border rounded-xl text-emerald-600" value={actualYield} onChange={(e) => setActualYield(e.target.value)} /></div>
+                      <div className="space-y-1"><label className="text-xs font-black uppercase text-slate-400">Yield Loss</label><div className="w-full p-4 text-2xl font-black border rounded-xl bg-slate-50 text-slate-400">{computedYieldLoss.toFixed(2)}</div></div>
+                    </div>
+                    {hasLoss ? (
+                      <>
+                        <div className="space-y-1">
+                          <label className="text-xs font-black uppercase text-slate-400">Loss Reason</label>
+                          <select className="w-full p-2 border rounded-lg" value={lossReason} onChange={(e) => setLossReason(e.target.value)}>
+                            <option value="Filter Loss">Filter Loss</option>
+                            <option value="Spillage">Spillage</option>
+                            <option value="Machine Breakdown">Machine Breakdown</option>
+                            <option value="Operator Error">Operator Error</option>
+                            <option value="Quality Rejection">Quality Rejection</option>
+                            <option value="Evaporation">Evaporation</option>
+                            <option value="Transfer Loss">Transfer Loss</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-black uppercase text-slate-400">
+                            {lossReason === 'Other' ? 'Custom Reason (Required)' : 'Additional Details (Optional)'}
+                          </label>
+                          <input type="text" className="w-full p-2 border rounded-lg" placeholder={lossReason === 'Other' ? "Specify exact reason here..." : "Add any specific context or notes..."} value={customLossReason} onChange={(e) => setCustomLossReason(e.target.value)} required={lossReason === 'Other'} />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="space-y-1">
+                        <label className="text-xs font-black uppercase text-slate-400">Loss Reason</label>
+                        <div className="w-full p-3 border rounded-lg bg-emerald-50 text-emerald-700 font-bold border-emerald-200 flex items-center gap-2">
+                          <CheckCircle2 className="w-5 h-5" /> Perfect Yield (No Loss)
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setIsCompletionModalOpen(false)} className="px-6 py-2 border rounded font-bold">Cancel</button><button type="button" onClick={() => handleConfirmCompletion()} disabled={isCompleting || actualYield === '' || (hasLoss && lossReason === 'Other' && !customLossReason)} className="px-8 py-2 bg-emerald-600 text-white rounded font-bold">Confirm</button></div>
+                  </>
+                );
+              })()}
             </form>
           </div>
         </div>
