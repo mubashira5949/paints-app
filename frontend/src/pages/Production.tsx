@@ -954,7 +954,24 @@ export default function Production() {
                   ))}
                 </div>
               )}
-              <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setIsEditModalOpen(false)} className="px-6 py-2 border rounded font-bold">Cancel</button><button type="submit" disabled={isEditing || isLoadingEditData} className="px-8 py-2 bg-blue-600 text-white rounded font-bold">Save Changes</button></div>
+              {(() => {
+                const parsedEditTarget = fromDisplayValue(editTargetQty, unitPref);
+                const totalEditMaterial = (editActualResources || []).reduce((sum, r) => sum + (Number(r.actual_quantity_used) || 0), 0);
+                const editMismatch = Math.abs(totalEditMaterial - parsedEditTarget) >= 0.01;
+                return (
+                  <>
+                    {editMismatch && !isLoadingEditData && (
+                      <div className="text-red-500 text-sm font-bold mt-2">
+                        Warning: Total raw material quantity ({totalEditMaterial.toFixed(2)} kg) does not match planned quantity ({parsedEditTarget.toFixed(2)} kg).
+                      </div>
+                    )}
+                    <div className="flex justify-end gap-3 pt-4 border-t">
+                      <button type="button" onClick={() => setIsEditModalOpen(false)} className="px-6 py-2 border rounded font-bold">Cancel</button>
+                      <button type="submit" disabled={isEditing || isLoadingEditData || editMismatch} className={`px-8 py-2 text-white rounded font-bold ${isEditing || isLoadingEditData || editMismatch ? 'bg-blue-300' : 'bg-blue-600 hover:bg-blue-700'}`}>Save Changes</button>
+                    </div>
+                  </>
+                );
+              })()}
             </form>
           </div>
         </div>
