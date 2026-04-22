@@ -308,7 +308,7 @@ export default function ProductionRunForm() {
                 No formulas found for this color.
                 {['manager', 'admin'].includes(operators.find(op => op.id === selectedOperator)?.role || 'operator') ? (
                   <span className="block mt-0.5">
-                    Please <button type="button" onClick={() => navigate('/formulas')} className="underline font-bold text-amber-800">create a recipe</button> to proceed.
+                    Please <button type="button" onClick={() => navigate('/formulas', { state: { selectedColorId: selectedColor, openCreateFormula: true } })} className="underline font-bold text-amber-800">create a recipe</button>.
                   </span>
                 ) : (
                   <span className="block mt-0.5">Please ask a manager to create a recipe.</span>
@@ -357,7 +357,7 @@ export default function ProductionRunForm() {
               type="number"
               min="0.01"
               step="0.01"
-              value={targetQty}
+              value={targetQty === '' || targetQty === '0' ? '' : targetQty}
               onChange={(e) => setTargetQty(e.target.value)}
               placeholder="e.g. 100"
               required
