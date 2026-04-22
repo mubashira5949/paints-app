@@ -91,6 +91,7 @@ interface ProductDemand {
   total_qty_kg: number
   order_count: number
   client_names?: string[]
+  inventory_stock_kg?: number
   required_packs?: { pack_size_kg: number; quantity: number }[]
   detailed_orders?: {
     order_id: number
@@ -676,14 +677,31 @@ export default function Production() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {(showAllDemand ? demand : demand.slice(0, 4)).map((item) => {
                       const activeRunForColor = activeRuns.find((r) => r.color === item.color_name);
-                      const prodStatus = activeRunForColor ? activeRunForColor.status : null;
+                      let prodStatus = activeRunForColor ? activeRunForColor.status : null;
+                      if (activeRunForColor) {
+                        const packaged = (activeRunForColor.packaging || []).reduce((s, p) => s + (p.pack_size_kg * p.quantity_units), 0);
+                        const batchVolume = activeRunForColor.actual_quantity_kg ?? activeRunForColor.targetQty;
+                        const isFullyPacked = (batchVolume - packaged) <= 0.01;
+                        if ((prodStatus === 'completed' || prodStatus === 'packaging') && isFullyPacked && (activeRunForColor.packaging || []).length > 0) {
+                          prodStatus = 'packed';
+                        }
+                      }
+                      
+                      const detailedOrdersSorted = [...(item.detailed_orders || [])].sort((a, b) => new Date(b.order_date).getTime() - new Date(a.order_date).getTime());
+                      
+                      const getStatusClass = (status: string | null) => {
+                        if (!status) return 'bg-amber-50 text-amber-600 border-amber-100';
+                        if (status === 'packed' || status === 'completed') return 'bg-emerald-50 text-emerald-600 border-emerald-100';
+                        return 'bg-blue-50 text-blue-600 border-blue-100';
+                      };
+
                       return (
                         <div key={item.color_id} className={`relative group bg-white p-3 rounded-xl border border-slate-100 hover:border-emerald-300 hover:shadow-xl transition-all duration-300 ${expandedDemand === item.color_id ? 'z-[100] ring-4 ring-emerald-400/20 shadow-2xl scale-[1.02]' : 'z-auto'}`}>
                           <div className="flex items-center gap-2 mb-2">
                             <div className="h-7 w-7 rounded-md shrink-0 border border-white shadow-sm" style={{ backgroundColor: colors.find((c) => c.id === item.color_id)?.color_code || '#cbd5e1' }} />
                             <h4 className="font-black text-slate-900 text-xs leading-tight truncate flex-1">{item.color_name}</h4>
                             <div className="flex items-center gap-1.5 ml-auto">
-                              <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border ${prodStatus ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                              <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border ${getStatusClass(prodStatus)}`}>
                                 {prodStatus ? (prodStatus.charAt(0).toUpperCase() + prodStatus.slice(1)) : 'Pending'}
                               </span>
                               <div className="bg-emerald-50 text-emerald-600 rounded-lg p-1.5 cursor-pointer hover:bg-emerald-100" onClick={() => setExpandedDemand(expandedDemand === item.color_id ? null : item.color_id)}>
@@ -702,7 +720,7 @@ export default function Production() {
                             <div className="absolute top-[calc(100%+8px)] left-0 z-[110] w-64 sm:w-80 bg-white shadow-2xl border border-slate-200 rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-4 duration-200">
                               <div className="bg-emerald-900 px-4 py-3 flex justify-between items-center text-white"><span className="text-[11px] font-black uppercase">Order Breakdown</span><button onClick={() => setExpandedDemand(null)}><X className="h-3.5 w-3.5" /></button></div>
                               <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 p-3 bg-white">
-                                {item.detailed_orders?.map((o, idx) => (
+                                {detailedOrdersSorted.map((o, idx) => (
                                   <div key={idx} className="py-3 px-3 hover:bg-slate-50 transition-all rounded-xl mb-2 border border-slate-100 bg-white shadow-sm">
                                     <div className="flex justify-between items-start mb-2 pb-2 border-b border-slate-50">
                                       <div className="flex flex-col"><span className="text-[10px] font-black text-emerald-600 uppercase">Client</span><p className="text-sm font-black text-slate-800 italic truncate max-w-[120px]">{o.client_name || 'Guest'}</p></div>
@@ -714,7 +732,21 @@ export default function Production() {
                                     </div>
                                     <div className="bg-emerald-600 p-2 rounded-xl flex justify-between items-center shadow-lg"><span className="text-[10px] font-black text-white/90 uppercase">Total</span><span className="text-sm font-black text-white">{formatUnit(o.quantity_kg || 0, unitPref)}</span></div>
                                     {canManageProduction && (
-                                      <button onClick={() => { setSelectedColor(item.color_id); setPrefilledOrder({ orderId: o.order_id, clientName: o.client_name, orderDate: o.order_date, targetQty: o.quantity_kg }); setIsModalOpen(true); setExpandedDemand(null); }} className="w-full mt-2 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase rounded-lg">Plan Batch</button>
+                                      <div className="flex flex-col gap-1.5 mt-2">
+                                        {(item.inventory_stock_kg || 0) >= (o.quantity_kg || 0) && (
+                                          <button onClick={async () => {
+                                            try {
+                                              await apiRequest(`/sales/orders/${o.order_id}/direct-fulfill`, { method: 'POST' });
+                                              const updatedDemand = await apiRequest<ProductDemand[]>('/sales/orders/demand');
+                                              setDemand(updatedDemand);
+                                              setExpandedDemand(null);
+                                            } catch (e) {
+                                              alert('Failed to pack from inventory');
+                                            }
+                                          }} className="w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black uppercase rounded-lg">Pack Direct from Inventory</button>
+                                        )}
+                                        <button onClick={() => { setSelectedColor(item.color_id); setPrefilledOrder({ orderId: o.order_id, clientName: o.client_name, orderDate: o.order_date, targetQty: o.quantity_kg }); setIsModalOpen(true); setExpandedDemand(null); }} className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase rounded-lg">Plan Batch</button>
+                                      </div>
                                     )}
                                   </div>
                                 ))}

@@ -304,6 +304,57 @@ export default async function (fastifyRaw: FastifyInstance) {
     })
 
     /**
+     * POST /sales/orders/:id/direct-fulfill
+     * Fulfills an order directly from existing inventory.
+     */
+    fastify.post('/orders/:id/direct-fulfill', {
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'sales', 'operator'])],
+        handler: async (request, reply) => {
+            const { id } = request.params as any
+            const user = (request as any).user as { id: number }
+            let client
+            try {
+                client = await fastify.db.connect()
+                await client.query('BEGIN')
+
+                const orderRes = await client.query('SELECT status FROM client_orders WHERE id = $1', [id])
+                if (orderRes.rows.length === 0) throw new Error('Order not found')
+                if (orderRes.rows[0].status !== 'pending') throw new Error('Order is not pending')
+
+                const itemsRes = await client.query('SELECT color_id, pack_size_kg, quantity FROM client_order_items WHERE order_id = $1', [id])
+                
+                for (const item of itemsRes.rows) {
+                    await client.query(
+                        `INSERT INTO finished_stock_transactions 
+                         (color_id, pack_size_kg, quantity_units, quantity_kg, transaction_type, notes, created_by)
+                         VALUES ($1, $2, $3, $4, 'sale', 'Directly packed and fulfilled', $5)`,
+                        [item.color_id, item.pack_size_kg, -item.quantity, -(item.pack_size_kg * item.quantity), user.id]
+                    )
+                    
+                    await client.query(
+                        `INSERT INTO finished_stock (color_id, pack_size_kg, quantity_units) 
+                         VALUES ($1, $2, $3) 
+                         ON CONFLICT (color_id, pack_size_kg) 
+                         DO UPDATE SET quantity_units = finished_stock.quantity_units + EXCLUDED.quantity_units`,
+                        [item.color_id, item.pack_size_kg, -item.quantity]
+                    )
+                }
+
+                await client.query("UPDATE client_orders SET status = 'fulfilled', shipping_status = 'delivered' WHERE id = $1", [id])
+
+                await client.query('COMMIT')
+                return reply.send({ message: 'Order fulfilled from inventory directly' })
+            } catch (err: any) {
+                if (client) await client.query('ROLLBACK')
+                fastify.log.error(err)
+                return reply.status(500).send({ error: 'Internal Server Error', message: err.message || 'Failed to fulfill order directly' })
+            } finally {
+                if (client) client.release()
+            }
+        }
+    })
+
+    /**
      * GET /sales/orders/demand
      * Aggregates pending order quantities for production planning.
      */
@@ -320,6 +371,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                         c.business_code,
                         SUM(i.quantity * i.pack_size_kg) as total_qty_kg,
                         COUNT(DISTINCT o.id) as order_count,
+                        (SELECT COALESCE(SUM(quantity_units * pack_size_kg), 0) FROM finished_stock WHERE color_id = i.color_id) as inventory_stock_kg,
                         ARRAY_AGG(DISTINCT COALESCE(cl.name, o.client_name)) as client_names,
                         COALESCE(json_agg(
                             json_build_object(
@@ -364,6 +416,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                         color_name: row.color_name,
                         business_code: row.business_code,
                         total_qty_kg: row.total_qty_kg,
+                        inventory_stock_kg: Number(row.inventory_stock_kg),
                         order_count: row.order_count,
                         client_names: row.client_names,
                         detailed_orders: typeof row.detailed_orders === 'string' ? JSON.parse(row.detailed_orders) : (row.detailed_orders || []),
