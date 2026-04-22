@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { apiRequest } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 import {
   Plus,
   Search,
@@ -36,10 +37,13 @@ interface Resource {
 }
 
 export default function RawMaterials() {
+  const { user } = useAuth()
+  const canEditStock = user?.role === 'admin' || user?.role === 'manager'
+  
   const [resources, setResources] = useState<Resource[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false)
@@ -163,11 +167,14 @@ export default function RawMaterials() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setError(null)
     try {
+      const parsedSupplierId = formData.supplier_id ? parseInt(formData.supplier_id) : null
+      const { supplier_id: _sid, ...restFormData } = formData
       const body = {
-        ...formData,
+        ...restFormData,
         current_stock: parseFloat(formData.current_stock) || 0,
-        supplier_id: formData.supplier_id ? parseInt(formData.supplier_id) : null,
+        supplier_id: parsedSupplierId && !isNaN(parsedSupplierId) ? parsedSupplierId : null,
       }
 
       if (editingResource) {
@@ -414,6 +421,13 @@ export default function RawMaterials() {
               </button>
             </div>
 
+            {error && (
+              <div className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200 flex items-center gap-3">
+                <AlertTriangle className="h-5 w-5 text-red-600 shrink-0" />
+                <p className="text-sm font-bold text-red-700">{error}</p>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
@@ -465,13 +479,14 @@ export default function RawMaterials() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                    Current Stock ({formData.unit}) *
+                    Current Stock ({formData.unit}) {canEditStock && '*'}
                   </label>
                   <input
-                    required
+                    required={canEditStock}
                     type="number"
                     step="any"
-                    className="w-full rounded-2xl border border-slate-200 px-5 py-3 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all font-bold placeholder:text-slate-300 bg-amber-50"
+                    disabled={!canEditStock}
+                    className={`w-full rounded-2xl border border-slate-200 px-5 py-3 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all font-bold placeholder:text-slate-300 ${!canEditStock ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-amber-50'}`}
                     placeholder="e.g. 500"
                     value={formData.current_stock}
                     onChange={(e) =>
@@ -481,9 +496,15 @@ export default function RawMaterials() {
                       })
                     }
                   />
-                  <p className="text-[9px] text-amber-600 font-bold ml-1 uppercase tracking-widest">
-                    ⚠️ OVERRIDES WAREHOUSE RECORDS
-                  </p>
+                  {canEditStock ? (
+                    <p className="text-[9px] text-amber-600 font-bold ml-1 uppercase tracking-widest">
+                      ⚠️ OVERRIDES WAREHOUSE RECORDS
+                    </p>
+                  ) : (
+                    <p className="text-[9px] text-slate-400 font-bold ml-1 uppercase tracking-widest">
+                      RESTRICTED TO MANAGERS
+                    </p>
+                  )}
                 </div>
               </div>
 

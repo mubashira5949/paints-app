@@ -304,7 +304,16 @@ export default function ProductionRunForm() {
               )}
             </div>
             {selectedColor && !isLoadingFormulas && formulas.length === 0 && (
-              <p className="text-xs text-amber-600">No formulas found for this color.</p>
+              <div className="text-xs text-amber-600 font-medium">
+                No formulas found for this color.
+                {['manager', 'admin'].includes(operators.find(op => op.id === selectedOperator)?.role || 'operator') ? (
+                  <span className="block mt-0.5">
+                    Please <button type="button" onClick={() => navigate('/formulas')} className="underline font-bold text-amber-800">create a recipe</button> to proceed.
+                  </span>
+                ) : (
+                  <span className="block mt-0.5">Please ask a manager to create a recipe.</span>
+                )}
+              </div>
             )}
           </div>
 

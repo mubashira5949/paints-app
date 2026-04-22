@@ -790,6 +790,34 @@ export default async function (fastifyRaw: FastifyInstance) {
                         const formulaRes = await client.query('SELECT batch_size_kg FROM formulas WHERE id = $1', [formula_id])
                         const scaleFactor = planned_quantity_kg / formulaRes.rows[0].batch_size_kg
 
+                        // Pre-check stock for edited materials
+                        const shortages: string[] = []
+                        for (const act of actualResources) {
+                            const stockRes = await client.query(
+                                'SELECT name, current_stock FROM resources WHERE id = $1',
+                                [act.resourceId]
+                            )
+                            if (stockRes.rows.length > 0) {
+                                const resData = stockRes.rows[0]
+                                const currentStock = parseFloat(resData.current_stock || '0')
+                                const neededStock = act.quantity
+                                
+                                if (currentStock < neededStock) {
+                                    const missing = (neededStock - currentStock).toFixed(2)
+                                    shortages.push(`${resData.name} (Short ${missing} kg)`)
+                                }
+                            }
+                        }
+
+                        if (shortages.length > 0) {
+                             await client.query('ROLLBACK')
+                             client.release()
+                             return reply.status(400).send({
+                                error: 'Bad Request',
+                                message: `Failed to update production run: Insufficient stock for: ${shortages.join(', ')}`
+                            })
+                        }
+
                         for (const act of actualResources) {
                             const erRes = await client.query(
                                 'SELECT quantity_required FROM formula_resources WHERE formula_id = $1 AND resource_id = $2',
@@ -1080,7 +1108,35 @@ export default async function (fastifyRaw: FastifyInstance) {
                     })
                 }
 
-                // 3. Create the production run with status = 'planned'
+                // 3. Pre-check stock for all requested materials
+                if (actualResources && actualResources.length > 0) {
+                    const shortages: string[] = []
+                    for (const act of actualResources) {
+                        const stockRes = await fastify.db.query(
+                            'SELECT name, current_stock FROM resources WHERE id = $1',
+                            [act.resourceId]
+                        )
+                        if (stockRes.rows.length > 0) {
+                            const resData = stockRes.rows[0]
+                            const currentStock = parseFloat(resData.current_stock || '0')
+                            const neededStock = act.quantity
+                            
+                            if (currentStock < neededStock) {
+                                const missing = (neededStock - currentStock).toFixed(2)
+                                shortages.push(`${resData.name} (Short ${missing} kg)`)
+                            }
+                        }
+                    }
+
+                    if (shortages.length > 0) {
+                         return reply.status(400).send({
+                            error: 'Bad Request',
+                            message: `Insufficient stock for: ${shortages.join(', ')}`
+                        })
+                    }
+                }
+
+                // 4. Create the production run with status = 'planned'
                 const runResult = await fastify.db.query(
                     `INSERT INTO production_runs
                        (formula_id, status, planned_quantity_kg, created_by, ink_series)
@@ -1091,7 +1147,7 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                 const runId = runResult.rows[0].id
 
-                // 4. Create initial actuals if provided
+                // 5. Create initial actuals if provided
                 if (actualResources) {
                     for (const act of actualResources) {
                         const erRes = await fastify.db.query(

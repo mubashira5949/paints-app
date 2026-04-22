@@ -15,7 +15,7 @@ export default async function (fastifyRaw: FastifyInstance) {
         name: Type.String(),
         description: Type.Optional(Type.String()),
         unit: Type.String({ description: 'Unit of measurement, e.g., kg, L, g' }),
-        supplier_id: Type.Optional(Type.Integer()),
+        supplier_id: Type.Optional(Type.Union([Type.Integer(), Type.Null()])),
         color: Type.Optional(Type.String()),
         feel: Type.Optional(Type.String())
     })
@@ -25,7 +25,7 @@ export default async function (fastifyRaw: FastifyInstance) {
         description: Type.Optional(Type.String()),
         unit: Type.Optional(Type.String()),
         current_stock: Type.Optional(Type.Number()),
-        supplier_id: Type.Optional(Type.Integer()),
+        supplier_id: Type.Optional(Type.Union([Type.Integer(), Type.Null()])),
         color: Type.Optional(Type.String()),
         feel: Type.Optional(Type.String())
     })
@@ -104,7 +104,12 @@ export default async function (fastifyRaw: FastifyInstance) {
             body: CreateResourceSchema
         },
         handler: async (request, reply) => {
-            const { name, description, unit, supplier_id, color, feel } = request.body
+            const { name, description, unit, color, feel } = request.body
+            // Sanitize supplier_id: treat 0, null, undefined as NULL in DB to avoid FK violations
+            const raw_supplier_id = (request.body as any).supplier_id
+            const supplier_id = (raw_supplier_id !== null && raw_supplier_id !== undefined && Number(raw_supplier_id) > 0)
+                ? Number(raw_supplier_id)
+                : null
             try {
                 const insertResult = await fastify.db.query(
                     'INSERT INTO resources (name, description, unit, supplier_id, color, feel) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
@@ -125,10 +130,16 @@ export default async function (fastifyRaw: FastifyInstance) {
                     resource: newResource
                 })
             } catch (err: any) {
-                if (err.code === '23505') { // Unique constraint violation
+                if (err.code === '23505') {
                     return reply.status(400).send({
                         error: 'Bad Request',
                         message: 'A resource with this name already exists'
+                    })
+                }
+                if (err.code === '23503') {
+                    return reply.status(400).send({
+                        error: 'Bad Request',
+                        message: 'Invalid supplier: the selected supplier does not exist'
                     })
                 }
                 fastify.log.error(err)
@@ -152,7 +163,13 @@ export default async function (fastifyRaw: FastifyInstance) {
         },
         handler: async (request, reply) => {
             const { id } = request.params
-            const { name, description, unit, supplier_id, color, feel, current_stock } = request.body
+            const { name, description, unit, color, feel, current_stock } = request.body
+
+            // Sanitize supplier_id: treat 0, null, undefined as NULL in DB to avoid FK violations
+            const raw_supplier_id = (request.body as any).supplier_id
+            const supplier_id = (raw_supplier_id !== null && raw_supplier_id !== undefined && Number(raw_supplier_id) > 0)
+                ? Number(raw_supplier_id)
+                : null
 
             try {
                 // Build dynamic update query
@@ -230,6 +247,12 @@ export default async function (fastifyRaw: FastifyInstance) {
                     return reply.status(400).send({
                         error: 'Bad Request',
                         message: 'A resource with this name already exists'
+                    })
+                }
+                if (err.code === '23503') { // Foreign key constraint violation
+                    return reply.status(400).send({
+                        error: 'Bad Request',
+                        message: 'Invalid supplier: the selected supplier does not exist'
                     })
                 }
                 fastify.log.error(err)

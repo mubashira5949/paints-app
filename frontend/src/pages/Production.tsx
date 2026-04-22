@@ -194,7 +194,7 @@ export default function Production() {
   // New Run Form State
   const [selectedColor, setSelectedColor] = useState<number | ''>('')
   const [selectedFormula, setSelectedFormula] = useState<Formula | null>(null)
-  const [planned_quantity_kg, setPlannedQuantityKg] = useState<number>(0)
+  const [planned_quantity_kg, setPlannedQuantityKg] = useState<number | ''>('')
   const [actualResources, setActualResources] = useState<
     { resource_id: number; actual_quantity_used: number }[]
   >([])
@@ -222,6 +222,7 @@ export default function Production() {
   const [isCompleting, setIsCompleting] = useState(false)
   const [lossReason, setLossReason] = useState<string>('Filter Loss') // Default reason
   const [customLossReason, setCustomLossReason] = useState<string>('')
+  const [productionError, setProductionError] = useState<string | null>(null)
 
   // KPI metrics derived from historyRuns
   const historyMetrics = {
@@ -473,10 +474,11 @@ export default function Production() {
     }
   }
 
-  const handleQuantityChange = (qty: number) => {
+  const handleQuantityChange = (qty: number | '') => {
     setPlannedQuantityKg(qty)
-    if (selectedFormula) {
-      const scaleFactor = fromDisplayValue(qty, unitPref) / Number(selectedFormula.batch_size_kg)
+    setProductionError(null)
+    if (selectedFormula && qty !== '') {
+      const scaleFactor = fromDisplayValue(Number(qty), unitPref) / Number(selectedFormula.batch_size_kg)
       setActualResources(
         selectedFormula.resources.map((res) => ({
           resource_id: res.resource_id,
@@ -488,6 +490,7 @@ export default function Production() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setProductionError(null)
     if (!selectedFormula || !selectedColor) return
 
     try {
@@ -496,7 +499,7 @@ export default function Production() {
         body: {
           formulaId: selectedFormula.id,
           colorId: Number(selectedColor),
-          targetQty: fromDisplayValue(planned_quantity_kg, unitPref),
+          targetQty: fromDisplayValue(Number(planned_quantity_kg) || 0, unitPref),
           operatorId: user?.id ?? 1,
           actualResources: actualResources.map((r) => ({
             resourceId: r.resource_id,
@@ -513,7 +516,7 @@ export default function Production() {
       setSelectedFormula(null)
       setPrefilledOrder(null)
     } catch (err: any) {
-      alert(err.message)
+      setProductionError(err.message || 'Failed to create production run')
     }
   }
 
@@ -898,20 +901,52 @@ export default function Production() {
             <form onSubmit={handleSubmit} className="space-y-6">
               {prefilledOrder && (<div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase text-blue-700">Client Order</p><p className="text-sm font-black italic">{prefilledOrder.clientName}</p></div><button type="button" onClick={() => setPrefilledOrder(null)} className="text-xs font-bold text-blue-600 underline">Clear</button></div>)}
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1"><label className="text-sm font-medium">Color</label><select className="w-full border rounded p-2 text-sm" value={selectedColor} onChange={(e) => setSelectedColor(Number(e.target.value))} required><option value="">Choose color...</option>{colors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-                <div className="space-y-1"><label className="text-sm font-medium">Formula</label><select className="w-full border rounded p-2 text-sm" disabled={!selectedColor} value={selectedFormula?.id || ''} onChange={(e) => handleFormulaSelect(e.target.value)} required><option value="">Choose formula...</option>{formulas.map(f => <option key={f.id} value={f.id}>{f.name} v{f.version}</option>)}</select></div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Color</label>
+                  <select 
+                    className="w-full border rounded p-2 text-sm" 
+                    value={selectedColor} 
+                    onChange={(e) => {
+                      setSelectedColor(Number(e.target.value));
+                      setSelectedFormula(null);
+                      setActualResources([]);
+                      setPlannedQuantityKg('');
+                      setProductionError(null);
+                    }} 
+                    required
+                  >
+                    <option value="">Choose color...</option>
+                    {colors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Formula</label>
+                  <select className="w-full border rounded p-2 text-sm" disabled={!selectedColor} value={selectedFormula?.id || ''} onChange={(e) => { handleFormulaSelect(e.target.value); setProductionError(null); }} required><option value="">Choose formula...</option>{formulas.map(f => <option key={f.id} value={f.id}>{f.name} v{f.version}</option>)}</select>
+                  {selectedColor !== '' && formulas.length === 0 && (
+                     <div className="mt-2 text-xs text-red-600 font-medium">
+                       No recipe available.
+                       {(user?.role === 'manager' || user?.role === 'admin') ? (
+                         <span className="block mt-0.5">
+                           <button type="button" onClick={() => { setIsModalOpen(false); navigate('/formulas'); }} className="underline font-bold text-red-700">Create a recipe</button> to proceed.
+                         </span>
+                       ) : (
+                         <span className="block mt-0.5">Please ask a manager to create a recipe.</span>
+                       )}
+                     </div>
+                  )}
+                </div>
               </div>
               {selectedFormula && (() => {
-                const parsedPlannedQuantity = fromDisplayValue(planned_quantity_kg, unitPref);
+                const parsedPlannedQuantity = fromDisplayValue(Number(planned_quantity_kg) || 0, unitPref);
                 const totalRawMaterial = actualResources.reduce((sum, r) => sum + (Number(r.actual_quantity_used) || 0), 0);
                 const rawMaterialMismatch = Math.abs(totalRawMaterial - parsedPlannedQuantity) >= 0.01;
                 return (
                   <div className="space-y-4 pt-4 border-t">
-                    <div className="flex justify-between items-center"><label className="text-sm font-bold">Planned Quantity ({unitPref})</label><input type="number" step="0.1" className="w-24 border rounded p-1 text-right font-mono" value={planned_quantity_kg} onChange={(e) => handleQuantityChange(Number(e.target.value))} /></div>
+                    <div className="flex justify-between items-center"><label className="text-sm font-bold">Planned Quantity ({unitPref})</label><input type="number" step="0.1" className="w-24 border rounded p-1 text-right font-mono" value={planned_quantity_kg} onChange={(e) => handleQuantityChange(e.target.value === '' ? '' : Number(e.target.value))} /></div>
                     <div className="max-h-48 overflow-y-auto space-y-2 text-xs">
                       {actualResources.map((r, idx) => {
                         const refRes = selectedFormula.resources.find(ref => ref.resource_id === r.resource_id);
-                        return (<div key={r.resource_id} className="flex justify-between items-center py-1 border-b border-dashed"><span>{refRes?.name}</span><div className="flex items-center gap-2"><input type="number" step="0.0001" className="w-20 border rounded p-1 text-right font-mono" value={r.actual_quantity_used} onChange={(e) => { const n = [...actualResources]; n[idx].actual_quantity_used = Number(e.target.value); setActualResources(n); }} /> <span className="text-slate-400 w-6">{refRes?.unit}</span></div></div>);
+                        return (<div key={r.resource_id} className="flex justify-between items-center py-1 border-b border-dashed"><span>{refRes?.name}</span><div className="flex items-center gap-2"><input type="number" step="0.0001" className="w-20 border rounded p-1 text-right font-mono" value={r.actual_quantity_used} onChange={(e) => { const n = [...actualResources]; n[idx].actual_quantity_used = Number(e.target.value); setActualResources(n); setProductionError(null); }} /> <span className="text-slate-400 w-6">{refRes?.unit}</span></div></div>);
                       })}
                     </div>
                     {rawMaterialMismatch && (
@@ -922,10 +957,16 @@ export default function Production() {
                   </div>
                 );
               })()}
+              {productionError && (
+                <div className="bg-red-50 text-red-700 p-3 rounded-lg border border-red-200 text-sm font-bold flex items-start gap-2 mt-4">
+                  <Activity className="w-5 h-5 shrink-0 mt-0.5" />
+                  <div>{productionError}</div>
+                </div>
+              )}
               <div className="flex justify-end gap-3 pt-4 border-t">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border rounded font-bold">Cancel</button>
                 {(() => {
-                  const parsedPlannedQuantity = fromDisplayValue(planned_quantity_kg, unitPref);
+                  const parsedPlannedQuantity = fromDisplayValue(Number(planned_quantity_kg) || 0, unitPref);
                   const totalRawMaterial = actualResources.reduce((sum, r) => sum + (Number(r.actual_quantity_used) || 0), 0);
                   const rawMaterialMismatch = Math.abs(totalRawMaterial - parsedPlannedQuantity) >= 0.01;
                   return (
@@ -945,16 +986,33 @@ export default function Production() {
           <div className="bg-white w-full max-w-xl rounded-xl shadow-2xl border relative z-10 p-6">
             <div className="flex items-center justify-between mb-6"><h3 className="text-xl font-bold">Edit Batch: {editingRun.batchId}</h3><button onClick={() => setIsEditModalOpen(false)}><X className="h-6 w-6" /></button></div>
             <form onSubmit={handleEditSubmit} className="space-y-6">
-              <div className="space-y-1"><label className="text-sm font-bold">Target Quantity ({unitPref})</label><input type="number" step="0.01" className="w-full border rounded p-3 font-mono" value={editTargetQty} onChange={(e) => handleEditTargetQtyChange(Number(e.target.value))} required /></div>
+              <div className="space-y-1"><label className="text-sm font-bold">Target Quantity ({unitPref})</label><input type="number" step="0.1" className="w-full border rounded p-3 font-mono" value={editTargetQty} onChange={(e) => handleEditTargetQtyChange(Number(e.target.value))} required /></div>
               {isLoadingEditData ? <div className="p-8 text-center animate-pulse">Loading...</div> : (
                 <div className="space-y-2 max-h-64 overflow-y-auto border rounded-xl p-4 bg-slate-50">
                   <p className="text-[10px] font-black uppercase text-slate-400 mb-2">Raw Material Correction</p>
                   {editActualResources.map((res, idx) => (
-                    <div key={res.resource_id} className="flex justify-between items-center border-b border-dashed py-2 last:border-0"><div className="flex flex-col"><span className="text-sm font-bold truncate max-w-[150px]">{res.name}</span><span className="text-[9px] text-slate-400 uppercase">{res.unit}</span></div><input type="number" step="0.0001" className="w-24 border rounded p-1.5 text-right font-mono" value={res.actual_quantity_used} onChange={(e) => { const n = [...editActualResources]; n[idx].actual_quantity_used = Number(e.target.value); setEditActualResources(n); }} /></div>
+                    <div key={res.resource_id} className="flex justify-between items-center border-b border-dashed py-2 last:border-0"><div className="flex flex-col"><span className="text-sm font-bold truncate max-w-[150px]">{res.name}</span><span className="text-[9px] text-slate-400 uppercase">{res.unit}</span></div><input type="number" step="0.1" className="w-24 border rounded p-1.5 text-right font-mono" value={res.actual_quantity_used} onChange={(e) => { const n = [...editActualResources]; n[idx].actual_quantity_used = Number(e.target.value); setEditActualResources(n); }} /></div>
                   ))}
                 </div>
               )}
-              <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setIsEditModalOpen(false)} className="px-6 py-2 border rounded font-bold">Cancel</button><button type="submit" disabled={isEditing || isLoadingEditData} className="px-8 py-2 bg-blue-600 text-white rounded font-bold">Save Changes</button></div>
+              {(() => {
+                const parsedEditTarget = fromDisplayValue(editTargetQty, unitPref);
+                const totalEditMaterial = (editActualResources || []).reduce((sum, r) => sum + (Number(r.actual_quantity_used) || 0), 0);
+                const editMismatch = Math.abs(totalEditMaterial - parsedEditTarget) >= 0.01;
+                return (
+                  <>
+                    {editMismatch && !isLoadingEditData && (
+                      <div className="text-red-500 text-sm font-bold mt-2">
+                        Warning: Total raw material quantity ({totalEditMaterial.toFixed(2)} kg) does not match planned quantity ({parsedEditTarget.toFixed(2)} kg).
+                      </div>
+                    )}
+                    <div className="flex justify-end gap-3 pt-4 border-t">
+                      <button type="button" onClick={() => setIsEditModalOpen(false)} className="px-6 py-2 border rounded font-bold">Cancel</button>
+                      <button type="submit" disabled={isEditing || isLoadingEditData || editMismatch} className={`px-8 py-2 text-white rounded font-bold ${isEditing || isLoadingEditData || editMismatch ? 'bg-blue-300' : 'bg-blue-600 hover:bg-blue-700'}`}>Save Changes</button>
+                    </div>
+                  </>
+                );
+              })()}
             </form>
           </div>
         </div>
@@ -968,12 +1026,30 @@ export default function Production() {
             <div className="flex items-center justify-between mb-6"><h3 className="text-xl font-bold">Complete Run</h3><button onClick={() => setIsCompletionModalOpen(false)}><X className="h-6 w-6" /></button></div>
             <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1"><label className="text-xs font-black uppercase text-slate-400">Actual Yield</label><input type="number" step="0.01" className="w-full p-4 text-2xl font-black border rounded-xl text-emerald-600" value={actualYield} onChange={(e) => setActualYield(e.target.value)} /></div>
-                <div className="space-y-1"><label className="text-xs font-black uppercase text-slate-400">Yield Loss</label><div className="w-full p-4 text-2xl font-black border rounded-xl bg-slate-50 text-slate-400">{Math.max(0, toDisplayValue(completingRun.targetQty, unitPref) - (Number(actualYield) || 0)).toFixed(2)}</div></div>
+                <div className="space-y-1"><label className="text-xs font-black uppercase text-slate-400">Actual Yield</label><input type="number" step="0.1" className="w-full p-4 text-2xl font-black border rounded-xl text-emerald-600" value={actualYield} onChange={(e) => setActualYield(e.target.value)} /></div>
+                <div className="space-y-1"><label className="text-xs font-black uppercase text-slate-400">Yield Loss</label><div className="w-full p-4 text-2xl font-black border rounded-xl bg-slate-50 text-slate-400">{Number(Math.max(0, toDisplayValue(completingRun.targetQty, unitPref) - (Number(actualYield) || 0)).toFixed(1))}</div></div>
               </div>
-              <div className="space-y-1"><label className="text-xs font-black uppercase text-slate-400">Loss Reason</label><select className="w-full p-2 border rounded-lg" value={lossReason} onChange={(e) => setLossReason(e.target.value)}><option value="Filter Loss">Filter Loss</option><option value="Spillage">Spillage</option><option value="Other">Other</option></select></div>
-              {lossReason === 'Other' && <input type="text" className="w-full p-2 border rounded-lg" placeholder="Specify reason..." value={customLossReason} onChange={(e) => setCustomLossReason(e.target.value)} required />}
-              <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setIsCompletionModalOpen(false)} className="px-6 py-2 border rounded font-bold">Cancel</button><button type="button" onClick={() => handleConfirmCompletion()} disabled={isCompleting || actualYield === ''} className="px-8 py-2 bg-emerald-600 text-white rounded font-bold">Confirm</button></div>
+              <div className="space-y-1">
+                <label className="text-xs font-black uppercase text-slate-400">Loss Reason</label>
+                <select className="w-full p-2 border rounded-lg" value={lossReason} onChange={(e) => setLossReason(e.target.value)}>
+                  <option value="No Loss">No Loss</option>
+                  <option value="Filter Loss">Filter Loss</option>
+                  <option value="Spillage">Spillage</option>
+                  <option value="Machine Breakdown">Machine Breakdown</option>
+                  <option value="Operator Error">Operator Error</option>
+                  <option value="Quality Rejection">Quality Rejection</option>
+                  <option value="Evaporation">Evaporation</option>
+                  <option value="Transfer Loss">Transfer Loss</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-black uppercase text-slate-400">
+                  {lossReason === 'Other' ? 'Custom Reason (Required)' : 'Additional Details (Optional)'}
+                </label>
+                <input type="text" className="w-full p-2 border rounded-lg" placeholder={lossReason === 'Other' ? "Specify exact reason here..." : "Add any specific context or notes..."} value={customLossReason} onChange={(e) => setCustomLossReason(e.target.value)} required={lossReason === 'Other'} />
+              </div>
+              <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setIsCompletionModalOpen(false)} className="px-6 py-2 border rounded font-bold">Cancel</button><button type="button" onClick={() => handleConfirmCompletion()} disabled={isCompleting || actualYield === '' || (lossReason === 'Other' && !customLossReason)} className="px-8 py-2 bg-emerald-600 text-white rounded font-bold">Confirm</button></div>
             </form>
           </div>
         </div>
