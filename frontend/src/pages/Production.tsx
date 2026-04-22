@@ -766,8 +766,18 @@ export default function Production() {
                           paused: { label: 'Paused', className: 'bg-amber-100 text-amber-800', icon: Timer },
                           packaging: { label: 'Packaging', className: 'bg-purple-100 text-purple-800', icon: Box },
                           completed: { label: 'Completed', className: 'bg-emerald-100 text-emerald-800', icon: CheckCircle2 },
+                          packed: { label: 'Packed', className: 'bg-emerald-600 text-white', icon: PackageCheck },
                         }
-                        const sc = statusConfig[run.status] || statusConfig.planned;
+                        let sc = statusConfig[run.status] || statusConfig.planned;
+                        
+                        const packaged = (run.packaging || []).reduce((s, p) => s + (p.pack_size_kg * p.quantity_units), 0);
+                        const batchVolume = run.actual_quantity_kg ?? run.targetQty;
+                        const isFullyPacked = (batchVolume - packaged) <= 0.01;
+                        
+                        if ((run.status === 'completed' || run.status === 'packaging') && isFullyPacked && (run.packaging || []).length > 0) {
+                          sc = statusConfig.packed;
+                        }
+
                         const StatusIcon = sc.icon;
                         return (
                           <div key={run.id} className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl border border-slate-200 hover:border-blue-200 transition-all group">
@@ -863,13 +873,22 @@ export default function Production() {
                         })
                         .slice(0, showAllHistory ? historyRuns.length : 10)
                         .map((run) => {
-                          const sc = {
+                          let sc = {
                             completed: { label: 'Completed', className: 'bg-emerald-100 text-emerald-800', icon: CheckCircle2 },
                             packed: { label: 'Packed', className: 'bg-emerald-600 text-white', icon: PackageCheck },
                             running: { label: 'Running', className: 'bg-blue-100 text-blue-800', icon: Cog },
                             packaging: { label: 'Packaging', className: 'bg-purple-100 text-purple-800', icon: Box },
                             planned: { label: 'Planned', className: 'bg-slate-100 text-slate-700', icon: Activity },
                           }[run.status] || { label: run.status, className: 'bg-slate-100 text-slate-700', icon: Activity };
+                          
+                          const packaged = (run.packaging || []).reduce((s, p) => s + (p.pack_size_kg * p.quantity_units), 0);
+                          const batchVolume = run.actual_quantity_kg ?? run.planned_quantity_kg;
+                          const isFullyPacked = (batchVolume - packaged) <= 0.01;
+                          
+                          if ((run.status === 'completed' || run.status === 'packaging') && isFullyPacked && (run.packaging || []).length > 0) {
+                            sc = { label: 'Packed', className: 'bg-emerald-600 text-white', icon: PackageCheck };
+                          }
+
                           const StatusIcon = sc.icon;
                           return (
                             <tr key={run.id} className="hover:bg-slate-50 transition-colors border-b last:border-0 cursor-pointer" onClick={() => navigate(`/production/${run.batchId}`)}>

@@ -104,8 +104,6 @@ export default function ProductionDetail() {
   // Parse numeric id from "PR-5" → 5
   const numericId = batchId?.replace(/^PR-/i, '')
 
-  const [isPacking, setIsPacking] = useState(false)
-
   useEffect(() => {
     if (!numericId) return
     fetchRun()
@@ -120,35 +118,6 @@ export default function ProductionDetail() {
       setError(err.message ?? 'Failed to load run details')
     } finally {
       setIsLoading(false)
-    }
-  }
-
-  const handleQuickPackRemaining = async () => {
-    if (!run || !numericId) return
-    const batchVol = run.actual_quantity_kg ?? run.planned_quantity_kg
-    const currentPackaged = run.packaging.reduce((s, p) => s + Number(p.volume_kg), 0)
-    const left = batchVol - currentPackaged
-
-    if (left <= 0.01) return // Ignore tiny remainders
-
-    setIsPacking(true)
-    try {
-      await apiRequest(`/production-runs/${numericId}/packaging`, {
-        method: 'POST',
-        body: {
-          packaging_details: [
-            {
-              pack_size_kg: left,
-              quantity_units: 1,
-            },
-          ],
-        },
-      })
-      await fetchRun()
-    } catch (err: any) {
-      alert(err.message || 'Failed to pack remaining volume')
-    } finally {
-      setIsPacking(false)
     }
   }
 
@@ -174,12 +143,20 @@ export default function ProductionDetail() {
     )
   }
 
-  const sc = statusConfig[run.status] ?? statusConfig.planned
+  let sc = statusConfig[run.status] ?? statusConfig.planned
   const packaged = run.packaging.reduce((s, p) => s + Number(p.volume_kg), 0)
   const batchVolume = run.actual_quantity_kg ?? run.planned_quantity_kg
   const remainingVolume = batchVolume - packaged
   const isFullyPacked = remainingVolume <= 0.01
   const hasActuals = run.actual_resources.length > 0
+
+  if ((run.status === 'completed' || run.status === 'packaging') && isFullyPacked && run.packaging.length > 0) {
+    sc = {
+      label: 'Packed',
+      className: 'bg-emerald-600 text-white',
+      icon: PackageCheck,
+    }
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-10">
@@ -508,11 +485,10 @@ export default function ProductionDetail() {
                     {(run.status === 'completed' || run.status === 'packaging') &&
                       (run.actual_quantity_kg ?? run.planned_quantity_kg) - packaged > 0.01 && (
                         <button
-                          onClick={handleQuickPackRemaining}
-                          disabled={isPacking}
-                          className="text-[9px] font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-1.5 py-0.5 rounded border border-purple-200 transition-colors disabled:opacity-50"
+                          onClick={() => navigate(`/production/${run.batchId}/packaging`)}
+                          className="text-[9px] font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-1.5 py-0.5 rounded border border-purple-200 transition-colors"
                         >
-                          {isPacking ? 'Packing...' : 'Pack Remaining'}
+                          Pack Remaining
                         </button>
                       )}
                     <span>
