@@ -369,7 +369,7 @@ export default function ProductionDetail() {
                     <tr key={r.resource_id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 font-medium">{r.name}</td>
                       <td className="px-4 py-3 text-center font-mono text-slate-600">
-                        {Number(r.expected_qty).toFixed(4)} {r.unit}
+                        {Number(Number(r.expected_qty).toFixed(4))} {r.unit}
                       </td>
                       <td className="px-4 py-3 text-center text-muted-foreground">—</td>
                       <td className="px-4 py-3 text-center text-muted-foreground">—</td>
@@ -389,17 +389,17 @@ export default function ProductionDetail() {
                       <tr key={r.resource_id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 font-medium">{r.name}</td>
                         <td className="px-4 py-3 text-center font-mono text-slate-500">
-                          {Number(r.expected_qty).toFixed(4)} {r.unit}
+                          {Number(Number(r.expected_qty).toFixed(4))} {r.unit}
                         </td>
                         <td className="px-4 py-3 text-center font-mono font-semibold">
-                          {r.actual_qty != null ? Number(r.actual_qty).toFixed(4) : '—'} {r.unit}
+                          {r.actual_qty != null ? Number(Number(r.actual_qty).toFixed(4)) : '—'} {r.unit}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-bold ${varColor}`}
                           >
                             {v > 0 ? '+' : ''}
-                            {v.toFixed(4)} {r.unit}
+                            {Number(v.toFixed(4))} {r.unit}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-center">

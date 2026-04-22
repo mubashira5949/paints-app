@@ -842,6 +842,7 @@ export default function Production() {
                       <th className="px-4 py-3 text-center cursor-pointer hover:text-blue-600" onClick={() => { setSortKey('target'); setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc'); }}>Target {sortKey === 'target' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}</th>
                       <th className="px-4 py-3 text-center cursor-pointer hover:text-blue-600" onClick={() => { setSortKey('actual'); setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc'); }}>Actual {sortKey === 'actual' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}</th>
                       <th className="px-4 py-3 text-center cursor-pointer hover:text-blue-600" onClick={() => { setSortKey('waste'); setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc'); }}>Loss {sortKey === 'waste' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}</th>
+                      <th className="px-4 py-3 text-left">Loss Reason</th>
                       <th className="px-4 py-3 text-center">Efficiency</th>
                       <th className="px-4 py-3 text-center">Status</th>
                       <th className="px-4 py-3 text-right">Actions</th>
@@ -877,6 +878,7 @@ export default function Production() {
                               <td className="p-4 text-center font-mono text-slate-400">{formatUnit(run.planned_quantity_kg, unitPref)}</td>
                               <td className="p-4 text-center font-mono font-black">{run.actual_quantity_kg ? formatUnit(run.actual_quantity_kg, unitPref) : '—'}</td>
                               <td className="p-4 text-center font-mono text-orange-600 font-bold">{run.wasteQty ? formatUnit(run.wasteQty, unitPref) : '—'}</td>
+                              <td className="p-4 text-xs text-slate-500 truncate max-w-[120px]" title={run.lossReason || ''}>{run.lossReason || '—'}</td>
                               <td className="p-4"><ProgressIndicator target={run.planned_quantity_kg} actual={run.actual_quantity_kg || run.planned_quantity_kg} label="" /></td>
                               <td className="p-4 text-center"><span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${sc.className}`}><StatusIcon className="w-3 h-3" /> {sc.label}</span></td>
                               <td className="p-4 text-right"><button className="text-slate-400 hover:text-slate-900"><Eye className="w-4 h-4" /></button></td>
@@ -927,7 +929,7 @@ export default function Production() {
                        No recipe available.
                        {(user?.role === 'manager' || user?.role === 'admin') ? (
                          <span className="block mt-0.5">
-                           <button type="button" onClick={() => { setIsModalOpen(false); navigate('/formulas'); }} className="underline font-bold text-red-700">Create a recipe</button> to proceed.
+                           <button type="button" onClick={() => { setIsModalOpen(false); navigate('/formulas', { state: { selectedColorId: selectedColor, openCreateFormula: true } }); }} className="underline font-bold text-red-700">Create a recipe</button>
                          </span>
                        ) : (
                          <span className="block mt-0.5">Please ask a manager to create a recipe.</span>
@@ -942,11 +944,11 @@ export default function Production() {
                 const rawMaterialMismatch = Math.abs(totalRawMaterial - parsedPlannedQuantity) >= 0.01;
                 return (
                   <div className="space-y-4 pt-4 border-t">
-                    <div className="flex justify-between items-center"><label className="text-sm font-bold">Planned Quantity ({unitPref})</label><input type="number" step="0.1" className="w-24 border rounded p-1 text-right font-mono" value={planned_quantity_kg} onChange={(e) => handleQuantityChange(e.target.value === '' ? '' : Number(e.target.value))} /></div>
+                    <div className="flex justify-between items-center"><label className="text-sm font-bold">Planned Quantity ({unitPref})</label><input type="number" step="0.1" className="w-24 border rounded p-1 text-right font-mono" value={planned_quantity_kg === 0 ? '' : planned_quantity_kg} onChange={(e) => handleQuantityChange(e.target.value === '' ? '' : Number(e.target.value))} /></div>
                     <div className="max-h-48 overflow-y-auto space-y-2 text-xs">
                       {actualResources.map((r, idx) => {
                         const refRes = selectedFormula.resources.find(ref => ref.resource_id === r.resource_id);
-                        return (<div key={r.resource_id} className="flex justify-between items-center py-1 border-b border-dashed"><span>{refRes?.name}</span><div className="flex items-center gap-2"><input type="number" step="0.0001" className="w-20 border rounded p-1 text-right font-mono" value={r.actual_quantity_used} onChange={(e) => { const n = [...actualResources]; n[idx].actual_quantity_used = Number(e.target.value); setActualResources(n); setProductionError(null); }} /> <span className="text-slate-400 w-6">{refRes?.unit}</span></div></div>);
+                        return (<div key={r.resource_id} className="flex justify-between items-center py-1 border-b border-dashed"><span>{refRes?.name}</span><div className="flex items-center gap-2"><input type="number" step="0.0001" className="w-20 border rounded p-1 text-right font-mono" value={r.actual_quantity_used === 0 ? '' : r.actual_quantity_used} onChange={(e) => { const n = [...actualResources]; n[idx].actual_quantity_used = Number(e.target.value); setActualResources(n); setProductionError(null); }} /> <span className="text-slate-400 w-6">{refRes?.unit}</span></div></div>);
                       })}
                     </div>
                     {rawMaterialMismatch && (
@@ -986,12 +988,12 @@ export default function Production() {
           <div className="bg-white w-full max-w-xl rounded-xl shadow-2xl border relative z-10 p-6">
             <div className="flex items-center justify-between mb-6"><h3 className="text-xl font-bold">Edit Batch: {editingRun.batchId}</h3><button onClick={() => setIsEditModalOpen(false)}><X className="h-6 w-6" /></button></div>
             <form onSubmit={handleEditSubmit} className="space-y-6">
-              <div className="space-y-1"><label className="text-sm font-bold">Target Quantity ({unitPref})</label><input type="number" step="0.1" className="w-full border rounded p-3 font-mono" value={editTargetQty} onChange={(e) => handleEditTargetQtyChange(Number(e.target.value))} required /></div>
+              <div className="space-y-1"><label className="text-sm font-bold">Target Quantity ({unitPref})</label><input type="number" step="0.1" className="w-full border rounded p-3 font-mono" value={editTargetQty === 0 ? '' : editTargetQty} onChange={(e) => handleEditTargetQtyChange(Number(e.target.value))} required /></div>
               {isLoadingEditData ? <div className="p-8 text-center animate-pulse">Loading...</div> : (
                 <div className="space-y-2 max-h-64 overflow-y-auto border rounded-xl p-4 bg-slate-50">
                   <p className="text-[10px] font-black uppercase text-slate-400 mb-2">Raw Material Correction</p>
                   {editActualResources.map((res, idx) => (
-                    <div key={res.resource_id} className="flex justify-between items-center border-b border-dashed py-2 last:border-0"><div className="flex flex-col"><span className="text-sm font-bold truncate max-w-[150px]">{res.name}</span><span className="text-[9px] text-slate-400 uppercase">{res.unit}</span></div><input type="number" step="0.1" className="w-24 border rounded p-1.5 text-right font-mono" value={res.actual_quantity_used} onChange={(e) => { const n = [...editActualResources]; n[idx].actual_quantity_used = Number(e.target.value); setEditActualResources(n); }} /></div>
+                    <div key={res.resource_id} className="flex justify-between items-center border-b border-dashed py-2 last:border-0"><div className="flex flex-col"><span className="text-sm font-bold truncate max-w-[150px]">{res.name}</span><span className="text-[9px] text-slate-400 uppercase">{res.unit}</span></div><input type="number" step="0.1" className="w-24 border rounded p-1.5 text-right font-mono" value={res.actual_quantity_used === 0 ? '' : res.actual_quantity_used} onChange={(e) => { const n = [...editActualResources]; n[idx].actual_quantity_used = Number(e.target.value); setEditActualResources(n); }} /></div>
                   ))}
                 </div>
               )}
@@ -1026,7 +1028,7 @@ export default function Production() {
             <div className="flex items-center justify-between mb-6"><h3 className="text-xl font-bold">Complete Run</h3><button onClick={() => setIsCompletionModalOpen(false)}><X className="h-6 w-6" /></button></div>
             <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1"><label className="text-xs font-black uppercase text-slate-400">Actual Yield</label><input type="number" step="0.1" className="w-full p-4 text-2xl font-black border rounded-xl text-emerald-600" value={actualYield} onChange={(e) => setActualYield(e.target.value)} /></div>
+                <div className="space-y-1"><label className="text-xs font-black uppercase text-slate-400">Actual Yield</label><input type="number" step="0.1" className="w-full p-4 text-2xl font-black border rounded-xl text-emerald-600" value={actualYield === 0 || actualYield === '0' ? '' : actualYield} onChange={(e) => setActualYield(e.target.value)} /></div>
                 <div className="space-y-1"><label className="text-xs font-black uppercase text-slate-400">Yield Loss</label><div className="w-full p-4 text-2xl font-black border rounded-xl bg-slate-50 text-slate-400">{Number(Math.max(0, toDisplayValue(completingRun.targetQty, unitPref) - (Number(actualYield) || 0)).toFixed(1))}</div></div>
               </div>
               <div className="space-y-1">

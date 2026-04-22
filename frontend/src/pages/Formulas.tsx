@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { apiRequest } from '../services/api'
 import {
   Plus,
@@ -69,6 +70,7 @@ interface Formula {
 }
 
 export default function Formulas() {
+  const location = useLocation()
   const { user } = useAuth()
   const isManager = user?.role === 'admin' || user?.role === 'manager'
   const [colors, setColors] = useState<Color[]>([])
@@ -227,8 +229,26 @@ export default function Formulas() {
       setResources(resourcesData)
       setProductTypes(typesData)
       setInkGrades(gradesData)
+      
+      const incomingColorId = location.state?.selectedColorId
       if (colorsData.length > 0 && !selectedColor) {
-        setSelectedColor(colorsData[0])
+        if (incomingColorId) {
+          const matchedColor = colorsData.find((c) => c.id === incomingColorId)
+          setSelectedColor(matchedColor || colorsData[0])
+          
+          if (location.state?.openCreateFormula && isManager) {
+            setEditingFormula(null)
+            setFormulaForm({
+              name: '',
+              version: '1.0.0',
+              batch_size_kg: toDisplayValue(100, unitPref),
+              resources: [{ resource_id: 0, quantity_required: 0 }],
+            })
+            setIsFormulaModalOpen(true)
+          }
+        } else {
+          setSelectedColor(colorsData[0])
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load data')
@@ -364,6 +384,12 @@ export default function Formulas() {
       return
     }
 
+    const totalResourceQty = validResources.reduce((s, r) => s + Number(r.quantity_required), 0)
+    const baseBatchSizeDisplay = Number(formulaForm.batch_size_kg) || 0
+    if (Math.abs(totalResourceQty - baseBatchSizeDisplay) >= 0.01) {
+      return // Silently return, UI handles the error display
+    }
+
     try {
       if (editingFormula) {
         await apiRequest(`/formulas/${editingFormula.id}`, {
@@ -440,11 +466,10 @@ export default function Formulas() {
 
   const openEditFormula = (formula: Formula) => {
     setEditingFormula(formula)
-    const totalQty = formula.resources.reduce((s, r) => s + (r.quantity_required || 0), 0)
     setFormulaForm({
       name: formula.name,
       version: formula.version,
-      batch_size_kg: totalQty,
+      batch_size_kg: toDisplayValue(formula.batch_size_kg, unitPref),
       resources:
         formula.resources.length > 0
           ? formula.resources.map((r) => ({
@@ -462,7 +487,6 @@ export default function Formulas() {
       return {
         ...prev,
         resources: newResources,
-        batch_size_kg: newResources.reduce((s, r) => s + (r.quantity_required || 0), 0),
       }
     })
   }
@@ -473,7 +497,6 @@ export default function Formulas() {
       return {
         ...prev,
         resources: newResources,
-        batch_size_kg: newResources.reduce((s, r) => s + (r.quantity_required || 0), 0),
       }
     })
   }
@@ -482,8 +505,7 @@ export default function Formulas() {
     setFormulaForm((prev) => {
       const newResources = [...prev.resources]
       newResources[index] = { ...newResources[index], [field]: value }
-      const totalQty = newResources.reduce((s, r) => s + (r.quantity_required || 0), 0)
-      return { ...prev, resources: newResources, batch_size_kg: totalQty }
+      return { ...prev, resources: newResources }
     })
   }
 
@@ -763,7 +785,7 @@ export default function Formulas() {
                                     {res.name || `Resource #${res.resource_id}`}
                                   </td>
                                   <td className="px-5 py-3 font-bold text-slate-700 text-right">
-                                    {res.quantity_required} {res.unit || ''}
+                                    {Number(res.quantity_required)} {res.unit || ''}
                                   </td>
                                 </tr>
                               ))}
@@ -1084,23 +1106,22 @@ export default function Formulas() {
                   <label className="text-sm font-bold text-slate-700 flex items-center justify-between">
                     <span>Base Batch Size ({unitPref})</span>
                     <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-                      Auto-calculated from materials
+                      Required
                     </span>
                   </label>
                   <div className="relative">
                     <input
-                      readOnly
+                      required
                       type="number"
-                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 font-mono cursor-not-allowed select-none"
-                      value={formulaForm.batch_size_kg || 0}
+                      step="0.0001"
+                      className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+                      value={formulaForm.batch_size_kg === 0 ? '' : formulaForm.batch_size_kg}
+                      onChange={(e) => setFormulaForm({ ...formulaForm, batch_size_kg: Number(e.target.value) })}
                     />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold uppercase tracking-widest pointer-events-none">
-                      = Σ materials
-                    </span>
                   </div>
                   {formulaForm.batch_size_kg === 0 && (
                     <p className="text-[11px] text-amber-600 font-medium">
-                      ⚠ Add material quantities above — batch size will compute automatically.
+                      ⚠ Please specify the base batch size. Total materials must equal this amount.
                     </p>
                   )}
                 </div>
@@ -1146,7 +1167,7 @@ export default function Formulas() {
                           step="0.01"
                           min="0.01"
                           placeholder="Qty"
-                          value={res.quantity_required === 0 ? '' : res.quantity_required}
+                          value={res.quantity_required === 0 ? '' : Number(res.quantity_required)}
                           onChange={(e) =>
                             updateResourceRow(index, 'quantity_required', Number(e.target.value))
                           }
@@ -1172,22 +1193,48 @@ export default function Formulas() {
               </div>
             </form>
 
-            <div className="flex gap-3 p-5 border-t bg-slate-50 shrink-0">
-              <button
-                type="button"
-                onClick={() => setIsFormulaModalOpen(false)}
-                className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                onClick={handleSaveFormula}
-                className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 transition-colors shadow-sm"
-              >
-                {editingFormula ? 'Save Changes' : 'Save Formula'}
-              </button>
-            </div>
+            {(() => {
+              const validResources = formulaForm.resources.filter((r) => r.resource_id > 0 && r.quantity_required > 0)
+              const totalResourceQty = validResources.reduce((s, r) => s + Number(r.quantity_required), 0)
+              const baseBatchSizeDisplay = Number(formulaForm.batch_size_kg) || 0
+              const mismatch = Math.abs(totalResourceQty - baseBatchSizeDisplay) >= 0.01
+
+              return (
+                <div className="flex flex-col border-t bg-slate-50 shrink-0">
+                  {mismatch && baseBatchSizeDisplay > 0 && (
+                    <div className="px-5 pt-4">
+                      <div className="bg-red-50 text-red-700 p-3 rounded-lg border border-red-200 text-sm font-bold flex items-start gap-2">
+                        <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                        <div>
+                          Validation Error: Total raw material quantity ({Number(totalResourceQty.toFixed(4))}) must exactly match the Base Batch Size ({baseBatchSizeDisplay}).
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex gap-3 p-5">
+                    <button
+                      type="button"
+                      onClick={() => setIsFormulaModalOpen(false)}
+                      className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      onClick={handleSaveFormula}
+                      disabled={mismatch || baseBatchSizeDisplay === 0}
+                      className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-bold text-white transition-colors shadow-sm ${
+                        mismatch || baseBatchSizeDisplay === 0
+                          ? 'bg-blue-300 cursor-not-allowed'
+                          : 'bg-blue-600 hover:bg-blue-700'
+                      }`}
+                    >
+                      {editingFormula ? 'Save Changes' : 'Save Formula'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })()}
           </div>
         </div>
       )}
