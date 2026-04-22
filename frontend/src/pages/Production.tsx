@@ -946,7 +946,7 @@ export default function Production() {
                     <div className="max-h-48 overflow-y-auto space-y-2 text-xs">
                       {actualResources.map((r, idx) => {
                         const refRes = selectedFormula.resources.find(ref => ref.resource_id === r.resource_id);
-                        return (<div key={r.resource_id} className="flex justify-between items-center py-1 border-b border-dashed"><span>{refRes?.name}</span><div className="flex items-center gap-2"><input type="number" step="0.1" className="w-20 border rounded p-1 text-right font-mono" value={r.actual_quantity_used} onChange={(e) => { const n = [...actualResources]; n[idx].actual_quantity_used = Number(e.target.value); setActualResources(n); setProductionError(null); }} /> <span className="text-slate-400 w-6">{refRes?.unit}</span></div></div>);
+                        return (<div key={r.resource_id} className="flex justify-between items-center py-1 border-b border-dashed"><span>{refRes?.name}</span><div className="flex items-center gap-2"><input type="number" step="0.0001" className="w-20 border rounded p-1 text-right font-mono" value={r.actual_quantity_used} onChange={(e) => { const n = [...actualResources]; n[idx].actual_quantity_used = Number(e.target.value); setActualResources(n); setProductionError(null); }} /> <span className="text-slate-400 w-6">{refRes?.unit}</span></div></div>);
                       })}
                     </div>
                     {rawMaterialMismatch && (
@@ -957,7 +957,6 @@ export default function Production() {
                   </div>
                 );
               })()}
-              
               {productionError && (
                 <div className="bg-red-50 text-red-700 p-3 rounded-lg border border-red-200 text-sm font-bold flex items-start gap-2 mt-4">
                   <Activity className="w-5 h-5 shrink-0 mt-0.5" />
