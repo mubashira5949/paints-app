@@ -316,6 +316,17 @@ const start = async () => {
                         INSERT INTO app_settings (key, value)
                         VALUES ('low_stock_threshold', '20')
                         ON CONFLICT (key) DO NOTHING;
+
+                        -- 14. Material Requests for Inventory Notifications
+                        CREATE TABLE IF NOT EXISTS material_requests (
+                            id SERIAL PRIMARY KEY,
+                            resource_id INTEGER REFERENCES resources(id) NOT NULL,
+                            requested_by INTEGER REFERENCES users(id) NOT NULL,
+                            status VARCHAR(50) DEFAULT 'pending',
+                            notes TEXT,
+                            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                        );
                     `)
                     return;
                 } catch (err) {

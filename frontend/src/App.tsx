@@ -47,7 +47,7 @@ function App() {
               <Route path="sales/history" element={<SalesHistory />} />
               <Route path="sales/orders" element={<Orders />} />
               <Route path="clients" element={<Clients />} />
-              <Route path="losses" element={<Losses />} />
+
               <Route path="raw-materials" element={<RawMaterials />} />
               <Route path="suppliers" element={<Suppliers />} />
               <Route path="purchase-orders" element={<PurchaseOrders />} />
@@ -56,6 +56,7 @@ function App() {
               <Route element={<ProtectedRoute allowedRoles={['manager', 'admin']} />}>
                 <Route path="users" element={<Users />} />
                 <Route path="settings" element={<Settings />} />
+                <Route path="losses" element={<Losses />} />
               </Route>
             </Route>
           </Route>

@@ -248,4 +248,66 @@ export default async function (fastifyRaw: FastifyInstance) {
             }
         }
     });
+
+    /**
+     * POST /api/inventory/notify-manager
+     * Allows an operator to notify the manager about low raw material stock.
+     */
+    fastify.post('/notify-manager', {
+        schema: {
+            body: Type.Object({
+                resource_id: Type.Integer(),
+                notes: Type.Optional(Type.String())
+            }),
+            security: [{ bearerAuth: [] }],
+            response: {
+                201: Type.Object({
+                    message: Type.String()
+                }),
+                400: Type.Object({
+                    error: Type.String(),
+                    message: Type.String()
+                }),
+                500: Type.Object({
+                    error: Type.String(),
+                    message: Type.String()
+                })
+            }
+        },
+        preHandler: [fastify.authenticate],
+        handler: async (request, reply): Promise<any> => {
+            const user = (request as any).user as { id: number, role: string }
+            const { resource_id, notes } = request.body as any
+
+            try {
+                // Check if there is already a pending request for this resource
+                const existing = await fastify.db.query(
+                    'SELECT id FROM material_requests WHERE resource_id = $1 AND status = $2',
+                    [resource_id, 'pending']
+                )
+
+                if (existing.rows.length > 0) {
+                    return reply.status(400).send({
+                        error: 'Bad Request',
+                        message: 'A notification has already been sent for this material.'
+                    })
+                }
+
+                await fastify.db.query(
+                    'INSERT INTO material_requests (resource_id, requested_by, notes) VALUES ($1, $2, $3)',
+                    [resource_id, user.id, notes || 'Low stock notification']
+                )
+
+                return reply.status(201).send({
+                    message: 'Manager notified successfully'
+                })
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({
+                    error: 'Internal Server Error',
+                    message: 'Failed to notify manager'
+                })
+            }
+        }
+    })
 }

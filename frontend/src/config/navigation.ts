@@ -89,7 +89,7 @@ export const navigation: NavItem[] = [
     title: 'Losses',
     path: '/losses',
     icon: AlertTriangle,
-    roles: ['manager', 'operator', 'sales', 'admin'],
+    roles: ['manager', 'admin'],
   },
   {
     title: 'Suppliers',

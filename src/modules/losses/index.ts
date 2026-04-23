@@ -28,7 +28,7 @@ export default async function (fastifyRaw: FastifyInstance) {
      * GET /api/losses - List losses with filters
      */
     fastify.get('/', {
-        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'operator', 'sales'])],
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
         schema: {
             querystring: Type.Object({
                 item_type: Type.Optional(Type.String()),
@@ -54,12 +54,14 @@ export default async function (fastifyRaw: FastifyInstance) {
                         u.username as documented_by,
                         pl.documented_at,
                         pl.reference_type,
-                        pl.reference_id
+                        pl.reference_id,
+                        pr.planned_quantity_kg as target_quantity_kg
                     FROM product_losses pl
                     LEFT JOIN colors c ON pl.color_id = c.id
                     LEFT JOIN resources r ON pl.resource_id = r.id
                     JOIN loss_reasons lr ON pl.reason_id = lr.id
                     JOIN users u ON pl.documented_by = u.id
+                    LEFT JOIN production_runs pr ON pl.reference_type = 'production_run' AND pl.reference_id = pr.id
                     WHERE 1=1
                 `
                 const params: any[] = []
@@ -94,6 +96,36 @@ export default async function (fastifyRaw: FastifyInstance) {
     })
 
     /**
+     * GET /api/losses/operator-summary - Summary of highest losses by operator
+     */
+    fastify.get('/operator-summary', {
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
+        handler: async (request, reply) => {
+            const query = `
+                SELECT 
+                    u.id, 
+                    u.username, 
+                    u.first_name, 
+                    u.last_name, 
+                    SUM(pl.quantity_kg) as total_loss_kg, 
+                    COUNT(pl.id) as loss_incidents
+                FROM product_losses pl
+                JOIN users u ON pl.documented_by = u.id
+                GROUP BY u.id, u.username, u.first_name, u.last_name
+                ORDER BY total_loss_kg DESC
+                LIMIT 10
+            `;
+            try {
+                const result = await fastify.db.query(query);
+                return reply.send(result.rows);
+            } catch (err) {
+                fastify.log.error(err);
+                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to fetch operator summary' });
+            }
+        }
+    })
+
+    /**
      * GET /api/losses/reasons - List available loss reasons
      */
     fastify.get('/reasons', {
@@ -108,7 +140,7 @@ export default async function (fastifyRaw: FastifyInstance) {
      * POST /api/losses - Document a new loss
      */
     fastify.post('/', {
-        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'operator', 'sales'])],
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
         schema: {
             body: LossSchema
         },

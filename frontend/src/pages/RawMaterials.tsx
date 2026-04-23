@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { apiRequest } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import {
@@ -38,6 +39,7 @@ interface Resource {
 
 export default function RawMaterials() {
   const { user } = useAuth()
+  const location = useLocation()
   const canEditStock = user?.role === 'admin' || user?.role === 'manager'
   
   const [resources, setResources] = useState<Resource[]>([])
@@ -87,6 +89,17 @@ export default function RawMaterials() {
   useEffect(() => {
     fetchData()
   }, [])
+
+  useEffect(() => {
+    if (resources.length > 0 && location.state?.orderMaterialId) {
+      const resourceToOrder = resources.find((r) => r.id === location.state.orderMaterialId)
+      if (resourceToOrder) {
+        handleOpenOrderModal(resourceToOrder)
+        // Clear the state so it doesn't reopen on refresh
+        window.history.replaceState({}, document.title)
+      }
+    }
+  }, [resources, location.state])
 
   const handleOpenModal = (resource: Resource | null = null) => {
     if (resource) {
