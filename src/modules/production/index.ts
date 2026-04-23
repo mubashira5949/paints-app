@@ -660,6 +660,43 @@ export default async function (fastifyRaw: FastifyInstance) {
 
                     // Transitioning to 'completed': finalize actuals & deduct stock
                     if (status === 'completed') {
+                        // 0. Log loss to product_losses table if waste > 0
+                        if (waste_kg !== undefined && waste_kg > 0) {
+                            const runData = await client.query(
+                                `SELECT pr.formula_id, f.color_id, pr.operator_id 
+                                 FROM production_runs pr 
+                                 JOIN formulas f ON pr.formula_id = f.id 
+                                 WHERE pr.id = $1`,
+                                [id]
+                            );
+                            
+                            if (runData.rows.length > 0) {
+                                const { color_id, operator_id } = runData.rows[0];
+                                const reasonText = loss_reason || 'Production Loss';
+                                
+                                // Upsert reason
+                                await client.query(
+                                    `INSERT INTO loss_reasons (name, description) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING`,
+                                    [reasonText, 'Auto-generated from production waste']
+                                );
+                                
+                                const reasonRes = await client.query(
+                                    `SELECT id FROM loss_reasons WHERE name = $1`,
+                                    [reasonText]
+                                );
+                                
+                                const reasonId = reasonRes.rows[0].id;
+                                
+                                await client.query(
+                                    `INSERT INTO product_losses (
+                                        item_type, color_id, quantity_kg, reason_id, notes, documented_by, reference_type, reference_id
+                                    ) VALUES (
+                                        'finished_good', $1, $2, $3, 'Production Waste', $4, 'production_run', $5
+                                    )`,
+                                    [color_id, waste_kg, reasonId, operator_id || (request.user as any)?.id, id]
+                                );
+                            }
+                        }
                         // 1. Ensure actuals exist (auto-populate if nothing provided during planning/running)
                         const currentActuals = await client.query(
                             'SELECT id FROM production_resource_actuals WHERE production_run_id = $1',

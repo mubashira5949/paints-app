@@ -23,9 +23,11 @@ export default async function (fastifyRaw: FastifyInstance) {
             operator: Type.String()
         })),
         inventoryAlerts: Type.Array(Type.Object({
+            resource_id: Type.Number(),
             material: Type.String(),
             remaining: Type.String(),
-            status: Type.String()
+            status: Type.String(),
+            requested_by: Type.Union([Type.String(), Type.Null()])
         }))
     })
 
@@ -90,15 +92,26 @@ export default async function (fastifyRaw: FastifyInstance) {
                     // 4. Fetch Inventory Alerts
                     fastify.db.query(`
                         SELECT 
-                            name as material, 
-                            current_stock || ' ' || unit as remaining,
+                            r.id as resource_id,
+                            r.name as material, 
+                            r.current_stock::real || ' ' || r.unit as remaining,
                             CASE 
-                                WHEN current_stock <= (reorder_level * 0.5) THEN 'critical' 
+                                WHEN r.current_stock <= (r.reorder_level * 0.5) THEN 'critical' 
                                 ELSE 'low' 
-                            END as status
-                        FROM resources
-                        WHERE current_stock <= reorder_level
-                        ORDER BY current_stock / NULLIF(reorder_level, 0) ASC
+                            END as status,
+                            mr.username as requested_by,
+                            mr.created_at as requested_at
+                        FROM resources r
+                        LEFT JOIN LATERAL (
+                            SELECT u.username, m.created_at 
+                            FROM material_requests m
+                            JOIN users u ON m.requested_by = u.id 
+                            WHERE m.resource_id = r.id AND m.status = 'pending' 
+                            ORDER BY m.created_at DESC 
+                            LIMIT 1
+                        ) mr ON true
+                        WHERE r.current_stock <= r.reorder_level
+                        ORDER BY r.current_stock / NULLIF(r.reorder_level, 0) ASC
                         LIMIT 5
                     `)
                 ]);

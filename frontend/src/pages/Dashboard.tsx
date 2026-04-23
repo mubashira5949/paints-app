@@ -18,6 +18,7 @@ import {
   ShoppingCart,
 } from 'lucide-react'
 import { useUnitPreference, formatUnit } from '../utils/units'
+import { useDateFormatPreference, formatDate } from '../utils/dateFormatter'
 
 interface DashboardData {
   metrics: {
@@ -37,9 +38,12 @@ interface DashboardData {
     operator: string
   }[]
   inventoryAlerts: {
+    resource_id: number
     material: string
     remaining: string
     status: string
+    requested_by: string | null
+    requested_at: string | null
   }[]
 }
 
@@ -47,11 +51,26 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const unitPref = useUnitPreference()
+  const dateFormat = useDateFormatPreference()
   const [data, setData] = useState<DashboardData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isFetching, setIsFetching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
+
+
+  const notifyManager = async (resource_id: number) => {
+    try {
+      await apiRequest('/api/inventory/notify-manager', {
+        method: 'POST',
+        body: { resource_id }
+      })
+      alert('Manager notified successfully')
+      fetchDashboardData() // Refresh dashboard
+    } catch (err) {
+      alert('Failed to notify manager')
+    }
+  }
 
   // Toggle states for tables
   const [showAllRuns, setShowAllRuns] = useState(false)
@@ -455,7 +474,7 @@ export default function Dashboard() {
                         <td className="px-3 py-3">
                           <p className="font-extrabold text-slate-900">{alert.material}</p>
                           <p className="text-[10px] text-slate-500 font-medium">
-                            {alert.remaining} left
+                            {alert.remaining.replace(/^([\d.]+)/, (match) => parseFloat(match).toString())} left
                           </p>
                         </td>
                         <td className="px-3 py-3 text-right">
@@ -469,21 +488,44 @@ export default function Dashboard() {
                             >
                               {alert.status}
                             </span>
-                            {(user?.role === 'operator' ||
-                              user?.role === 'admin' ||
-                              user?.role === 'manager') &&
-                              alert.status === 'critical' && (
+                            {/* Manager/Admin View: Show who requested and 'Place Order' button */}
+                            {(user?.role === 'manager' || user?.role === 'admin') && (
+                              <div className="flex flex-col items-end gap-1 mt-1">
+                                {alert.requested_by && (
+                                  <div className="flex flex-col items-end">
+                                    <span className="text-[9px] text-blue-600 font-bold uppercase tracking-wider bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                      Req: {alert.requested_by}
+                                    </span>
+                                    {alert.requested_at && (
+                                      <span className="text-[8px] text-slate-400 font-bold mt-0.5">
+                                        {formatDate(alert.requested_at, dateFormat, true)}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                                 <button
-                                  onClick={() => {
-                                    window.alert(
-                                      `Manager notified to initiate Purchase Order for ${alert.material}`,
-                                    )
-                                  }}
-                                  className="text-[9px] bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded uppercase tracking-widest font-black transition-colors shadow-sm"
+                                  onClick={() => navigate('/raw-materials', { state: { orderMaterialId: alert.resource_id } })}
+                                  className="text-[9px] bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200 px-2 py-0.5 rounded uppercase tracking-widest font-black transition-colors shadow-sm"
                                 >
-                                  Notify Manager
+                                  Place Order
                                 </button>
-                              )}
+                              </div>
+                            )}
+                            
+                            {/* Operator/Worker View: Show 'Notify Manager' button */}
+                            {(user?.role === 'operator' || user?.role === 'worker') && (
+                                <button
+                                  onClick={() => notifyManager(alert.resource_id)}
+                                  disabled={!!alert.requested_by}
+                                  className={`text-[9px] px-2 py-0.5 rounded uppercase tracking-widest font-black transition-colors shadow-sm ${
+                                    alert.requested_by
+                                      ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                                      : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'
+                                  }`}
+                                >
+                                  {alert.requested_by ? 'Notified' : 'Notify Manager'}
+                                </button>
+                            )}
                           </div>
                         </td>
                       </tr>

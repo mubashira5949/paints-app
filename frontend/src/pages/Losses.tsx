@@ -27,6 +27,7 @@ interface LossRecord {
   documented_at: string
   reference_type: string | null
   reference_id: number | null
+  target_quantity_kg: string | null
 }
 
 interface LossReason {
@@ -48,9 +49,20 @@ interface ResourceOption {
   current_stock: number
 }
 
+interface OperatorSummary {
+  id: number
+  username: string
+  first_name: string
+  last_name: string
+  total_loss_kg: string
+  loss_incidents: string
+}
+
 export default function Losses() {
   const unitPref = useUnitPreference()
   const [losses, setLosses] = useState<LossRecord[]>([])
+  const [operatorSummary, setOperatorSummary] = useState<OperatorSummary[]>([])
+
   const [reasons, setReasons] = useState<LossReason[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitLoading, setIsSubmitLoading] = useState(false)
@@ -101,14 +113,16 @@ export default function Losses() {
 
   const fetchInitialData = async () => {
     try {
-      const [reasonsData, colorsData, resourcesData] = await Promise.all([
+      const [reasonsData, colorsData, resourcesData, operatorData] = await Promise.all([
         apiRequest<LossReason[]>('/api/losses/reasons'),
-        apiRequest<ColorOption[]>('/api/inventory'), // Reusing inventory for color list
+        apiRequest<ColorOption[]>('/api/inventory'),
         apiRequest<ResourceOption[]>('/resources'),
+        apiRequest<OperatorSummary[]>('/api/losses/operator-summary'),
       ])
       setReasons(reasonsData)
       setColors(colorsData)
       setResources(resourcesData)
+      setOperatorSummary(operatorData)
     } catch (err) {
       console.error('Failed to fetch form data', err)
     }
@@ -267,6 +281,8 @@ export default function Losses() {
         </div>
       </div>
 
+
+
       {/* Main Table */}
       <div className="rounded-2xl border bg-white shadow-xl overflow-hidden border-slate-200">
         <div className="p-5 border-b bg-slate-50/50 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -300,19 +316,22 @@ export default function Losses() {
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-100">
                 <th className="px-6 py-4 text-left font-bold text-slate-500 text-[10px] uppercase tracking-widest">
-                  Date / Documentation
+                  Date & Time
                 </th>
                 <th className="px-6 py-4 text-left font-bold text-slate-500 text-[10px] uppercase tracking-widest">
-                  Item
+                  Operator
                 </th>
                 <th className="px-6 py-4 text-left font-bold text-slate-500 text-[10px] uppercase tracking-widest">
-                  Type
+                  Color / Item
+                </th>
+                <th className="px-6 py-4 text-center font-bold text-slate-500 text-[10px] uppercase tracking-widest">
+                  Target Quantity
                 </th>
                 <th className="px-6 py-4 text-center font-bold text-slate-500 text-[10px] uppercase tracking-widest">
                   Lost Quantity
                 </th>
                 <th className="px-6 py-4 text-left font-bold text-slate-500 text-[10px] uppercase tracking-widest">
-                  Reason / Notes
+                  Reason
                 </th>
               </tr>
             </thead>
@@ -320,7 +339,7 @@ export default function Losses() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    <td className="px-6 py-6" colSpan={5}>
+                    <td className="px-6 py-6" colSpan={6}>
                       <div className="h-4 bg-slate-100 rounded w-full"></div>
                     </td>
                   </tr>
@@ -328,7 +347,7 @@ export default function Losses() {
               ) : losses.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="px-6 py-12 text-center text-slate-400 font-medium italic"
                   >
                     No loss records found.
@@ -339,92 +358,58 @@ export default function Losses() {
                   <tr key={loss.id} className="hover:bg-slate-50/50 transition-colors group">
                     <td className="px-6 py-5">
                       <div className="flex flex-col">
-                        <span className="text-[11px] font-black text-slate-400 uppercase tracking-tighter">
-                          ID: L-{loss.id}
-                        </span>
                         <span className="font-bold text-slate-700 text-sm">
                           {new Date(loss.documented_at).toLocaleDateString()}
                         </span>
-                        <span className="text-[10px] font-medium text-slate-400 flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />{' '}
-                          {new Date(loss.documented_at).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                        <span className="text-[10px] font-medium text-slate-400">
+                          {new Date(loss.documented_at).toLocaleTimeString()}
                         </span>
                       </div>
                     </td>
                     <td className="px-6 py-5">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`p-2 rounded-lg ${loss.item_type === 'finished_good' ? 'bg-indigo-50' : 'bg-blue-50'}`}
-                        >
-                          {loss.item_type === 'finished_good' ? (
-                            <Package className="h-4 w-4 text-indigo-600" />
-                          ) : (
-                            <Droplets className="h-4 w-4 text-blue-600" />
-                          )}
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="font-extrabold text-slate-900 leading-tight">
-                            {loss.color_name || loss.resource_name}
-                          </span>
-                          {loss.item_type === 'finished_good' && (
-                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">
-                              {loss.pack_size_kg}
-                              {unitLabel(unitPref)} Pack
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-5">
-                      <span
-                        className={`inline-flex px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
-                          loss.item_type === 'finished_good'
-                            ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
-                            : 'bg-blue-50 text-blue-700 border border-blue-100'
-                        }`}
-                      >
-                        {loss.item_type === 'finished_good' ? 'FINISHED' : 'RAW MATERIAL'}
+                      <span className="font-black text-slate-900 text-sm uppercase">
+                        {loss.documented_by}
                       </span>
                     </td>
-                    <td className="px-6 py-5 text-center">
-                      <div className="flex flex-col items-center">
-                        <span className="text-sm font-black text-slate-900">
-                          {loss.item_type === 'finished_good'
-                            ? `${loss.quantity_units} Units`
-                            : formatUnit(loss.quantity_kg, unitPref)}
+                    <td className="px-6 py-5">
+                      <div className="flex flex-col">
+                        <span className="font-extrabold text-slate-900">
+                          {loss.color_name || loss.resource_name}
                         </span>
-                        {loss.item_type === 'finished_good' && (
-                          <span className="text-[10px] font-bold text-slate-400 uppercase italic">
-                            ({formatUnit(loss.quantity_kg, unitPref)})
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">
+                          {loss.item_type === 'finished_good' ? 'Finished Good' : 'Raw Material'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-5 text-center">
+                      {loss.target_quantity_kg ? (
+                        <span className="text-sm font-bold text-slate-500">
+                          {formatUnit(parseFloat(loss.target_quantity_kg), unitPref)}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-300">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-5 text-center">
+                      <span className="text-sm font-black text-red-600">
+                        {loss.item_type === 'finished_good' && loss.quantity_units 
+                          ? `${loss.quantity_units} Units` 
+                          : formatUnit(loss.quantity_kg, unitPref)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-5">
+                      <div className="flex flex-col">
+                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-100 text-[10px] font-black uppercase self-start">
+                          {loss.reason_name}
+                        </span>
+                        {loss.notes && (
+                          <span className="text-xs text-slate-500 mt-1 line-clamp-1" title={loss.notes}>
+                            {loss.notes}
                           </span>
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-5">
-                      <div className="flex flex-col">
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-100 text-[10px] font-black uppercase tracking-tight self-start mb-1">
-                          {loss.reason_name}
-                        </span>
-                        <p
-                          className="text-xs text-slate-500 font-medium line-clamp-1 italic max-w-xs"
-                          title={loss.notes || ''}
-                        >
-                          {loss.notes || 'No additional notes provided.'}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                            Documented By:
-                          </span>
-                          <span className="text-[9px] font-black text-slate-600 uppercase">
-                            {loss.documented_by}
-                          </span>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
+</tr>
                 ))
               )}
             </tbody>
