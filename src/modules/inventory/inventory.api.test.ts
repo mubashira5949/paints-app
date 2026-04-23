@@ -24,6 +24,9 @@ describe('Inventory API Module', () => {
         get: (path: string, options: any) => {
             routes[`GET ${path}`] = options
         },
+        post: (path: string, options: any) => {
+            routes[`POST ${path}`] = options
+        },
         withTypeProvider: () => mockFastify
     }
 
