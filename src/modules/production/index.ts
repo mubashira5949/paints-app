@@ -288,10 +288,129 @@ export default async function (fastifyRaw: FastifyInstance) {
     })
 
     /**
-     * GET /production-runs/:id - Full detail for a single production run.
-     * Returns formula, expected resources, actual consumption + variance, packaging, operator.
+     * GET /production-runs/active - List all non-completed production runs.
+     * Returns planned, running, and paused batches in a consistent shape.
+     */
+    fastify.get('/active', {
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'operator'])],
+        handler: async (request, reply) => {
+            try {
+                const result = await fastify.db.query(`
+                    SELECT
+                        pr.id,
+                        'PR-' || pr.id AS "batchId",
+                        c.name AS color,
+                        r.name AS formula,
+                        pr.planned_quantity_kg AS "targetQty",
+                        pr.actual_quantity_kg,
+                        pr.status,
+                        pr.started_at,
+                        pr.created_at,
+                        u.username AS operator,
+                        (
+                            SELECT json_agg(
+                                json_build_object(
+                                    'pack_size_kg', fst.pack_size_kg,
+                                    'quantity_units', fst.quantity_units
+                                )
+                            )
+                            FROM finished_stock_transactions fst
+                            WHERE fst.reference_id = pr.id
+                              AND fst.transaction_type = 'production_entry'
+                        ) AS packaging
+                    FROM production_runs pr
+                    JOIN formulas r ON pr.formula_id = r.id
+                    JOIN colors c ON r.color_id = c.id
+                    LEFT JOIN users u ON pr.created_by = u.id
+                    WHERE pr.status IN ('planned', 'running', 'paused', 'completed', 'packaging')
+                    AND (
+                        pr.status IN ('planned', 'running', 'paused')
+                        OR (
+                            pr.status IN ('completed', 'packaging')
+                            AND (SELECT COALESCE(SUM(quantity_kg), 0) FROM finished_stock_transactions WHERE reference_id = pr.id AND transaction_type = 'production_entry') < (COALESCE(pr.actual_quantity_kg, pr.planned_quantity_kg) - 0.1)
+                        )
+                    )
+                    ORDER BY pr.created_at DESC
+                `)
+                return reply.send(result.rows)
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({
+                    error: 'Internal Server Error',
+                    message: 'Failed to retrieve active production runs'
+                })
+            }
+        }
+    })
+
+
+    /**
+     * GET /production-runs/summary - Get daily production summary metrics.
      * Accessible by 'admin', 'manager', or 'operator' roles.
      */
+    fastify.get('/summary', {
+        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'operator'])],
+        handler: async (request, reply) => {
+            try {
+                // 1. Active Runs
+                const activeRunsRes = await fastify.db.query(
+                    `SELECT COUNT(*) as count FROM production_runs pr 
+                     WHERE pr.status IN ('planned', 'running', 'paused')
+                        OR (pr.status IN ('completed', 'packaging') 
+                            AND (SELECT COALESCE(SUM(quantity_kg), 0) FROM finished_stock_transactions WHERE reference_id = pr.id AND transaction_type = 'production_entry') < (COALESCE(pr.actual_quantity_kg, pr.planned_quantity_kg) - 0.1)
+                        )`
+                )
+                const activeRuns = parseInt(activeRunsRes.rows[0].count, 10)
+
+                // 2. Today's Production (Yield)
+                const todaysProductionRes = await fastify.db.query(
+                    `SELECT SUM(actual_quantity_kg) as total 
+                     FROM production_runs 
+                     WHERE DATE(created_at) = CURRENT_DATE AND status = 'completed'`
+                )
+                const todaysProduction = parseFloat(todaysProductionRes.rows[0].total || '0')
+
+                // 3. Resource Consumption (Today)
+                const todaysConsumptionRes = await fastify.db.query(
+                    `SELECT SUM(pra.actual_quantity_used) as total 
+                     FROM production_resource_actuals pra
+                     JOIN production_runs pr ON pra.production_run_id = pr.id
+                     WHERE DATE(pr.completed_at) = CURRENT_DATE`
+                )
+                const resourceConsumption = parseFloat(todaysConsumptionRes.rows[0].total || '0')
+
+                // 4. Production Variance
+                const varianceRes = await fastify.db.query(
+                    `SELECT SUM(expected_quantity) as total_expected, SUM(actual_quantity_used) as total_actual
+                     FROM production_resource_actuals pra
+                     JOIN production_runs pr ON pra.production_run_id = pr.id
+                     WHERE DATE(pr.completed_at) = CURRENT_DATE`
+                )
+                const totalExpected = parseFloat(varianceRes.rows[0].total_expected || '0')
+                const totalActual = parseFloat(varianceRes.rows[0].total_actual || '0')
+
+                let variancePercentage = 0;
+                if (totalExpected > 0) {
+                    variancePercentage = ((totalActual - totalExpected) / totalExpected) * 100;
+                }
+
+                return reply.send({
+                    active_runs: activeRuns,
+                    todays_production_kg: todaysProduction,
+                    resource_consumption_kg: resourceConsumption, // Assuming standard metric mix is kg/kg
+                    production_variance_percent: variancePercentage
+                })
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({
+                    error: 'Internal Server Error',
+                    message: 'Failed to retrieve production summary'
+                })
+            }
+        }
+    })
+
+
     fastify.get('/:id', {
         preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'operator'])],
         schema: {
@@ -460,61 +579,6 @@ export default async function (fastifyRaw: FastifyInstance) {
     })
 
     /**
-     * GET /production-runs/active - List all non-completed production runs.
-     * Returns planned, running, and paused batches in a consistent shape.
-     */
-    fastify.get('/active', {
-        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'operator'])],
-        handler: async (request, reply) => {
-            try {
-                const result = await fastify.db.query(`
-                    SELECT
-                        pr.id,
-                        'PR-' || pr.id AS "batchId",
-                        c.name AS color,
-                        r.name AS formula,
-                        pr.planned_quantity_kg AS "targetQty",
-                        pr.actual_quantity_kg,
-                        pr.status,
-                        pr.started_at,
-                        pr.created_at,
-                        u.username AS operator,
-                        (
-                            SELECT json_agg(
-                                json_build_object(
-                                    'pack_size_kg', fst.pack_size_kg,
-                                    'quantity_units', fst.quantity_units
-                                )
-                            )
-                            FROM finished_stock_transactions fst
-                            WHERE fst.reference_id = pr.id
-                              AND fst.transaction_type = 'production_entry'
-                        ) AS packaging
-                    FROM production_runs pr
-                    JOIN formulas r ON pr.formula_id = r.id
-                    JOIN colors c ON r.color_id = c.id
-                    LEFT JOIN users u ON pr.created_by = u.id
-                    WHERE pr.status IN ('planned', 'running', 'paused', 'completed', 'packaging')
-                    AND (
-                        pr.status IN ('planned', 'running', 'paused')
-                        OR (
-                            pr.status IN ('completed', 'packaging')
-                            AND (SELECT COALESCE(SUM(quantity_kg), 0) FROM finished_stock_transactions WHERE reference_id = pr.id AND transaction_type = 'production_entry') < (COALESCE(pr.actual_quantity_kg, pr.planned_quantity_kg) - 0.1)
-                        )
-                    )
-                    ORDER BY pr.created_at DESC
-                `)
-                return reply.send(result.rows)
-            } catch (err) {
-                fastify.log.error(err)
-                return reply.status(500).send({
-                    error: 'Internal Server Error',
-                    message: 'Failed to retrieve active production runs'
-                })
-            }
-        }
-    })
-
     /**
      * PATCH /production-runs/:id/status - Update a run's status.
      * Valid statuses: planned → running → paused / completed → packaging
@@ -613,7 +677,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                             if (runDetails.rows.length > 0) {
                                 const { formula_id, planned_quantity_kg, actual_quantity_kg: currentActual, batch_size_kg } = runDetails.rows[0]
                                 const effectiveActual = actual_quantity_kg ?? currentActual ?? planned_quantity_kg
-                                const scaleFactor = effectiveActual / batch_size_kg
+                                const scaleFactor = batch_size_kg > 0 ? effectiveActual / batch_size_kg : 1
 
                                 const formulaResources = await client.query(
                                     'SELECT resource_id, quantity_required FROM formula_resources WHERE formula_id = $1',
@@ -810,12 +874,9 @@ export default async function (fastifyRaw: FastifyInstance) {
                         }
 
                         if (shortages.length > 0) {
-                             await client.query('ROLLBACK')
-                             client.release()
-                             return reply.status(400).send({
-                                error: 'Bad Request',
-                                message: `Failed to update production run: Insufficient stock for: ${shortages.join(', ')}`
-                            })
+                              const stockErr: any = new Error(`Insufficient stock for: ${shortages.join(', ')}`)
+                              stockErr.statusCode = 400
+                              throw stockErr
                         }
 
                         for (const act of actualResources) {
@@ -855,11 +916,13 @@ export default async function (fastifyRaw: FastifyInstance) {
                     message: 'Production run updated successfully',
                     production_run_id: id
                 })
-            } catch (err) {
+            } catch (err: any) {
                 fastify.log.error(err)
-                return reply.status(500).send({
-                    error: 'Internal Server Error',
-                    message: 'Failed to update production run'
+                const statusCode = err.statusCode || 500
+                const errorName = statusCode === 400 ? 'Bad Request' : 'Internal Server Error'
+                return reply.status(statusCode).send({
+                    error: errorName,
+                    message: err.message || 'Failed to update production run'
                 })
             }
         }
@@ -867,70 +930,6 @@ export default async function (fastifyRaw: FastifyInstance) {
 
     /**
      * GET /production-runs/summary - Retrieve production summary metrics.
-     * Accessible by 'admin', 'manager', or 'operator' roles.
-     */
-    fastify.get('/summary', {
-        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager', 'operator'])],
-        handler: async (request, reply) => {
-            try {
-                // 1. Active Runs
-                const activeRunsRes = await fastify.db.query(
-                    `SELECT COUNT(*) as count FROM production_runs pr 
-                     WHERE pr.status IN ('planned', 'running', 'paused')
-                        OR (pr.status IN ('completed', 'packaging') 
-                            AND (SELECT COALESCE(SUM(quantity_kg), 0) FROM finished_stock_transactions WHERE reference_id = pr.id AND transaction_type = 'production_entry') < (COALESCE(pr.actual_quantity_kg, pr.planned_quantity_kg) - 0.1)
-                        )`
-                )
-                const activeRuns = parseInt(activeRunsRes.rows[0].count, 10)
-
-                // 2. Today's Production (Yield)
-                const todaysProductionRes = await fastify.db.query(
-                    `SELECT SUM(actual_quantity_kg) as total 
-                     FROM production_runs 
-                     WHERE DATE(created_at) = CURRENT_DATE AND status = 'completed'`
-                )
-                const todaysProduction = parseFloat(todaysProductionRes.rows[0].total || '0')
-
-                // 3. Resource Consumption (Today)
-                const todaysConsumptionRes = await fastify.db.query(
-                    `SELECT SUM(pra.actual_quantity_used) as total 
-                     FROM production_resource_actuals pra
-                     JOIN production_runs pr ON pra.production_run_id = pr.id
-                     WHERE DATE(pra.created_at) = CURRENT_DATE`
-                )
-                const resourceConsumption = parseFloat(todaysConsumptionRes.rows[0].total || '0')
-
-                // 4. Production Variance
-                const varianceRes = await fastify.db.query(
-                    `SELECT SUM(expected_quantity) as total_expected, SUM(actual_quantity_used) as total_actual
-                     FROM production_resource_actuals pra
-                     JOIN production_runs pr ON pra.production_run_id = pr.id
-                     WHERE DATE(pra.created_at) = CURRENT_DATE`
-                )
-                const totalExpected = parseFloat(varianceRes.rows[0].total_expected || '0')
-                const totalActual = parseFloat(varianceRes.rows[0].total_actual || '0')
-
-                let variancePercentage = 0;
-                if (totalExpected > 0) {
-                    variancePercentage = ((totalActual - totalExpected) / totalExpected) * 100;
-                }
-
-                return reply.send({
-                    active_runs: activeRuns,
-                    todays_production_kg: todaysProduction,
-                    resource_consumption_kg: resourceConsumption, // Assuming standard metric mix is kg/kg
-                    production_variance_percent: variancePercentage
-                })
-            } catch (err) {
-                fastify.log.error(err)
-                return reply.status(500).send({
-                    error: 'Internal Server Error',
-                    message: 'Failed to retrieve production summary'
-                })
-            }
-        }
-    })
-
     /**
      * POST /production-runs - Create a new production run, deducting materials.
      * Only accessible by users with 'admin', 'manager', or 'operator' roles.
@@ -1008,7 +1007,9 @@ export default async function (fastifyRaw: FastifyInstance) {
                     // Calculate numeric variance
                     const variance = actual.quantity - expectedQuantity
                     // Flag variance exceeding 5% threshold
-                    const varianceFlag = Math.abs(variance / expectedQuantity) > 0.05
+                    const varianceFlag = expectedQuantity > 0
+                        ? Math.abs(variance / expectedQuantity) > 0.05
+                        : variance !== 0
 
                     // a. Record the actual consumption alongside variance tracking
                     await client.query(
@@ -1157,7 +1158,9 @@ export default async function (fastifyRaw: FastifyInstance) {
                         const scaleFactor = targetQty / formula.batch_size_kg
                         const expectedQty = erRes.rows.length > 0 ? (erRes.rows[0].quantity_required * scaleFactor) : 0
                         const variance = act.quantity - expectedQty
-                        const varianceFlag = Math.abs(variance / expectedQty) > 0.05
+                        const varianceFlag = expectedQty > 0
+                            ? Math.abs(variance / expectedQty) > 0.05
+                            : variance !== 0
 
                         await fastify.db.query(
                             `INSERT INTO production_resource_actuals 
@@ -1168,10 +1171,24 @@ export default async function (fastifyRaw: FastifyInstance) {
                     }
                 }
 
+                // Fetch expected resources to return in the response
+                const expectedResourcesResult = await fastify.db.query(`
+                    SELECT
+                        fr.resource_id,
+                        r.name,
+                        r.unit,
+                        ROUND((fr.quantity_required * $2 / f.batch_size_kg)::numeric, 4) AS expected_quantity
+                    FROM formula_resources fr
+                    JOIN resources r ON fr.resource_id = r.id
+                    JOIN formulas f ON fr.formula_id = f.id
+                    WHERE fr.formula_id = $1
+                `, [formulaId, targetQty])
+
                 return reply.status(201).send({
                     message: 'Production batch planned successfully',
                     production_run_id: runId,
-                    status: 'planned'
+                    status: 'planned',
+                    expected_resources: expectedResourcesResult.rows
                 })
 
             } catch (err) {
@@ -1218,6 +1235,15 @@ export default async function (fastifyRaw: FastifyInstance) {
                 }
 
                 const { actual_quantity_kg, planned_quantity_kg, status, color_id } = runResult.rows[0]
+
+                // Only allow packaging for completed or partially-packaged runs
+                if (status !== 'completed' && status !== 'packaging') {
+                    await client.query('ROLLBACK')
+                    return reply.status(400).send({
+                        error: 'Bad Request',
+                        message: `Cannot package a run with status '${status}'. Run must be 'completed' first.`
+                    })
+                }
 
                 // Ensure we don't package volumes we didn't theoretically produce
                 let requestedVolumeKG = 0
