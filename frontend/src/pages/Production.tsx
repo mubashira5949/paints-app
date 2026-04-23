@@ -333,6 +333,11 @@ export default function Production() {
     setIsCompleting(true)
     try {
       const parsedYield = Number(actualYield) || 0
+      if (parsedYield <= 0) {
+        alert('Please enter a valid actual yield greater than 0.')
+        setIsCompleting(false)
+        return
+      }
       const targetQtyDisplay = toDisplayValue(completingRun.targetQty, unitPref)
       const computedWaste = Math.max(0, targetQtyDisplay - parsedYield)
       await updateStatus(completingRun.id, 'completed', {
@@ -1077,7 +1082,7 @@ export default function Production() {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setIsCompletionModalOpen(false)}></div>
           <div className="bg-white w-full max-w-lg rounded-xl shadow-2xl border relative z-10 p-8">
             <div className="flex items-center justify-between mb-6"><h3 className="text-xl font-bold">Complete Run</h3><button onClick={() => setIsCompletionModalOpen(false)}><X className="h-6 w-6" /></button></div>
-            <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
+            <form onSubmit={handleConfirmCompletion} className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1"><label className="text-xs font-black uppercase text-slate-400">Actual Yield</label><input type="number" step="0.1" className="w-full p-4 text-2xl font-black border rounded-xl text-emerald-600" value={actualYield === 0 || actualYield === '0' ? '' : actualYield} onChange={(e) => setActualYield(e.target.value)} /></div>
                 <div className="space-y-1"><label className="text-xs font-black uppercase text-slate-400">Yield Loss</label><div className="w-full p-4 text-2xl font-black border rounded-xl bg-slate-50 text-slate-400">{Number(Math.max(0, toDisplayValue(completingRun.targetQty, unitPref) - (Number(actualYield) || 0)).toFixed(1))}</div></div>

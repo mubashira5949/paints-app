@@ -146,8 +146,7 @@ fastify.register(inventoryApi, { prefix: '/api/inventory' })
 import salesModule from './modules/sales'
 
 // Register sales module with a '/sales' prefix.
-    // Force reload for HSN report
-    fastify.register(salesModule, { prefix: '/sales' })
+fastify.register(salesModule, { prefix: '/sales' })
 
 import clientsModule from './modules/clients'
 import settingsModule from './modules/settings'
