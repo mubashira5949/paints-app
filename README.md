@@ -1,4 +1,4 @@
-🎨 Paint Production & Inventory Management System
+# 🎨 Paint Production & Inventory Management System
 
 A full-stack web application designed to manage paint manufacturing, raw material inventory, production tracking, sales, and financial integrity.
 
