@@ -75,4 +75,4 @@ Run the test suite:
 npm test
 ```
 
-<!-- Maintenance commit: 2026-04-27 -->
+<!-- Maintenance commit: 2026-04-28 -->
