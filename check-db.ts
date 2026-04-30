@@ -1,10 +1,20 @@
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
 dotenv.config();
+import fs from 'fs';
+import path from 'path';
+
+let sslOptions: any = { rejectUnauthorized: false };
+if (process.env.DB_SSL_ROOT_CERT) {
+    sslOptions = {
+        rejectUnauthorized: true,
+        ca: fs.readFileSync(path.resolve(process.env.DB_SSL_ROOT_CERT)).toString()
+    };
+}
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: sslOptions
 });
 
 async function check() {

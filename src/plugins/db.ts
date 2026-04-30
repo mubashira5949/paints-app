@@ -43,9 +43,8 @@ async function dbConnector(fastify: FastifyInstance) {
     fastify.decorate('db', pool)
 
     /**
-     * Keep-alive ping every 4 minutes to prevent Neon serverless DB from
-     * suspending its compute after 5 minutes of inactivity.
-     * Without this, the first query after idle takes 2-3 seconds (cold start).
+     * Keep-alive ping every 4 minutes to ensure the database connection
+     * remains active and isn't dropped by VPC firewalls or idle timeouts.
      */
     const keepAlive = setInterval(async () => {
         try {
