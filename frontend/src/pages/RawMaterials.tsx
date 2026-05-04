@@ -362,7 +362,7 @@ export default function RawMaterials() {
                         Availability
                       </span>
                       <div className="text-2xl font-black text-slate-900 tracking-tighter">
-                        {resource.current_stock}
+                        {Number(resource.current_stock)}
                         <span className="text-xs text-slate-400 ml-1 font-bold uppercase">
                           {resource.unit}
                         </span>
