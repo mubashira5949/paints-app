@@ -663,7 +663,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                         // 0. Log loss to product_losses table if waste > 0
                         if (waste_kg !== undefined && waste_kg > 0) {
                             const runData = await client.query(
-                                `SELECT pr.formula_id, f.color_id, pr.operator_id 
+                                `SELECT pr.formula_id, f.color_id, pr.created_by AS operator_id 
                                  FROM production_runs pr 
                                  JOIN formulas f ON pr.formula_id = f.id 
                                  WHERE pr.id = $1`,
