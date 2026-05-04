@@ -464,8 +464,7 @@ export default function Inventory() {
                 (showAllInventory ? inventory : inventory.slice(0, 5)).map((item) => (
                   <React.Fragment key={item.id}>
                     <tr
-                      onClick={() => toggleRow(item.id)}
-                      className="hover:bg-gray-50 transition-colors cursor-pointer group"
+                      className="hover:bg-gray-50 transition-colors group"
                     >
                       <td className="p-6 font-medium">
                         <div className="flex items-center gap-3">
@@ -476,7 +475,7 @@ export default function Inventory() {
                               textShadow: '0px 1px 2px rgba(0,0,0,0.5)',
                             }}
                           >
-                            {item.status === 'low' && '!'}
+                            {item.mass === 0 ? '×' : (item.status === 'low' ? '!' : '')}
                           </div>
                           <div className="flex flex-col">
                             <span className="font-extrabold text-[15px] text-slate-900">
@@ -551,16 +550,22 @@ export default function Inventory() {
                         </div>
                       </td>
                       <td className="p-6">
-                        {item.status === 'healthy' && (
+                        {item.mass > 0 && item.status === 'healthy' && (
                           <div className="flex items-center justify-center gap-2 text-emerald-600 font-bold text-xs uppercase tracking-wide">
                             <CheckCircle2 className="h-5 w-5" />
                             <span>Healthy</span>
                           </div>
                         )}
-                        {item.status === 'low' && (
+                        {item.mass > 0 && item.status === 'low' && (
                           <div className="flex items-center justify-center gap-2 text-amber-600 font-bold text-xs uppercase tracking-wide">
                             <AlertTriangle className="h-5 w-5" />
                             <span>Low Stock</span>
+                          </div>
+                        )}
+                        {item.mass === 0 && (
+                          <div className="flex items-center justify-center gap-2 text-slate-400 font-bold text-xs uppercase tracking-wide">
+                            <AlertTriangle className="h-5 w-5" />
+                            <span>Out of Stock</span>
                           </div>
                         )}
                       </td>
