@@ -53,6 +53,7 @@ interface InventorySummary {
   totalMass: number
   packagedUnits: number
   lowStockColors: number
+  outOfStockColors: number
 }
 
 interface Supplier {
@@ -251,7 +252,7 @@ export default function Inventory() {
         </button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border bg-card p-6 shadow-sm border-t-4 border-blue-500 hover:shadow-md transition-shadow">
           <div className="flex flex-row items-center justify-between space-y-0 pb-2">
             <p className="text-sm font-medium">Total Finished Stock</p>
@@ -287,7 +288,20 @@ export default function Inventory() {
               {summary ? summary.lowStockColors : '0'}
               <span className="text-sm font-normal text-muted-foreground ml-1">Colors</span>
             </div>
-            <p className="text-xs text-muted-foreground">Below minimum threshold</p>
+            <p className="text-xs text-muted-foreground">Has stock, but below threshold</p>
+          </div>
+        </div>
+        <div className="rounded-xl border bg-card p-6 shadow-sm border-t-4 border-red-400 hover:shadow-md transition-shadow">
+          <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <p className="text-sm font-medium">Out of Stock Colors</p>
+            <BarChart3 className="h-4 w-4 text-red-400" />
+          </div>
+          <div>
+            <div className="text-2xl font-bold">
+              {summary ? summary.outOfStockColors : '0'}
+              <span className="text-sm font-normal text-muted-foreground ml-1">Colors</span>
+            </div>
+            <p className="text-xs text-muted-foreground">Zero stock available</p>
           </div>
         </div>
       </div>

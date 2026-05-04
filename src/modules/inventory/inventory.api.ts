@@ -20,7 +20,8 @@ export default async function (fastifyRaw: FastifyInstance) {
                 200: Type.Object({
                     totalMass: Type.Number(),
                     packagedUnits: Type.Number(),
-                    lowStockColors: Type.Number()
+                    lowStockColors: Type.Number(),
+                    outOfStockColors: Type.Number()
                 }),
                 500: Type.Object({
                     error: Type.String(),
@@ -46,41 +47,43 @@ export default async function (fastifyRaw: FastifyInstance) {
                 const totals = totalsResult.rows[0];
 
                 const threshold = (request.query as any)?.threshold;
-                // Low Stock Colors Count
-                let lowStockQuery;
-                let paramVals: any[] = [];
-                if (threshold !== undefined) {
-                    lowStockQuery = `
-                        SELECT COUNT(*) as "lowStockColors"
-                        FROM (
-                            SELECT c.id
-                            FROM colors c
-                            LEFT JOIN finished_stock fs ON c.id = fs.color_id
-                            GROUP BY c.id
-                            HAVING COALESCE(SUM(fs.quantity_units * fs.pack_size_kg), 0) < $1::numeric
-                        ) AS low_stock_colors
-                    `;
-                    paramVals = [threshold];
-                } else {
-                    lowStockQuery = `
-                        SELECT COUNT(*) as "lowStockColors"
-                        FROM (
-                            SELECT c.id
-                            FROM colors c
-                            LEFT JOIN finished_stock fs ON c.id = fs.color_id
-                            GROUP BY c.id, c.min_threshold_kg
-                            HAVING COALESCE(SUM(fs.quantity_units * fs.pack_size_kg), 0) < c.min_threshold_kg
-                        ) AS low_stock_colors
-                    `;
-                }
-                
+                const paramVals: any[] = threshold !== undefined ? [threshold] : [];
+                const thresholdExpr = threshold !== undefined ? '$1::numeric' : 'c.min_threshold_kg';
+
+                // Out of stock: mass = 0
+                const outOfStockQuery = `
+                    SELECT COUNT(*) as "outOfStockColors"
+                    FROM (
+                        SELECT c.id
+                        FROM colors c
+                        LEFT JOIN finished_stock fs ON c.id = fs.color_id
+                        GROUP BY c.id
+                        HAVING COALESCE(SUM(fs.quantity_units * fs.pack_size_kg), 0) = 0
+                    ) AS oos
+                `;
+                const outOfStockResult = await fastify.db.query(outOfStockQuery);
+                const outOfStockColors = parseInt(outOfStockResult.rows[0].outOfStockColors);
+
+                // Low stock: has some stock but below threshold
+                const lowStockQuery = `
+                    SELECT COUNT(*) as "lowStockColors"
+                    FROM (
+                        SELECT c.id
+                        FROM colors c
+                        LEFT JOIN finished_stock fs ON c.id = fs.color_id
+                        GROUP BY c.id, c.min_threshold_kg
+                        HAVING COALESCE(SUM(fs.quantity_units * fs.pack_size_kg), 0) > 0
+                           AND COALESCE(SUM(fs.quantity_units * fs.pack_size_kg), 0) < ${thresholdExpr}
+                    ) AS low_stock_colors
+                `;
                 const lowStockResult = await fastify.db.query(lowStockQuery, paramVals);
                 const lowStockColors = parseInt(lowStockResult.rows[0].lowStockColors);
 
                 return reply.status(200).send({
                     totalMass: Number(totals.totalMass),
                     packagedUnits: Number(totals.packagedUnits),
-                    lowStockColors: Number(lowStockColors)
+                    lowStockColors: Number(lowStockColors),
+                    outOfStockColors: Number(outOfStockColors)
                 });
             } catch (err) {
                 fastify.log.error(err);
