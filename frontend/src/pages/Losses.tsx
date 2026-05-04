@@ -143,10 +143,10 @@ export default function Losses() {
       quantity_units: '',
       quantity_kg: '',
     }))
-    if (color && color.packDistribution) {
+    if (color && Array.isArray(color.packDistribution) && color.packDistribution.length > 0) {
       setAvailablePackSizes(color.packDistribution.map((p) => parseFloat(p.size)))
     } else {
-      setAvailablePackSizes([])
+      setAvailablePackSizes([1, 4, 10, 20])
     }
   }
 
