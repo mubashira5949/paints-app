@@ -280,6 +280,13 @@ export default async function (fastifyRaw: FastifyInstance) {
                             (color_id, pack_size_kg, quantity_units, quantity_kg, transaction_type, notes, created_by)
                             VALUES ($1, $2, $3, $4, 'restock', 'Restock from returned order #' || $5, $6)
                         `, [item.color_id, item.pack_size_kg, item.quantity, quantityKg, id, user.id])
+                        
+                        await client.query(`
+                            INSERT INTO finished_stock (color_id, pack_size_kg, quantity_units) 
+                            VALUES ($1, $2, $3) 
+                            ON CONFLICT (color_id, pack_size_kg) 
+                            DO UPDATE SET quantity_units = finished_stock.quantity_units + EXCLUDED.quantity_units
+                        `, [item.color_id, item.pack_size_kg, item.quantity])
                     }
                 }
 
