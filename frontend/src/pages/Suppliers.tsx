@@ -446,12 +446,6 @@ export default function Suppliers() {
               >
                 Core Intelligence
               </button>
-              <button
-                onClick={() => setActiveTab('stakeholders')}
-                className={`pb-4 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'stakeholders' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-              >
-                Stakeholders ({formData.pocs.length})
-              </button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-10">
