@@ -112,20 +112,21 @@ export default function Losses() {
   }
 
   const fetchInitialData = async () => {
-    try {
-      const [reasonsData, colorsData, resourcesData, operatorData] = await Promise.all([
-        apiRequest<LossReason[]>('/api/losses/reasons'),
-        apiRequest<ColorOption[]>('/api/inventory'),
-        apiRequest<ResourceOption[]>('/resources'),
-        apiRequest<OperatorSummary[]>('/api/losses/operator-summary'),
-      ])
-      setReasons(reasonsData)
-      setColors(colorsData)
-      setResources(resourcesData)
-      setOperatorSummary(operatorData)
-    } catch (err) {
-      console.error('Failed to fetch form data', err)
-    }
+    apiRequest<LossReason[]>('/api/losses/reasons')
+      .then(setReasons)
+      .catch((err) => console.error('Failed to fetch reasons', err))
+
+    apiRequest<ColorOption[]>('/api/inventory')
+      .then(setColors)
+      .catch((err) => console.error('Failed to fetch inventory', err))
+
+    apiRequest<ResourceOption[]>('/resources')
+      .then(setResources)
+      .catch((err) => console.error('Failed to fetch resources', err))
+
+    apiRequest<OperatorSummary[]>('/api/losses/operator-summary')
+      .then(setOperatorSummary)
+      .catch((err) => console.error('Failed to fetch operator summary', err))
   }
 
   useEffect(() => {
