@@ -165,7 +165,7 @@ export default function PurchaseOrders() {
           <div className="relative">
             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
             <select className="pl-10 pr-8 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 appearance-none text-sm font-bold text-slate-600 bg-white min-w-[140px] cursor-pointer">
-              <option value="">All Statuses</option>
+              <option value="">All Status</option>
               <option value="pending">Pending</option>
               <option value="ordered">Ordered</option>
               <option value="received">Received</option>
