@@ -68,6 +68,31 @@ export default function PurchaseOrders() {
   const [selectedItem, setSelectedItem] = useState<POItem | null>(null)
   const [editData, setEditData] = useState({ quantity: '', unit_price: '' })
 
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('')
+  const [date, setDate] = useState('')
+
+  const filteredOrders = orders.filter((order) => {
+    if (search) {
+      const s = search.toLowerCase()
+      const poNumber = generateUniquePONumber(order.id, order.created_at).toLowerCase()
+      const supplierName = order.supplier_name ? order.supplier_name.toLowerCase() : ''
+      if (!poNumber.includes(s) && !supplierName.includes(s)) {
+        return false
+      }
+    }
+    if (status && order.status !== status) {
+      return false
+    }
+    if (date) {
+      const orderDate = new Date(order.created_at).toISOString().split('T')[0]
+      if (orderDate !== date) {
+        return false
+      }
+    }
+    return true
+  })
+
   const fetchOrders = async () => {
     setIsLoading(true)
     try {
@@ -159,12 +184,18 @@ export default function PurchaseOrders() {
             type="text"
             placeholder="Search Purchase Order..."
             className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all text-sm font-bold placeholder:text-slate-400"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         <div className="flex gap-4">
           <div className="relative">
             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-            <select className="pl-10 pr-8 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 appearance-none text-sm font-bold text-slate-600 bg-white min-w-[140px] cursor-pointer">
+            <select
+              className="pl-10 pr-8 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 appearance-none text-sm font-bold text-slate-600 bg-white min-w-[140px] cursor-pointer"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
               <option value="">All Status</option>
               <option value="pending">Pending</option>
               <option value="ordered">Ordered</option>
@@ -178,6 +209,8 @@ export default function PurchaseOrders() {
             <input
               type="date"
               className="pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 text-sm font-bold text-slate-600 bg-white min-w-[140px] cursor-pointer"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
             />
           </div>
         </div>
@@ -192,7 +225,7 @@ export default function PurchaseOrders() {
         </div>
       ) : (
         <div className="space-y-6">
-          {orders.map((order) => (
+          {filteredOrders.map((order) => (
             <div
               key={order.id}
               className={`group bg-white overflow-hidden transition-all duration-300 ${expandedId === order.id ? 'no-shadow print:shadow-none' : 'rounded-[24px] border border-slate-100 shadow-sm hover:shadow-md'}`}
