@@ -457,7 +457,7 @@ export default function PurchaseOrders() {
                                   className="text-[10px] text-slate-400 font-bold uppercase no-print cursor-pointer hover:text-orange-500 truncate mt-1"
                                   onClick={() => openEditModal(item)}
                                 >
-                                  Edit Unit Quantity
+                                  Edit Item
                                 </span>
                               </div>
                             </td>
@@ -549,7 +549,7 @@ export default function PurchaseOrders() {
                   <PencilLine className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-black text-slate-900">Scale Order</h2>
+                  <h2 className="text-xl font-black text-slate-900">Edit Item</h2>
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
                     {selectedItem.resource_name}
                   </p>
@@ -564,17 +564,35 @@ export default function PurchaseOrders() {
             </div>
 
             <form onSubmit={handleUpdateItem} className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                  New Quantity ({selectedItem.unit})
-                </label>
-                <input
-                  required
-                  type="number"
-                  className="w-full rounded-2xl border border-slate-200 px-5 py-4 text-sm font-bold focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all font-black"
-                  value={editData.quantity}
-                  onChange={(e) => setEditData({ ...editData, quantity: e.target.value })}
-                />
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                    New Quantity ({selectedItem.unit})
+                  </label>
+                  <input
+                    required
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="w-full rounded-2xl border border-slate-200 px-5 py-4 text-sm font-bold focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all font-black"
+                    value={editData.quantity}
+                    onChange={(e) => setEditData({ ...editData, quantity: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                    Unit Price (₹)
+                  </label>
+                  <input
+                    required
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="w-full rounded-2xl border border-slate-200 px-5 py-4 text-sm font-bold focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all font-black"
+                    value={editData.unit_price}
+                    onChange={(e) => setEditData({ ...editData, unit_price: e.target.value })}
+                  />
+                </div>
               </div>
               <button className="w-full py-4 rounded-3xl bg-orange-500 text-white text-xs font-black uppercase tracking-widest shadow-xl shadow-orange-100 hover:bg-orange-600 transition-all active:scale-[0.98]">
                 UPDATE OFFICIAL RECORD
