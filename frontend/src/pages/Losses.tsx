@@ -237,7 +237,7 @@ export default function Losses() {
               {formatUnit(
                 losses
                   .filter((l) => l.item_type === 'finished_good')
-                  .reduce((acc, curr) => acc + curr.quantity_kg, 0),
+                  .reduce((acc, curr) => acc + Number(curr.quantity_kg || 0), 0),
                 unitPref,
               )}
             </div>
@@ -259,7 +259,7 @@ export default function Losses() {
               {formatUnit(
                 losses
                   .filter((l) => l.item_type === 'raw_material')
-                  .reduce((acc, curr) => acc + curr.quantity_kg, 0),
+                  .reduce((acc, curr) => acc + Number(curr.quantity_kg || 0), 0),
                 unitPref,
               )}
             </div>
