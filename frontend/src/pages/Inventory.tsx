@@ -92,13 +92,14 @@ export default function Inventory() {
 
   const [productTypeOptions, setProductTypeOptions] = useState<{ id: number; name: string }[]>([])
   const [seriesOptions, setSeriesOptions] = useState<{ id: number; name: string }[]>([])
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
   // Purchase Order Modal state
   const [showPOModal, setShowPOModal] = useState(false)
   const [poDraftItem, setPODraftItem] = useState<PODraftItem | null>(null)
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [selectedSupplierId, setSelectedSupplierId] = useState<number | null>(null)
-  const [poQuantity, setPOQuantity] = useState<number>(0)
+  const [poQuantity, setPOQuantity] = useState<number | string>('')
   const [poNotes, setPONotes] = useState('')
   const [poSubmitting, setPOSubmitting] = useState(false)
 
@@ -210,14 +211,14 @@ export default function Inventory() {
       })
       setShowPOModal(false)
       setPODraftItem(null)
-      alert(`✅ Purchase Order created for ${poDraftItem.resource_name}!\nNavigate to Procurement to review.`)
+      setSuccessMsg(`✅ Purchase Order created for ${poDraftItem.resource_name}! Navigate to Procurement to review.`)
+      setTimeout(() => setSuccessMsg(null), 4000)
     } catch (err: any) {
       alert(err.message || 'Failed to create purchase order')
     } finally {
       setPOSubmitting(false)
     }
   }
-
 
   useEffect(() => {
     fetchInventory()
@@ -234,7 +235,16 @@ export default function Inventory() {
     : alerts
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {successMsg && (
+        <div className="fixed bottom-6 right-6 z-[300] bg-slate-900 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300">
+          <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+          <p className="text-sm font-bold">{successMsg}</p>
+          <button onClick={() => setSuccessMsg(null)} className="ml-2 text-slate-400 hover:text-white">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Inventory Management</h1>
@@ -941,8 +951,11 @@ export default function Inventory() {
                   type="number"
                   min={1}
                   step="0.1"
-                  value={poQuantity}
-                  onChange={(e) => setPOQuantity(Number(e.target.value))}
+                  value={poQuantity === '' ? '' : Number(poQuantity).toString()}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/^0+(?=\d)/, '');
+                    setPOQuantity(val === '' ? '' : val);
+                  }}
                   className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all"
                 />
               </div>
