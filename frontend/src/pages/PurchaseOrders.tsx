@@ -325,12 +325,12 @@ export default function PurchaseOrders() {
                     </div>
                   </div>
 
-                  <div className="p-8 lg:p-12">
+                  <div className="p-8 lg:p-12 print:p-0 print:pt-4">
                     {/* Main Title */}
-                    <h2 className="text-center text-4xl font-black text-orange-500 uppercase tracking-widest mb-12">
+                    <h2 className="text-center text-4xl font-black text-orange-500 uppercase tracking-widest mb-12 print:mb-6">
                       Purchase Order
                     </h2>
-                  <div className="grid grid-cols-2 gap-12 mb-12">
+                  <div className="grid grid-cols-2 gap-12 mb-12 print:gap-6 print:mb-6">
                     {/* Top Left: Company Details */}
                     <div className="space-y-6">
                       <div className="text-sm font-bold text-slate-500 space-y-1">
@@ -366,7 +366,7 @@ export default function PurchaseOrders() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-12 items-start mb-12">
+                  <div className="grid grid-cols-2 gap-12 items-start mb-12 print:gap-6 print:mb-6">
                     {/* Middle Left: Bill To */}
                     <div className="space-y-4">
                       <h4 className="text-lg font-black text-slate-900">Bill To</h4>
@@ -420,7 +420,7 @@ export default function PurchaseOrders() {
                   </div>
 
                   {/* Order Details Table */}
-                  <div className="mb-10">
+                  <div className="mb-10 print:mb-6">
                     <h4 className="text-lg font-black text-slate-900 mb-4">Order Details</h4>
                     <table className="w-full border-collapse">
                       <thead className="bg-slate-100">
@@ -445,10 +445,10 @@ export default function PurchaseOrders() {
                       <tbody>
                         {order.items?.map((item, index) => (
                           <tr key={item.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-                            <td className="px-6 py-4 text-center font-bold text-slate-500">
+                            <td className="px-6 py-4 print:py-2 text-center font-bold text-slate-500">
                               {index + 1}.
                             </td>
-                            <td className="px-6 py-4">
+                            <td className="px-6 py-4 print:py-2">
                               <div className="flex flex-col">
                                 <span className="font-black text-slate-900 uppercase tracking-tight">
                                   {item.resource_name}
@@ -461,13 +461,13 @@ export default function PurchaseOrders() {
                                 </span>
                               </div>
                             </td>
-                            <td className="px-6 py-4 text-center font-bold text-slate-600">
+                            <td className="px-6 py-4 print:py-2 text-center font-bold text-slate-600">
                               {item.quantity}
                             </td>
-                            <td className="px-6 py-4 text-center font-bold text-slate-600">
+                            <td className="px-6 py-4 print:py-2 text-center font-bold text-slate-600">
                               ₹{item.unit_price.toFixed(2)}
                             </td>
-                            <td className="px-6 py-4 text-right font-black text-slate-900 tracking-tight">
+                            <td className="px-6 py-4 print:py-2 text-right font-black text-slate-900 tracking-tight">
                               ₹{(item.quantity * item.unit_price).toFixed(2)}
                             </td>
                           </tr>
@@ -477,7 +477,7 @@ export default function PurchaseOrders() {
                   </div>
 
                   {/* Totals Section */}
-                  <div className="flex justify-end mb-16">
+                  <div className="flex justify-end mb-16 print:mb-6">
                     <div className="w-full max-w-[320px] rounded-2xl bg-orange-50 border border-orange-200 overflow-hidden shadow-sm">
                       <div className="p-6 space-y-4 font-bold text-sm">
                         <div className="flex justify-between text-slate-500">
@@ -513,7 +513,7 @@ export default function PurchaseOrders() {
                   </div>
 
                   {/* Footer */}
-                  <div className="flex items-center justify-between pt-10 border-t border-slate-200">
+                  <div className="flex items-center justify-between pt-10 print:pt-6 border-t border-slate-200">
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-2 text-slate-900 font-black">
                         <UserCheck className="h-5 w-5 text-orange-500" /> Authorized By: Alex Mercer
