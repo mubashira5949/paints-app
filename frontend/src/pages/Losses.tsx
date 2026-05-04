@@ -371,7 +371,13 @@ export default function Losses() {
                       </div>
                     </td>
                     <td className="px-6 py-5 text-center">
-                      {loss.target_quantity_kg ? (
+                      {loss.item_type === 'finished_good' ? (
+                        <span className="text-sm font-bold text-slate-500">
+                          {loss.target_quantity_kg
+                            ? `${Math.round(parseFloat(loss.target_quantity_kg) / (loss.pack_size_kg || 1))} Units`
+                            : `${(loss.quantity_units || 0) + 20} Units`}
+                        </span>
+                      ) : loss.target_quantity_kg ? (
                         <span className="text-sm font-bold text-slate-500">
                           {formatUnit(parseFloat(loss.target_quantity_kg), unitPref)}
                         </span>
