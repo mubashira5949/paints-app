@@ -379,14 +379,16 @@ export default function RawMaterials() {
 
                     {/* Actions Slider */}
                     <div className="py-4 flex gap-2">
-                      <button
-                        onClick={() => handleOpenOrderModal(resource)}
-                        title="Create Purchase Order"
-                        className="p-3 rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2 group-hover:scale-105"
-                      >
-                        <ShoppingCart className="h-4 w-4" />
-                        <span className="text-[10px] font-black uppercase">ORDER</span>
-                      </button>
+                      {canEditStock && (
+                        <button
+                          onClick={() => handleOpenOrderModal(resource)}
+                          title="Create Purchase Order"
+                          className="p-3 rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2 group-hover:scale-105"
+                        >
+                          <ShoppingCart className="h-4 w-4" />
+                          <span className="text-[10px] font-black uppercase">ORDER</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => handleOpenModal(resource)}
                         className="p-3 rounded-2xl bg-slate-100 text-slate-500 hover:bg-slate-200 transition-all shadow-sm"
