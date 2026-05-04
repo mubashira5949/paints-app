@@ -36,3 +36,12 @@
     letter-spacing: -0.015em;
   }
 }
+
+@media print {
+  @page {
+    margin: 0; /* Removes default browser headers and footers */
+  }
+  body {
+    padding: 1cm; /* Prevents content from touching the absolute physical edge of the paper */
+  }
+}
