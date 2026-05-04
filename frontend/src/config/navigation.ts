@@ -35,7 +35,7 @@ export const navigation: NavItem[] = [
     title: 'Analytics & Trends',
     path: '/trends',
     icon: TrendingUp,
-    roles: ['manager', 'admin', 'sales'],
+    roles: ['manager', 'admin'],
   },
   {
     title: 'Production',
