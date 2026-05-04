@@ -1136,8 +1136,12 @@ export default function Formulas() {
                   <label className="text-sm font-bold text-slate-900">Bill of Materials</label>
                   <button
                     type="button"
-                    onClick={addResourceRow}
-                    className="text-xs font-bold text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      addResourceRow()
+                    }}
+                    className="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer relative z-10 flex items-center"
                   >
                     + Add Material
                   </button>
