@@ -518,20 +518,6 @@ export default function Dashboard() {
                               </div>
                             )}
 
-                            {/* Operator: Notify Manager */}
-                            {(user?.role === 'operator' || user?.role === 'worker') && (
-                              <button
-                                onClick={() => notifyManager(alert.resource_id)}
-                                disabled={!!alert.requested_by}
-                                className={`text-[9px] px-2 py-1 rounded-lg uppercase tracking-widest font-black transition-colors ${
-                                  alert.requested_by
-                                    ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                                    : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'
-                                }`}
-                              >
-                                {alert.requested_by ? 'Notified ✓' : 'Notify Manager'}
-                              </button>
-                            )}
                           </div>
                         </td>
                       </tr>
