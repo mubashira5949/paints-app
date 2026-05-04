@@ -1,9 +1,3 @@
-/**
- * Seed Script: Insert all standard colors with ink series availability + placeholder codes.
- * Run with: npx tsx src/scripts/seed-colors.ts
- * Uses INSERT ... ON CONFLICT (name) DO UPDATE — safe to re-run.
- */
-
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
 
@@ -11,121 +5,97 @@ dotenv.config();
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { 
-        rejectUnauthorized: false,
-        servername: 'db.neon.tech'
-    }
+    ssl: { rejectUnauthorized: false }
 });
 
-interface ColorSeed {
-    name: string;
-    series: string;
-    product_type: 'Water Based' | 'Oil Based';
-    available_lcs: boolean;
-    available_std: boolean;
-    available_opq_js: boolean;
-    hsn_code: string;
-    business_code: string;
-}
-
-// ─── Shared HSN / product codes ─────────────────────────────────────────────
-const INK_HSN = '32081090';
-const HD_HSN  = '32089090';
-
-// ─── Ink Series colours (1-30) ──────────────────────────────────────────────
-// Categorized as 'Oil Based' by default for the core ink series.
-const INK_COLORS: ColorSeed[] = [
-    // name                  | series       | type        | ink_series | lcs   | std   | js    | hsn       | code
-    { name: 'BLACK',            series: 'Ink Series', product_type: 'Oil Based',      available_lcs: true,  available_std: true,  available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-001' },
-    { name: 'LEMON YELLOW',     series: 'Ink Series', product_type: 'Oil Based',      available_lcs: true,  available_std: true,  available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-002' },
-    { name: 'GOLDEN YELLOW',    series: 'Ink Series', product_type: 'Oil Based',      available_lcs: true,  available_std: true,  available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-003' },
-    { name: 'BLUE ROYAL',       series: 'Ink Series', product_type: 'Oil Based',      available_lcs: true,  available_std: true,  available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-004' },
-    { name: 'BLUE NAVY',        series: 'Ink Series', product_type: 'Oil Based',      available_lcs: true,  available_std: true,  available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-005' },
-    { name: 'ALPHA GREEN',      series: 'Ink Series', product_type: 'Oil Based',      available_lcs: true,  available_std: true,  available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-006' },
-    { name: 'DALLAS GREEN',     series: 'Ink Series', product_type: 'Oil Based',      available_lcs: true,  available_std: true,  available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-007' },
-    { name: 'DMP',              series: 'Ink Series', product_type: 'Oil Based',      available_lcs: true,  available_std: true,  available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-008' },
-    { name: 'ORANGE',           series: 'Ink Series', product_type: 'Oil Based',      available_lcs: true,  available_std: true,  available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-009' },
-    { name: 'BRITE BLUE',       series: 'Ink Series', product_type: 'Oil Based',      available_lcs: true,  available_std: true,  available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-010' },
-    { name: 'SPICY BROWN',      series: 'Ink Series', product_type: 'Oil Based',      available_lcs: false, available_std: true,  available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-011' },
-    { name: 'VIOLET',           series: 'Ink Series', product_type: 'Oil Based',      available_lcs: false, available_std: true,  available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-012' },
-    { name: 'TEE BLUE',         series: 'Ink Series', product_type: 'Oil Based',      available_lcs: false, available_std: true,  available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-013' },
-    { name: 'TURQUOISE',        series: 'Ink Series', product_type: 'Oil Based',      available_lcs: false, available_std: true,  available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-014' },
-    { name: 'RED SUPER',        series: 'Ink Series', product_type: 'Oil Based',      available_lcs: false, available_std: true,  available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-015' },
-    { name: 'RED SCARLET',      series: 'Ink Series', product_type: 'Oil Based',      available_lcs: false, available_std: true,  available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-016' },
-    { name: 'KHAKI',            series: 'Ink Series', product_type: 'Oil Based',      available_lcs: false, available_std: false, available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-017' },
-    { name: 'RAMA GREEN',       series: 'Ink Series', product_type: 'Oil Based',      available_lcs: false, available_std: true,  available_opq_js: false, hsn_code: INK_HSN, business_code: 'INK-018' },
-    { name: 'DARK SUPER RED',   series: 'Ink Series', product_type: 'Oil Based',      available_lcs: true,  available_std: false, available_opq_js: false, hsn_code: INK_HSN, business_code: 'INK-019' },
-    { name: 'STEEL GREY',       series: 'Ink Series', product_type: 'Oil Based',      available_lcs: false, available_std: false, available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-020' },
-    { name: 'FLT YGT',          series: 'Ink Series', product_type: 'Oil Based',      available_lcs: false, available_std: false, available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-021' },
-    { name: 'FLT PINK',         series: 'Ink Series', product_type: 'Oil Based',      available_lcs: false, available_std: false, available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-022' },
-    { name: 'FLT GREEN',        series: 'Ink Series', product_type: 'Oil Based',      available_lcs: false, available_std: false, available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-023' },
-    { name: 'FLT ORANGE',       series: 'Ink Series', product_type: 'Oil Based',      available_lcs: false, available_std: false, available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-024' },
-    { name: 'FLT MAGENTA',      series: 'Ink Series', product_type: 'Oil Based',      available_lcs: false, available_std: false, available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-025' },
-    { name: 'FLT NEON',         series: 'Ink Series', product_type: 'Oil Based',      available_lcs: false, available_std: false, available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-026' },
-    { name: 'FLT GOLDEN YELLOW',series: 'Ink Series', product_type: 'Oil Based',      available_lcs: false, available_std: false, available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-027' },
-    { name: 'BRITE GREEN',       series: 'Ink Series', product_type: 'Oil Based',      available_lcs: false, available_std: true,  available_opq_js: false, hsn_code: INK_HSN, business_code: 'INK-028' },
-    { name: 'FOAN BUFF',        series: 'Ink Series', product_type: 'Oil Based',      available_lcs: false, available_std: false, available_opq_js: true,  hsn_code: INK_HSN, business_code: 'INK-029' },
-    { name: 'SKY BLUE',         series: 'Ink Series', product_type: 'Oil Based',      available_lcs: false, available_std: true,  available_opq_js: false, hsn_code: INK_HSN, business_code: 'INK-030' },
+const colorData = [
+    { name: 'BLACK', lcs: true, std: true, opq: true },
+    { name: 'LEMON YELLOW', lcs: true, std: true, opq: true },
+    { name: 'GOLDEN YELLOW', lcs: true, std: true, opq: true },
+    { name: 'BLUE ROYAL', lcs: true, std: true, opq: true },
+    { name: 'BLUE NAVY', lcs: true, std: true, opq: true },
+    { name: 'ALPHA GREEN', lcs: true, std: true, opq: true },
+    { name: 'DALLAS GREEN', lcs: true, std: true, opq: true },
+    { name: 'DMP', lcs: true, std: true, opq: true },
+    { name: 'ORANGE', lcs: true, std: true, opq: true },
+    { name: 'BRITE BLUE', lcs: true, std: true, opq: true },
+    { name: 'SPICY BROWN', lcs: false, std: true, opq: true },
+    { name: 'VIOLET', lcs: false, std: true, opq: true },
+    { name: 'TEE BLUE', lcs: false, std: true, opq: true },
+    { name: 'TURQUOISE', lcs: false, std: true, opq: true },
+    { name: 'RED SUPER', lcs: false, std: true, opq: true },
+    { name: 'RED SCARLET', lcs: false, std: true, opq: true },
+    { name: 'KHAKI', lcs: false, std: false, opq: true },
+    { name: 'RAMA GREEN', lcs: false, std: true, opq: false },
+    { name: 'DARK SUPER RED', lcs: true, std: false, opq: false },
+    { name: 'STEEL GREY', lcs: false, std: false, opq: true },
+    { name: 'FLT YGT', lcs: false, std: false, opq: true },
+    { name: 'FLT PINK', lcs: false, std: false, opq: true },
+    { name: 'FLT GREEN', lcs: false, std: false, opq: true },
+    { name: 'FLT ORANGE', lcs: false, std: false, opq: true },
+    { name: 'FLT MAGENTA', lcs: false, std: false, opq: true },
+    { name: 'FLT NEON', lcs: false, std: false, opq: true },
+    { name: 'FLT GOLDEN YELLOW', lcs: false, std: false, opq: true },
+    { name: 'BRITE GREEN', lcs: false, std: true, opq: false },
+    { name: 'FOAN BUFF', lcs: false, std: false, opq: true },
+    { name: 'SKY BLUE', lcs: false, std: true, opq: false },
 ];
 
-// ─── High Density / Special / Water Based colours (31-42) ───────────────────
-const HD_COLORS: ColorSeed[] = [
-    { name: 'NEW HD',          series: 'High Density', product_type: 'Water Based', available_lcs: false, available_std: false, available_opq_js: false, hsn_code: HD_HSN, business_code: 'HD-001' },
-    { name: 'NEW PUFF',        series: 'High Density', product_type: 'Water Based', available_lcs: false, available_std: false, available_opq_js: false, hsn_code: HD_HSN, business_code: 'HD-002' },
-    { name: 'PUFF ADDITIVE',   series: 'High Density', product_type: 'Water Based', available_lcs: false, available_std: false, available_opq_js: false, hsn_code: HD_HSN, business_code: 'HD-003' },
-    { name: 'NEW EMBOSS GELL', series: 'High Density', product_type: 'Water Based', available_lcs: false, available_std: false, available_opq_js: false, hsn_code: HD_HSN, business_code: 'HD-004' },
-    { name: 'CLEAR GELL 505',  series: 'High Density', product_type: 'Water Based', available_lcs: false, available_std: false, available_opq_js: false, hsn_code: HD_HSN, business_code: 'HD-005' },
-    { name: 'WHITE G-S',       series: 'High Density', product_type: 'Oil Based',   available_lcs: false, available_std: false, available_opq_js: false, hsn_code: HD_HSN, business_code: 'HD-006' },
-    { name: 'WHITE S-S',       series: 'High Density', product_type: 'Oil Based',   available_lcs: false, available_std: false, available_opq_js: false, hsn_code: HD_HSN, business_code: 'HD-007' },
-    { name: 'SUPER WHITE',     series: 'High Density', product_type: 'Oil Based',   available_lcs: false, available_std: false, available_opq_js: false, hsn_code: HD_HSN, business_code: 'HD-008' },
-    { name: 'CD 300 WHITE',    series: 'High Density', product_type: 'Water Based', available_lcs: false, available_std: false, available_opq_js: false, hsn_code: HD_HSN, business_code: 'HD-009' },
-    { name: 'POLAR WHITE',     series: 'High Density', product_type: 'Water Based', available_lcs: false, available_std: false, available_opq_js: false, hsn_code: HD_HSN, business_code: 'HD-010' },
-    { name: '1 STROKE WHITE',  series: 'High Density', product_type: 'Water Based', available_lcs: false, available_std: false, available_opq_js: false, hsn_code: HD_HSN, business_code: 'HD-011' },
-];
-
-const ALL_COLORS = [...INK_COLORS, ...HD_COLORS];
-
-async function seed() {
+async function seedColors() {
     const client = await pool.connect();
     try {
-        console.log(`Seeding ${ALL_COLORS.length} colors...`);
-        let inserted = 0;
-        let updated = 0;
-
-        for (const color of ALL_COLORS) {
-            const result = await client.query(
-                `INSERT INTO colors
-                   (name, series, product_type, available_lcs, available_std, available_opq_js,
-                    hsn_code, business_code, color_code, tags)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '#888888', '[]')
-                 ON CONFLICT (name) DO UPDATE SET
-                   series           = EXCLUDED.series,
-                   product_type     = EXCLUDED.product_type,
-                   available_lcs    = EXCLUDED.available_lcs,
-                   available_std    = EXCLUDED.available_std,
-                   available_opq_js = EXCLUDED.available_opq_js,
-                   hsn_code         = EXCLUDED.hsn_code,
-                   business_code    = EXCLUDED.business_code,
-                   updated_at       = CURRENT_TIMESTAMP
-                 RETURNING (xmax = 0) AS inserted`,
-                [
-                    color.name, color.series, JSON.stringify([color.product_type]), 
-                    color.available_lcs, color.available_std, color.available_opq_js,
-                    color.hsn_code, color.business_code
-                ]
-            );
-            if (result.rows[0]?.inserted) inserted++; else updated++;
+        await client.query('BEGIN');
+        
+        // Fetch grade IDs
+        const gradesRes = await client.query('SELECT id, name FROM ink_grades');
+        const grades = gradesRes.rows.reduce((acc, row) => {
+            acc[row.name] = row.id;
+            return acc;
+        }, {} as Record<string, number>);
+        
+        const lcsId = grades['LCS'];
+        const stdId = grades['STD'];
+        const opqId = grades['OPQ/JS'];
+        
+        if (!lcsId || !stdId || !opqId) {
+            throw new Error('Missing ink grades in database. Please seed them first.');
         }
 
-        console.log(`Done! Inserted: ${inserted}, Updated: ${updated}`);
+        for (const row of colorData) {
+            // Check if color exists
+            const existingRes = await client.query('SELECT id FROM colors WHERE name = $1', [row.name]);
+            let colorId;
+            if (existingRes.rows.length > 0) {
+                colorId = existingRes.rows[0].id;
+                console.log(`Color ${row.name} already exists. Updating its grades.`);
+            } else {
+                // Insert color
+                const insertRes = await client.query(
+                    'INSERT INTO colors (name, min_threshold_kg) VALUES ($1, 0) RETURNING id',
+                    [row.name]
+                );
+                colorId = insertRes.rows[0].id;
+            }
+            
+            // Clear existing grades for this color
+            await client.query('DELETE FROM color_ink_grades WHERE color_id = $1', [colorId]);
+            
+            // Insert grades based on table
+            if (row.lcs) await client.query('INSERT INTO color_ink_grades (color_id, grade_id) VALUES ($1, $2)', [colorId, lcsId]);
+            if (row.std) await client.query('INSERT INTO color_ink_grades (color_id, grade_id) VALUES ($1, $2)', [colorId, stdId]);
+            if (row.opq) await client.query('INSERT INTO color_ink_grades (color_id, grade_id) VALUES ($1, $2)', [colorId, opqId]);
+        }
+
+        await client.query('COMMIT');
+        console.log('Successfully seeded all colors and their ink series.');
         process.exit(0);
     } catch (err) {
-        console.error('Seed failed:', err);
+        await client.query('ROLLBACK');
+        console.error('Error:', err);
         process.exit(1);
     } finally {
         client.release();
     }
 }
 
-seed();
-
+seedColors();
