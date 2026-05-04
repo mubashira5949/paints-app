@@ -36,6 +36,7 @@ interface DashboardData {
     color: string
     output: number | null
     operator: string
+    status?: string
   }[]
   inventoryAlerts: {
     resource_id: number
@@ -407,7 +408,15 @@ export default function Dashboard() {
                         </td>
                         <td className="p-6 font-extrabold text-slate-900">{run.color}</td>
                         <td className="p-6 font-black text-slate-700 tracking-tight">
-                          {formatUnit(run.output, unitPref)}
+                          {run.output != null && run.output > 0 ? (
+                            formatUnit(run.output, unitPref)
+                          ) : run.status !== 'completed' ? (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-600 border border-amber-200">
+                              In Progress
+                            </span>
+                          ) : (
+                            '—'
+                          )}
                         </td>
                         <td className="p-6 text-slate-500 font-medium text-xs uppercase tracking-wide">
                           {run.operator}
@@ -421,9 +430,9 @@ export default function Dashboard() {
         </div>
 
         <div className="col-span-1 rounded-xl border bg-card p-6 shadow-sm border-t-4 border-t-orange-500">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <Bell className="mr-2 h-5 w-5" />
+              <Bell className="mr-2 h-4 w-4 text-orange-500" />
               <h3 className="font-semibold">Inventory Alerts</h3>
               <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
                 {data?.inventoryAlerts &&
@@ -431,56 +440,52 @@ export default function Dashboard() {
                     ? `Showing all ${data.inventoryAlerts.length}`
                     : `Showing ${Math.min(3, data.inventoryAlerts.length)} of ${data.inventoryAlerts.length}`)}
               </span>
+              {data?.inventoryAlerts && data.inventoryAlerts.length > 3 && (
+                <button
+                  onClick={() => setShowAllAlerts(!showAllAlerts)}
+                  className="text-xs text-orange-600 hover:text-orange-700 font-bold uppercase tracking-wider bg-orange-50 px-2 py-0.5 rounded border border-orange-100 whitespace-nowrap"
+                >
+                  {showAllAlerts ? 'View Less' : 'View All'}
+                </button>
+              )}
             </div>
-            {data?.inventoryAlerts && data.inventoryAlerts.length > 3 && (
-              <button
-                onClick={() => setShowAllAlerts(!showAllAlerts)}
-                className="text-xs text-orange-600 hover:text-orange-700 font-bold uppercase tracking-wider bg-orange-50 px-2 py-0.5 rounded border border-orange-100"
-              >
-                {showAllAlerts ? 'View Less' : 'View All'}
-              </button>
-            )}
           </div>
-          <div className="overflow-hidden rounded-xl shadow-sm border border-slate-100">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-3 py-2 font-bold text-slate-500 uppercase tracking-widest">
+          <div className="overflow-x-auto rounded-xl shadow-sm border border-slate-100">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-slate-50/50">
+                  <th className="h-12 px-4 text-left align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
                     Material
                   </th>
-                  <th className="px-3 py-2 font-bold text-slate-500 uppercase tracking-widest text-right">
+                  <th className="h-12 px-4 text-right align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
                     Status
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
+              <tbody className="divide-y">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={2} className="px-3 py-3 text-center text-slate-400">
-                      Loading...
-                    </td>
+                    <td colSpan={2} className="p-6 text-center text-slate-400">Loading...</td>
                   </tr>
                 ) : data?.inventoryAlerts.length === 0 ? (
                   <tr>
-                    <td colSpan={2} className="px-3 py-3 text-center text-slate-400">
-                      No alerts
-                    </td>
+                    <td colSpan={2} className="p-6 text-center text-slate-400">No alerts</td>
                   </tr>
                 ) : (
                   data?.inventoryAlerts
                     .slice(0, showAllAlerts ? data.inventoryAlerts.length : 3)
                     .map((alert, i) => (
                       <tr key={i} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-3 py-3">
-                          <p className="font-extrabold text-slate-900">{alert.material}</p>
-                          <p className="text-[10px] text-slate-500 font-medium">
+                        <td className="px-4 py-4">
+                          <p className="font-extrabold text-slate-900 text-sm">{alert.material}</p>
+                          <p className="text-[10px] text-slate-500 font-medium mt-0.5">
                             {alert.remaining.replace(/^([\d.]+)/, (match) => parseFloat(match).toString())} left
                           </p>
                         </td>
-                        <td className="px-3 py-3 text-right">
+                        <td className="px-4 py-4 text-right">
                           <div className="flex flex-col items-end gap-1.5">
                             <span
-                              className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-black uppercase tracking-wider ${
+                              className={`inline-flex items-center px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
                                 alert.status === 'critical'
                                   ? 'bg-red-100 text-red-700'
                                   : 'bg-amber-100 text-amber-700'
@@ -488,43 +493,44 @@ export default function Dashboard() {
                             >
                               {alert.status}
                             </span>
-                            {/* Manager/Admin View: Show who requested and 'Place Order' button */}
-                            {(user?.role === 'manager' || user?.role === 'admin') && (
-                              <div className="flex flex-col items-end gap-1 mt-1">
-                                {alert.requested_by && (
-                                  <div className="flex flex-col items-end">
-                                    <span className="text-[9px] text-blue-600 font-bold uppercase tracking-wider bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
-                                      Req: {alert.requested_by}
-                                    </span>
-                                    {alert.requested_at && (
-                                      <span className="text-[8px] text-slate-400 font-bold mt-0.5">
-                                        {formatDate(alert.requested_at, dateFormat, true)}
-                                      </span>
-                                    )}
-                                  </div>
+
+                            {/* Admin only: Place Order */}
+                            {user?.role === 'admin' && (
+                              <button
+                                onClick={() => navigate('/raw-materials', { state: { orderMaterialId: alert.resource_id } })}
+                                className="text-[9px] bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200 px-2 py-1 rounded-lg uppercase tracking-widest font-black transition-colors"
+                              >
+                                Place Order
+                              </button>
+                            )}
+
+                            {/* Manager: see who requested, no order button */}
+                            {user?.role === 'manager' && alert.requested_by && (
+                              <div className="flex flex-col items-end">
+                                <span className="text-[9px] text-blue-600 font-bold uppercase tracking-wider bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                  Req: {alert.requested_by}
+                                </span>
+                                {alert.requested_at && (
+                                  <span className="text-[8px] text-slate-400 font-bold mt-0.5">
+                                    {formatDate(alert.requested_at, dateFormat, true)}
+                                  </span>
                                 )}
-                                <button
-                                  onClick={() => navigate('/raw-materials', { state: { orderMaterialId: alert.resource_id } })}
-                                  className="text-[9px] bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200 px-2 py-0.5 rounded uppercase tracking-widest font-black transition-colors shadow-sm"
-                                >
-                                  Place Order
-                                </button>
                               </div>
                             )}
-                            
-                            {/* Operator/Worker View: Show 'Notify Manager' button */}
+
+                            {/* Operator: Notify Manager */}
                             {(user?.role === 'operator' || user?.role === 'worker') && (
-                                <button
-                                  onClick={() => notifyManager(alert.resource_id)}
-                                  disabled={!!alert.requested_by}
-                                  className={`text-[9px] px-2 py-0.5 rounded uppercase tracking-widest font-black transition-colors shadow-sm ${
-                                    alert.requested_by
-                                      ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                                      : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'
-                                  }`}
-                                >
-                                  {alert.requested_by ? 'Notified' : 'Notify Manager'}
-                                </button>
+                              <button
+                                onClick={() => notifyManager(alert.resource_id)}
+                                disabled={!!alert.requested_by}
+                                className={`text-[9px] px-2 py-1 rounded-lg uppercase tracking-widest font-black transition-colors ${
+                                  alert.requested_by
+                                    ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                                    : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'
+                                }`}
+                              >
+                                {alert.requested_by ? 'Notified ✓' : 'Notify Manager'}
+                              </button>
                             )}
                           </div>
                         </td>

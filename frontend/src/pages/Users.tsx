@@ -290,7 +290,7 @@ export default function Users() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="rounded-xl border bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Users</span>
@@ -331,16 +331,6 @@ export default function Users() {
             <div className="text-xs font-bold text-slate-400 mb-1">active roles</div>
           </div>
         </div>
-        <div className="rounded-xl border bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Clients</span>
-            <UsersIcon className="h-4 w-4 text-amber-500" />
-          </div>
-          <div className="flex items-end justify-between">
-            <div className="text-3xl font-black text-slate-900">{summary?.client ?? 0}</div>
-            <div className="text-xs font-bold text-slate-400 mb-1">active roles</div>
-          </div>
-        </div>
       </div>
 
       {/* Users Table */}
@@ -370,7 +360,6 @@ export default function Users() {
                 <option value="manager">Manager</option>
                 <option value="operator">Operator</option>
                 <option value="sales">Sales</option>
-                <option value="client">Client</option>
                 <option value="admin">Admin</option>
               </select>
               <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 pointer-events-none" />
@@ -496,7 +485,6 @@ export default function Users() {
                           <option value="manager">Manager</option>
                           <option value="operator">Operator</option>
                           <option value="sales">Sales</option>
-                          <option value="client">Client</option>
                           <option value="admin">Admin</option>
                         </select>
                         <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-blue-600 pointer-events-none" />

@@ -331,7 +331,7 @@ export default async function (fastifyRaw: FastifyInstance) {
                         r.name,
                         r.current_stock,
                         r.unit,
-                        COALESCE(SUM(ABS(t.quantity)) FILTER (WHERE t.transaction_type IN ('production', 'consumption')), 0) as used_quantity,
+                        COALESCE(SUM(ABS(t.quantity)) FILTER (WHERE t.transaction_type IN ('production_usage', 'production', 'consumption')), 0) as used_quantity,
                         MAX(t.created_at) as last_used
                     FROM resources r
                     LEFT JOIN resource_stock_transactions t ON r.id = t.resource_id
