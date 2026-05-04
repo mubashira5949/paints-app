@@ -242,13 +242,15 @@ export default function RawMaterials() {
             </p>
           </div>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white hover:bg-slate-800 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Add NEW Component
-        </button>
+        {canEditStock && (
+          <button
+            onClick={() => handleOpenModal()}
+            className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white hover:bg-slate-800 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add NEW Component
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
