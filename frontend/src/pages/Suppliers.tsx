@@ -185,7 +185,7 @@ export default function Suppliers() {
             Partner Intelligence
           </h1>
           <p className="text-muted-foreground mt-1 text-sm font-medium">
-            Multi-stakeholder management and active material catalogs.
+            Partner management and active material catalogs.
           </p>
         </div>
         <button
@@ -205,7 +205,7 @@ export default function Suppliers() {
           <Search className="absolute left-4 top-9 h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
           <input
             type="text"
-            placeholder="Search company or stakeholder..."
+            placeholder="Search company or contact..."
             className="w-full pl-12 pr-4 py-3.5 rounded-2xl border border-slate-200 bg-white shadow-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold"
             value={supplierSearch}
             onChange={(e) => setSupplierSearch(e.target.value)}
@@ -303,7 +303,7 @@ export default function Suppliers() {
                   {/* POC Section */}
                   <div className="space-y-4">
                     <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                      <UserCircle2 className="h-4 w-4" /> Primary Stakeholders
+                      <UserCircle2 className="h-4 w-4" /> Primary Contacts
                     </h4>
                     <div className="space-y-3">
                       {supplier.pocs?.map((poc, idx) => (
@@ -427,7 +427,7 @@ export default function Suppliers() {
                     {editingSupplier ? 'Collaborator Profile' : 'New Strategic Partner'}
                   </h2>
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">
-                    Multi-stakeholder Registration
+                    Partner Registration
                   </p>
                 </div>
               </div>
@@ -479,7 +479,7 @@ export default function Suppliers() {
 
                     <div className="pt-4 space-y-4 border-t border-slate-50 mt-4">
                       <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                        Primary Stakeholder
+                        Primary Contact
                       </h3>
                       <div className="space-y-4 bg-slate-50/50 p-6 rounded-3xl border border-slate-100">
                         <div className="space-y-2">
@@ -572,7 +572,7 @@ export default function Suppliers() {
                 <div className="space-y-6">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">
-                      Additional Stakeholders
+                      Additional Contacts
                     </h3>
                     <button
                       type="button"
