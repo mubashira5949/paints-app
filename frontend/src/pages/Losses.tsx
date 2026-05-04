@@ -224,18 +224,25 @@ export default function Losses() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-6 md:grid-cols-3">
-        <div className="rounded-2xl border bg-white p-6 shadow-sm border-l-4 border-amber-500 hover:shadow-md transition-all group">
+      <div className="grid gap-6 md:grid-cols-2">
+        <div className="rounded-2xl border bg-white p-6 shadow-sm border-l-4 border-indigo-500 hover:shadow-md transition-all group">
           <div className="flex flex-row items-center justify-between space-y-0 pb-2">
             <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
-              Recent Losses (30d)
+              Colour Total Loss
             </p>
-            <AlertTriangle className="h-5 w-5 text-amber-500 group-hover:scale-110 transition-transform" />
+            <Droplets className="h-5 w-5 text-indigo-500 group-hover:scale-110 transition-transform" />
           </div>
           <div className="mt-2">
-            <div className="text-3xl font-black text-slate-900">{losses.length}</div>
+            <div className="text-3xl font-black text-slate-900">
+              {formatUnit(
+                losses
+                  .filter((l) => l.item_type === 'finished_good')
+                  .reduce((acc, curr) => acc + curr.quantity_kg, 0),
+                unitPref,
+              )}
+            </div>
             <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter italic">
-              Documented discrepancies
+              Cumulative finished goods loss
             </p>
           </div>
         </div>
@@ -243,39 +250,21 @@ export default function Losses() {
         <div className="rounded-2xl border bg-white p-6 shadow-sm border-l-4 border-blue-500 hover:shadow-md transition-all group">
           <div className="flex flex-row items-center justify-between space-y-0 pb-2">
             <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
-              Total Mass Lost
+              Raw Material Total Loss
             </p>
-            <Droplets className="h-5 w-5 text-blue-500 group-hover:scale-110 transition-transform" />
+            <Package className="h-5 w-5 text-blue-500 group-hover:scale-110 transition-transform" />
           </div>
           <div className="mt-2">
             <div className="text-3xl font-black text-slate-900">
               {formatUnit(
-                losses.reduce((acc, curr) => acc + curr.quantity_kg, 0),
+                losses
+                  .filter((l) => l.item_type === 'raw_material')
+                  .reduce((acc, curr) => acc + curr.quantity_kg, 0),
                 unitPref,
               )}
             </div>
             <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter italic">
-              Cumulative material loss
-            </p>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border bg-white p-6 shadow-sm border-l-4 border-indigo-500 hover:shadow-md transition-all group">
-          <div className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
-              Finished Goods Lost
-            </p>
-            <Package className="h-5 w-5 text-indigo-500 group-hover:scale-110 transition-transform" />
-          </div>
-          <div className="mt-2">
-            <div className="text-3xl font-black text-slate-900">
-              {losses
-                .filter((l) => l.item_type === 'finished_good')
-                .reduce((acc, curr) => acc + (curr.quantity_units || 0), 0)}
-              <span className="text-sm font-bold text-slate-400 ml-2">Units</span>
-            </div>
-            <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter italic">
-              Packaged products lost
+              Cumulative raw material loss
             </p>
           </div>
         </div>
