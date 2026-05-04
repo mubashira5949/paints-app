@@ -284,7 +284,7 @@ export default function ProductionDetail() {
         </div>
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">
-            Batch Size
+            Formula Base Size
           </p>
           <p className="font-medium">{formatUnit(run.batch_size_kg, unitPref)}</p>
         </div>
