@@ -285,6 +285,10 @@ export default function Formulas() {
       apiRequest<SettingItem[]>('/settings/product-types')
         .then(setProductTypes)
         .catch(console.error)
+      
+      apiRequest<SettingItem[]>('/settings/ink-grades')
+        .then(setInkGrades)
+        .catch(console.error)
     }
   }, [isColorModalOpen])
 
