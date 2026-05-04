@@ -12,6 +12,8 @@ import {
   Filter,
   Calendar,
   Download,
+  CheckCircle2,
+  X,
 } from 'lucide-react'
 
 interface PurchaseOrderPOC {
@@ -63,6 +65,7 @@ export default function PurchaseOrders() {
   const [orders, setOrders] = useState<PurchaseOrder[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [, setError] = useState<string | null>(null)
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState<POItem | null>(null)
@@ -165,7 +168,16 @@ export default function PurchaseOrders() {
   }
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto px-4 py-12 print:p-0 print:max-w-none">
+    <div className="space-y-8 max-w-5xl mx-auto px-4 py-12 print:p-0 print:max-w-none relative">
+      {successMsg && (
+        <div className="fixed bottom-6 right-6 z-[300] bg-slate-900 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 print:hidden">
+          <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+          <p className="text-sm font-bold">{successMsg}</p>
+          <button onClick={() => setSuccessMsg(null)} className="ml-2 text-slate-400 hover:text-white">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between print:hidden">
         <h1 className="text-3xl font-black text-slate-900 tracking-tight">
           Standard Procurement Ledger
@@ -301,7 +313,8 @@ export default function PurchaseOrders() {
                           navigator.clipboard.writeText(
                             window.location.host + '/po/' + order.share_token,
                           )
-                          alert('PO URL Copied!')
+                          setSuccessMsg('PO URL Copied!')
+                          setTimeout(() => setSuccessMsg(null), 3000)
                         }}
                         className="p-2.5 rounded-xl border border-slate-200 text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition-all bg-white"
                         title="Share Link"
