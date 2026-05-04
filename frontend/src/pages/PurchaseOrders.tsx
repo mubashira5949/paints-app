@@ -166,7 +166,7 @@ export default function PurchaseOrders() {
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto px-4 py-12 print:p-0 print:max-w-none">
-      <div className="flex items-center justify-between no-print">
+      <div className="flex items-center justify-between print:hidden">
         <h1 className="text-3xl font-black text-slate-900 tracking-tight">
           Standard Procurement Ledger
         </h1>
@@ -177,7 +177,7 @@ export default function PurchaseOrders() {
       </div>
 
       {/* Filters Bar */}
-      <div className="flex flex-col md:flex-row gap-4 mb-8 no-print">
+      <div className="flex flex-col md:flex-row gap-4 mb-8 print:hidden">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
           <input
@@ -228,11 +228,11 @@ export default function PurchaseOrders() {
           {filteredOrders.map((order) => (
             <div
               key={order.id}
-              className={`group bg-white overflow-hidden transition-all duration-300 ${expandedId === order.id ? 'no-shadow print:shadow-none' : 'rounded-[24px] border border-slate-100 shadow-sm hover:shadow-md'}`}
+              className={`group bg-white overflow-hidden transition-all duration-300 ${expandedId === order.id ? 'no-shadow print:shadow-none' : `rounded-[24px] border border-slate-100 shadow-sm hover:shadow-md ${expandedId ? 'print:hidden' : ''}`}`}
             >
               {/* Summary Bar - Hidden for printing when expanded */}
               <div
-                className={`px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 cursor-pointer hover:bg-slate-50 transition-colors no-print ${expandedId === order.id ? 'border-b border-orange-100 bg-orange-50/30' : ''}`}
+                className={`px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 cursor-pointer hover:bg-slate-50 transition-colors print:hidden ${expandedId === order.id ? 'border-b border-orange-100 bg-orange-50/30' : ''}`}
                 onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}
               >
                 <div className="flex items-center gap-6">
@@ -277,7 +277,7 @@ export default function PurchaseOrders() {
               {expandedId === order.id && (
                 <div className="relative bg-white print:p-0">
                   {/* Sticky Header with Actions */}
-                  <div className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex flex-col md:flex-row items-center justify-between gap-4 no-print shadow-sm">
+                  <div className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex flex-col md:flex-row items-center justify-between gap-4 print:hidden shadow-sm">
                     <div className="flex items-center gap-3">
                       <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Document</span>
                       <span className="text-lg font-black text-slate-900">{generateUniquePONumber(order.id, order.created_at)}</span>
@@ -454,7 +454,7 @@ export default function PurchaseOrders() {
                                   {item.resource_name}
                                 </span>
                                 <span
-                                  className="text-[10px] text-slate-400 font-bold uppercase no-print cursor-pointer hover:text-orange-500 truncate mt-1"
+                                  className="text-[10px] text-slate-400 font-bold uppercase print:hidden cursor-pointer hover:text-orange-500 truncate mt-1"
                                   onClick={() => openEditModal(item)}
                                 >
                                   Edit Item
