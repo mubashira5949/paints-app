@@ -4,6 +4,7 @@ import { X } from 'lucide-react'
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { useAuth } from '../../contexts/AuthContext'
+import { useEffect, useState } from 'react'
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -17,15 +18,30 @@ interface SidebarProps {
 
 export function Sidebar({ userRole, isOpen, setIsOpen }: SidebarProps) {
   const { user } = useAuth()
+  const [isLargeScreen, setIsLargeScreen] = useState(() => window.innerWidth >= 1024)
+
+  // Auto-close sidebar and track viewport size
+  useEffect(() => {
+    const handleResize = () => {
+      const large = window.innerWidth >= 1024
+      setIsLargeScreen(large)
+      if (large) setIsOpen(false)
+    }
+    window.addEventListener('resize', handleResize)
+    // Check immediately on mount
+    handleResize()
+    return () => window.removeEventListener('resize', handleResize)
+  }, [setIsOpen])
+
   // Filter navigation items based on the current user's role
   const filteredNavigation = navigation.filter((item) => item.roles.includes(userRole))
 
   return (
     <>
-      {/* Mobile overlay */}
-      {isOpen && (
+      {/* Mobile overlay - only render on small screens */}
+      {isOpen && !isLargeScreen && (
         <div
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden animate-in fade-in duration-300"
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300"
           onClick={() => setIsOpen(false)}
           aria-hidden="true"
         />
