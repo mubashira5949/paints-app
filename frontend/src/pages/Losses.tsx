@@ -3,8 +3,6 @@ import { apiRequest } from '../services/api'
 import {
   AlertTriangle,
   Plus,
-  Filter,
-  Calendar,
   Package,
   Droplets,
   ClipboardList,
@@ -12,6 +10,7 @@ import {
   X,
 } from 'lucide-react'
 import { useUnitPreference, formatUnit, unitLabel } from '../utils/units'
+import { useDateFormatPreference, formatDate } from '../utils/dateFormatter'
 
 interface LossRecord {
   id: number
@@ -60,8 +59,10 @@ interface OperatorSummary {
 
 export default function Losses() {
   const unitPref = useUnitPreference()
+  const dateFormat = useDateFormatPreference()
   const [losses, setLosses] = useState<LossRecord[]>([])
-  const [operatorSummary, setOperatorSummary] = useState<OperatorSummary[]>([])
+  const [allLosses, setAllLosses] = useState<LossRecord[]>([])
+  const [_operatorSummary, setOperatorSummary] = useState<OperatorSummary[]>([])
 
   const [reasons, setReasons] = useState<LossReason[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -101,8 +102,12 @@ export default function Losses() {
       if (filters.item_type !== 'all') params.append('item_type', filters.item_type)
       if (filters.reason_id !== 'all') params.append('reason_id', filters.reason_id)
 
-      const data = await apiRequest<LossRecord[]>(`/api/losses?${params.toString()}`)
-      setLosses(data)
+      const [filtered, all] = await Promise.all([
+        apiRequest<LossRecord[]>(`/api/losses?${params.toString()}`),
+        apiRequest<LossRecord[]>('/api/losses'),
+      ])
+      setLosses(filtered)
+      setAllLosses(all)
     } catch (err) {
       console.error('Failed to fetch losses', err)
       setError('Failed to load loss records')
@@ -236,7 +241,7 @@ export default function Losses() {
           <div className="mt-2">
             <div className="text-3xl font-black text-slate-900">
               {formatUnit(
-                losses
+                allLosses
                   .filter((l) => l.item_type === 'finished_good')
                   .reduce((acc, curr) => acc + Number(curr.quantity_kg || 0), 0),
                 unitPref,
@@ -258,7 +263,7 @@ export default function Losses() {
           <div className="mt-2">
             <div className="text-3xl font-black text-slate-900">
               {formatUnit(
-                losses
+                allLosses
                   .filter((l) => l.item_type === 'raw_material')
                   .reduce((acc, curr) => acc + Number(curr.quantity_kg || 0), 0),
                 unitPref,
@@ -371,7 +376,7 @@ export default function Losses() {
                     <td className="px-6 py-5">
                       <div className="flex flex-col">
                         <span className="font-bold text-slate-700 text-sm">
-                          {new Date(loss.documented_at).toLocaleDateString()}
+                          {formatDate(loss.documented_at, dateFormat)}
                         </span>
                         <span className="text-[10px] font-medium text-slate-400">
                           {new Date(loss.documented_at).toLocaleTimeString()}
@@ -398,8 +403,8 @@ export default function Losses() {
                         {loss.item_type === 'finished_good' ? (
                           <span className="text-sm font-bold text-slate-500">
                             {loss.target_quantity_kg
-                              ? `${Math.round(parseFloat(loss.target_quantity_kg) / (loss.pack_size_kg || 1))} Units`
-                              : `${(loss.quantity_units || 0) + 20} Units`}
+                              ? `${Math.round(parseFloat(loss.target_quantity_kg) / (loss.pack_size_kg || 1))}kg`
+                              : `${(loss.quantity_units || 0) + 20}kg`}
                           </span>
                         ) : loss.target_quantity_kg ? (
                           <span className="text-sm font-bold text-slate-500">
@@ -412,8 +417,8 @@ export default function Losses() {
                     )}
                     <td className="px-6 py-5 text-center">
                       <span className="text-sm font-black text-red-600">
-                        {loss.item_type === 'finished_good' && loss.quantity_units 
-                          ? `${loss.quantity_units} Units` 
+                        {loss.item_type === 'finished_good' && loss.quantity_units
+                          ? `${loss.quantity_units}kg`
                           : formatUnit(loss.quantity_kg, unitPref)}
                       </span>
                     </td>

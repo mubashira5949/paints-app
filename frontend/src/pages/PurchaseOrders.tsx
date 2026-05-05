@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useDateFormatPreference, formatDate } from '../utils/dateFormatter'
 import { apiRequest } from '../services/api'
 import {
   Mail,
@@ -62,6 +63,7 @@ const BUYER_INFO = {
 }
 
 export default function PurchaseOrders() {
+  const dateFormat = useDateFormatPreference()
   const [orders, setOrders] = useState<PurchaseOrder[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [, setError] = useState<string | null>(null)
@@ -360,7 +362,7 @@ export default function PurchaseOrders() {
                       <div className="space-y-1">
                         <span className="text-sm font-black text-slate-900">Purchase Date:</span>
                         <p className="text-sm font-bold text-slate-500">
-                          {new Date(order.created_at).toLocaleDateString()}
+                          {formatDate(order.created_at, dateFormat)}
                         </p>
                       </div>
                       <div className="px-4 py-1.5 border-2 border-orange-500 rounded-xl bg-orange-50/50">
@@ -371,9 +373,10 @@ export default function PurchaseOrders() {
                       <div className="space-y-1">
                         <span className="text-sm font-black text-slate-900">Delivery Date:</span>
                         <p className="text-sm font-bold text-slate-500">
-                          {new Date(
-                            new Date(order.created_at).getTime() + 15 * 24 * 60 * 60 * 1000,
-                          ).toLocaleDateString()}
+                          {formatDate(
+                            new Date(new Date(order.created_at).getTime() + 15 * 24 * 60 * 60 * 1000),
+                            dateFormat,
+                          )}
                         </p>
                       </div>
                     </div>
@@ -537,11 +540,7 @@ export default function PurchaseOrders() {
                     </div>
                     <div className="text-right text-xs font-black text-slate-400 uppercase tracking-widest">
                       Date:{' '}
-                      {new Date().toLocaleDateString('en-GB', {
-                        day: '2-digit',
-                        month: 'long',
-                        year: 'numeric',
-                      })}
+                      {formatDate(new Date(), dateFormat)}
                     </div>
                   </div>
                 </div>

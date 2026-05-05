@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { Download, Loader2, Link as LinkIcon, Mail } from 'lucide-react'
 import { apiRequest } from '../services/api'
+import { useDateFormatPreference, formatDate } from '../utils/dateFormatter'
 
 interface POItem {
   id: number
@@ -33,6 +34,7 @@ const BUYER_INFO = {
 
 export default function SharedPurchaseOrder() {
   const { token } = useParams<{ token: string }>()
+  const dateFormat = useDateFormatPreference()
   const [order, setOrder] = useState<PurchaseOrder | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -141,7 +143,7 @@ export default function SharedPurchaseOrder() {
               <div className="space-y-1">
                 <span className="text-sm font-black text-slate-900">Purchase Date:</span>
                 <p className="text-sm font-bold text-slate-500">
-                  {new Date(order.created_at).toLocaleDateString()}
+                  {formatDate(order.created_at, dateFormat)}
                 </p>
               </div>
               <div className="px-4 py-1.5 border-2 border-orange-500 rounded-xl bg-orange-50/50 inline-block">
@@ -152,7 +154,10 @@ export default function SharedPurchaseOrder() {
               <div className="space-y-1">
                 <span className="text-sm font-black text-slate-900">Delivery Date:</span>
                 <p className="text-sm font-bold text-slate-500">
-                  {new Date(new Date(order.created_at).getTime() + 15 * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                  {formatDate(
+                    new Date(new Date(order.created_at).getTime() + 15 * 24 * 60 * 60 * 1000),
+                    dateFormat,
+                  )}
                 </p>
               </div>
             </div>
@@ -259,7 +264,7 @@ export default function SharedPurchaseOrder() {
               </p>
             </div>
             <div className="text-right text-xs font-black text-slate-400 uppercase tracking-widest">
-              Date: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
+              Date: {formatDate(new Date(), dateFormat)}
             </div>
           </div>
         </div>
