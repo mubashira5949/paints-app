@@ -20,7 +20,8 @@ export default async function (fastifyRaw: FastifyInstance) {
             batchId: Type.String(),
             color: Type.String(),
             output: Type.Union([Type.Number(), Type.Null()]),
-            operator: Type.String()
+            operator: Type.String(),
+            status: Type.Union([Type.String(), Type.Null()])
         })),
         inventoryAlerts: Type.Array(Type.Object({
             resource_id: Type.Number(),
@@ -81,7 +82,8 @@ export default async function (fastifyRaw: FastifyInstance) {
                             'B-' || pr.id as "batchId", 
                             c.name as color, 
                             pr.actual_quantity_kg::float as output, 
-                            u.username as operator
+                            u.username as operator,
+                            pr.status
                         FROM production_runs pr
                         JOIN formulas r ON pr.formula_id = r.id
                         JOIN colors c ON r.color_id = c.id

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useDateFormatPreference, formatDate } from '../utils/dateFormatter'
 import { apiRequest } from '../services/api'
 import {
   Mail,
@@ -12,6 +13,8 @@ import {
   Filter,
   Calendar,
   Download,
+  CheckCircle2,
+  X,
 } from 'lucide-react'
 
 interface PurchaseOrderPOC {
@@ -60,13 +63,40 @@ const BUYER_INFO = {
 }
 
 export default function PurchaseOrders() {
+  const dateFormat = useDateFormatPreference()
   const [orders, setOrders] = useState<PurchaseOrder[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [, setError] = useState<string | null>(null)
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState<POItem | null>(null)
   const [editData, setEditData] = useState({ quantity: '', unit_price: '' })
+
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('')
+  const [date, setDate] = useState('')
+
+  const filteredOrders = orders.filter((order) => {
+    if (search) {
+      const s = search.toLowerCase()
+      const poNumber = generateUniquePONumber(order.id, order.created_at).toLowerCase()
+      const supplierName = order.supplier_name ? order.supplier_name.toLowerCase() : ''
+      if (!poNumber.includes(s) && !supplierName.includes(s)) {
+        return false
+      }
+    }
+    if (status && order.status !== status) {
+      return false
+    }
+    if (date) {
+      const orderDate = new Date(order.created_at).toISOString().split('T')[0]
+      if (orderDate !== date) {
+        return false
+      }
+    }
+    return true
+  })
 
   const fetchOrders = async () => {
     setIsLoading(true)
@@ -140,8 +170,17 @@ export default function PurchaseOrders() {
   }
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto px-4 py-12 print:p-0 print:max-w-none">
-      <div className="flex items-center justify-between no-print">
+    <div className="space-y-8 max-w-5xl mx-auto px-4 py-12 print:p-0 print:max-w-none relative">
+      {successMsg && (
+        <div className="fixed bottom-6 right-6 z-[300] bg-slate-900 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 print:hidden">
+          <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+          <p className="text-sm font-bold">{successMsg}</p>
+          <button onClick={() => setSuccessMsg(null)} className="ml-2 text-slate-400 hover:text-white">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+      <div className="flex items-center justify-between print:hidden">
         <h1 className="text-3xl font-black text-slate-900 tracking-tight">
           Standard Procurement Ledger
         </h1>
@@ -152,20 +191,26 @@ export default function PurchaseOrders() {
       </div>
 
       {/* Filters Bar */}
-      <div className="flex flex-col md:flex-row gap-4 mb-8 no-print">
+      <div className="flex flex-col md:flex-row gap-4 mb-8 print:hidden">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
           <input
             type="text"
             placeholder="Search Purchase Order..."
             className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all text-sm font-bold placeholder:text-slate-400"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         <div className="flex gap-4">
           <div className="relative">
             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-            <select className="pl-10 pr-8 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 appearance-none text-sm font-bold text-slate-600 bg-white min-w-[140px] cursor-pointer">
-              <option value="">All Statuses</option>
+            <select
+              className="pl-10 pr-8 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 appearance-none text-sm font-bold text-slate-600 bg-white min-w-[140px] cursor-pointer"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
+              <option value="">All Status</option>
               <option value="pending">Pending</option>
               <option value="ordered">Ordered</option>
               <option value="received">Received</option>
@@ -178,6 +223,8 @@ export default function PurchaseOrders() {
             <input
               type="date"
               className="pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 text-sm font-bold text-slate-600 bg-white min-w-[140px] cursor-pointer"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
             />
           </div>
         </div>
@@ -192,14 +239,14 @@ export default function PurchaseOrders() {
         </div>
       ) : (
         <div className="space-y-6">
-          {orders.map((order) => (
+          {filteredOrders.map((order) => (
             <div
               key={order.id}
-              className={`group bg-white overflow-hidden transition-all duration-300 ${expandedId === order.id ? 'no-shadow print:shadow-none' : 'rounded-[24px] border border-slate-100 shadow-sm hover:shadow-md'}`}
+              className={`group bg-white overflow-hidden transition-all duration-300 ${expandedId === order.id ? 'no-shadow print:shadow-none' : `rounded-[24px] border border-slate-100 shadow-sm hover:shadow-md ${expandedId ? 'print:hidden' : ''}`}`}
             >
               {/* Summary Bar - Hidden for printing when expanded */}
               <div
-                className={`px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 cursor-pointer hover:bg-slate-50 transition-colors no-print ${expandedId === order.id ? 'border-b border-orange-100 bg-orange-50/30' : ''}`}
+                className={`px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 cursor-pointer hover:bg-slate-50 transition-colors print:hidden ${expandedId === order.id ? 'border-b border-orange-100 bg-orange-50/30' : ''}`}
                 onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}
               >
                 <div className="flex items-center gap-6">
@@ -244,7 +291,7 @@ export default function PurchaseOrders() {
               {expandedId === order.id && (
                 <div className="relative bg-white print:p-0">
                   {/* Sticky Header with Actions */}
-                  <div className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex flex-col md:flex-row items-center justify-between gap-4 no-print shadow-sm">
+                  <div className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex flex-col md:flex-row items-center justify-between gap-4 print:hidden shadow-sm">
                     <div className="flex items-center gap-3">
                       <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Document</span>
                       <span className="text-lg font-black text-slate-900">{generateUniquePONumber(order.id, order.created_at)}</span>
@@ -268,7 +315,8 @@ export default function PurchaseOrders() {
                           navigator.clipboard.writeText(
                             window.location.host + '/po/' + order.share_token,
                           )
-                          alert('PO URL Copied!')
+                          setSuccessMsg('PO URL Copied!')
+                          setTimeout(() => setSuccessMsg(null), 3000)
                         }}
                         className="p-2.5 rounded-xl border border-slate-200 text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition-all bg-white"
                         title="Share Link"
@@ -292,12 +340,12 @@ export default function PurchaseOrders() {
                     </div>
                   </div>
 
-                  <div className="p-8 lg:p-12">
+                  <div className="p-8 lg:p-12 print:p-0 print:pt-4">
                     {/* Main Title */}
-                    <h2 className="text-center text-4xl font-black text-orange-500 uppercase tracking-widest mb-12">
+                    <h2 className="text-center text-4xl font-black text-orange-500 uppercase tracking-widest mb-12 print:mb-6">
                       Purchase Order
                     </h2>
-                  <div className="grid grid-cols-2 gap-12 mb-12">
+                  <div className="grid grid-cols-2 gap-12 mb-12 print:gap-6 print:mb-6">
                     {/* Top Left: Company Details */}
                     <div className="space-y-6">
                       <div className="text-sm font-bold text-slate-500 space-y-1">
@@ -314,7 +362,7 @@ export default function PurchaseOrders() {
                       <div className="space-y-1">
                         <span className="text-sm font-black text-slate-900">Purchase Date:</span>
                         <p className="text-sm font-bold text-slate-500">
-                          {new Date(order.created_at).toLocaleDateString()}
+                          {formatDate(order.created_at, dateFormat)}
                         </p>
                       </div>
                       <div className="px-4 py-1.5 border-2 border-orange-500 rounded-xl bg-orange-50/50">
@@ -325,15 +373,16 @@ export default function PurchaseOrders() {
                       <div className="space-y-1">
                         <span className="text-sm font-black text-slate-900">Delivery Date:</span>
                         <p className="text-sm font-bold text-slate-500">
-                          {new Date(
-                            new Date(order.created_at).getTime() + 15 * 24 * 60 * 60 * 1000,
-                          ).toLocaleDateString()}
+                          {formatDate(
+                            new Date(new Date(order.created_at).getTime() + 15 * 24 * 60 * 60 * 1000),
+                            dateFormat,
+                          )}
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-12 items-start mb-12">
+                  <div className="grid grid-cols-2 gap-12 items-start mb-12 print:gap-6 print:mb-6">
                     {/* Middle Left: Bill To */}
                     <div className="space-y-4">
                       <h4 className="text-lg font-black text-slate-900">Bill To</h4>
@@ -387,7 +436,7 @@ export default function PurchaseOrders() {
                   </div>
 
                   {/* Order Details Table */}
-                  <div className="mb-10">
+                  <div className="mb-10 print:mb-6">
                     <h4 className="text-lg font-black text-slate-900 mb-4">Order Details</h4>
                     <table className="w-full border-collapse">
                       <thead className="bg-slate-100">
@@ -412,29 +461,29 @@ export default function PurchaseOrders() {
                       <tbody>
                         {order.items?.map((item, index) => (
                           <tr key={item.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-                            <td className="px-6 py-4 text-center font-bold text-slate-500">
+                            <td className="px-6 py-4 print:py-2 text-center font-bold text-slate-500">
                               {index + 1}.
                             </td>
-                            <td className="px-6 py-4">
+                            <td className="px-6 py-4 print:py-2">
                               <div className="flex flex-col">
                                 <span className="font-black text-slate-900 uppercase tracking-tight">
                                   {item.resource_name}
                                 </span>
                                 <span
-                                  className="text-[10px] text-slate-400 font-bold uppercase no-print cursor-pointer hover:text-orange-500 truncate mt-1"
+                                  className="text-[10px] text-slate-400 font-bold uppercase print:hidden cursor-pointer hover:text-orange-500 truncate mt-1"
                                   onClick={() => openEditModal(item)}
                                 >
-                                  Edit Unit Quantity
+                                  Edit Item
                                 </span>
                               </div>
                             </td>
-                            <td className="px-6 py-4 text-center font-bold text-slate-600">
+                            <td className="px-6 py-4 print:py-2 text-center font-bold text-slate-600">
                               {item.quantity}
                             </td>
-                            <td className="px-6 py-4 text-center font-bold text-slate-600">
+                            <td className="px-6 py-4 print:py-2 text-center font-bold text-slate-600">
                               ₹{item.unit_price.toFixed(2)}
                             </td>
-                            <td className="px-6 py-4 text-right font-black text-slate-900 tracking-tight">
+                            <td className="px-6 py-4 print:py-2 text-right font-black text-slate-900 tracking-tight">
                               ₹{(item.quantity * item.unit_price).toFixed(2)}
                             </td>
                           </tr>
@@ -444,7 +493,7 @@ export default function PurchaseOrders() {
                   </div>
 
                   {/* Totals Section */}
-                  <div className="flex justify-end mb-16">
+                  <div className="flex justify-end mb-16 print:mb-6">
                     <div className="w-full max-w-[320px] rounded-2xl bg-orange-50 border border-orange-200 overflow-hidden shadow-sm">
                       <div className="p-6 space-y-4 font-bold text-sm">
                         <div className="flex justify-between text-slate-500">
@@ -480,7 +529,7 @@ export default function PurchaseOrders() {
                   </div>
 
                   {/* Footer */}
-                  <div className="flex items-center justify-between pt-10 border-t border-slate-200">
+                  <div className="flex items-center justify-between pt-10 print:pt-6 border-t border-slate-200">
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-2 text-slate-900 font-black">
                         <UserCheck className="h-5 w-5 text-orange-500" /> Authorized By: Alex Mercer
@@ -491,11 +540,7 @@ export default function PurchaseOrders() {
                     </div>
                     <div className="text-right text-xs font-black text-slate-400 uppercase tracking-widest">
                       Date:{' '}
-                      {new Date().toLocaleDateString('en-GB', {
-                        day: '2-digit',
-                        month: 'long',
-                        year: 'numeric',
-                      })}
+                      {formatDate(new Date(), dateFormat)}
                     </div>
                   </div>
                 </div>
@@ -516,7 +561,7 @@ export default function PurchaseOrders() {
                   <PencilLine className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-black text-slate-900">Scale Order</h2>
+                  <h2 className="text-xl font-black text-slate-900">Edit Item</h2>
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
                     {selectedItem.resource_name}
                   </p>
@@ -531,17 +576,35 @@ export default function PurchaseOrders() {
             </div>
 
             <form onSubmit={handleUpdateItem} className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                  New Quantity ({selectedItem.unit})
-                </label>
-                <input
-                  required
-                  type="number"
-                  className="w-full rounded-2xl border border-slate-200 px-5 py-4 text-sm font-bold focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all font-black"
-                  value={editData.quantity}
-                  onChange={(e) => setEditData({ ...editData, quantity: e.target.value })}
-                />
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                    New Quantity ({selectedItem.unit})
+                  </label>
+                  <input
+                    required
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="w-full rounded-2xl border border-slate-200 px-5 py-4 text-sm font-bold focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all font-black"
+                    value={editData.quantity}
+                    onChange={(e) => setEditData({ ...editData, quantity: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                    Unit Price (₹)
+                  </label>
+                  <input
+                    required
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="w-full rounded-2xl border border-slate-200 px-5 py-4 text-sm font-bold focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all font-black"
+                    value={editData.unit_price}
+                    onChange={(e) => setEditData({ ...editData, unit_price: e.target.value })}
+                  />
+                </div>
               </div>
               <button className="w-full py-4 rounded-3xl bg-orange-500 text-white text-xs font-black uppercase tracking-widest shadow-xl shadow-orange-100 hover:bg-orange-600 transition-all active:scale-[0.98]">
                 UPDATE OFFICIAL RECORD

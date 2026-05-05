@@ -21,6 +21,7 @@ import RawMaterials from './pages/RawMaterials'
 import Suppliers from './pages/Suppliers'
 import PurchaseOrders from './pages/PurchaseOrders'
 import Trends from './pages/Trends'
+import SharedPurchaseOrder from './pages/SharedPurchaseOrder'
 
 function App() {
   return (
@@ -29,6 +30,7 @@ function App() {
         <Routes>
           {/* Public Route */}
           <Route path="/login" element={<Login />} />
+          <Route path="/po/:token" element={<SharedPurchaseOrder />} />
 
           {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>

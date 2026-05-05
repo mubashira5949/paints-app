@@ -63,6 +63,11 @@ describe('Inventory API Module', () => {
                         rows: [{ totalMass: 146, packagedUnits: 22 }]
                     })
                 }
+                if (queryText.includes('SELECT COUNT(*) as "outOfStockColors"')) {
+                    return Promise.resolve({
+                        rows: [{ outOfStockColors: '5' }]
+                    })
+                }
                 if (queryText.includes('SELECT COUNT(*) as "lowStockColors"')) {
                     return Promise.resolve({
                         rows: [{ lowStockColors: '2' }]
@@ -77,7 +82,8 @@ describe('Inventory API Module', () => {
             expect(result).toEqual({
                 totalMass: 146,
                 packagedUnits: 22,
-                lowStockColors: 2
+                lowStockColors: 2,
+                outOfStockColors: 5
             })
         })
     })

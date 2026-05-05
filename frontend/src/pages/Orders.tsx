@@ -907,8 +907,11 @@ export default function Orders() {
                       <input
                         type="number"
                         min="1"
-                        value={quantity}
-                        onChange={(e) => setQuantity(Number(e.target.value))}
+                        value={quantity === 0 ? '' : quantity}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/^0+/, '');
+                          setQuantity(val === '' ? 0 : Number(val));
+                        }}
                         className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
                       />
                     </div>

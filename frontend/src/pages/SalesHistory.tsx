@@ -30,7 +30,13 @@ export default function SalesHistory() {
   const [colorFilter, setColorFilter] = useState('')
   const [isExporting, setIsExporting] = useState(false)
 
-  const uniqueColors = Array.from(new Set(transactions.map((t) => t.color_name))).sort()
+  const uniqueColors = Array.from(
+    new Set(
+      transactions
+        .filter((t) => user?.role !== 'sales' || t.logged_by?.toLowerCase() === user.username?.toLowerCase())
+        .map((t) => t.color_name)
+    )
+  ).sort()
 
   useEffect(() => {
     fetchTransactions()
@@ -83,6 +89,10 @@ export default function SalesHistory() {
   }
 
   const filtered = transactions.filter((t) => {
+    if (user?.role === 'sales' && t.logged_by?.toLowerCase() !== user.username?.toLowerCase()) {
+      return false
+    }
+
     const matchesSearch =
       t.color_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (t.notes && t.notes.toLowerCase().includes(searchTerm.toLowerCase())) ||

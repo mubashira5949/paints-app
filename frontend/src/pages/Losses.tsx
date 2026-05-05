@@ -3,8 +3,6 @@ import { apiRequest } from '../services/api'
 import {
   AlertTriangle,
   Plus,
-  Filter,
-  Calendar,
   Package,
   Droplets,
   ClipboardList,
@@ -12,6 +10,7 @@ import {
   X,
 } from 'lucide-react'
 import { useUnitPreference, formatUnit, unitLabel } from '../utils/units'
+import { useDateFormatPreference, formatDate } from '../utils/dateFormatter'
 
 interface LossRecord {
   id: number
@@ -60,8 +59,10 @@ interface OperatorSummary {
 
 export default function Losses() {
   const unitPref = useUnitPreference()
+  const dateFormat = useDateFormatPreference()
   const [losses, setLosses] = useState<LossRecord[]>([])
-  const [operatorSummary, setOperatorSummary] = useState<OperatorSummary[]>([])
+  const [allLosses, setAllLosses] = useState<LossRecord[]>([])
+  const [_operatorSummary, setOperatorSummary] = useState<OperatorSummary[]>([])
 
   const [reasons, setReasons] = useState<LossReason[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -90,7 +91,7 @@ export default function Losses() {
 
   // Filter State
   const [filters, setFilters] = useState({
-    item_type: 'all',
+    item_type: 'finished_good',
     reason_id: 'all',
   })
 
@@ -101,8 +102,12 @@ export default function Losses() {
       if (filters.item_type !== 'all') params.append('item_type', filters.item_type)
       if (filters.reason_id !== 'all') params.append('reason_id', filters.reason_id)
 
-      const data = await apiRequest<LossRecord[]>(`/api/losses?${params.toString()}`)
-      setLosses(data)
+      const [filtered, all] = await Promise.all([
+        apiRequest<LossRecord[]>(`/api/losses?${params.toString()}`),
+        apiRequest<LossRecord[]>('/api/losses'),
+      ])
+      setLosses(filtered)
+      setAllLosses(all)
     } catch (err) {
       console.error('Failed to fetch losses', err)
       setError('Failed to load loss records')
@@ -112,20 +117,21 @@ export default function Losses() {
   }
 
   const fetchInitialData = async () => {
-    try {
-      const [reasonsData, colorsData, resourcesData, operatorData] = await Promise.all([
-        apiRequest<LossReason[]>('/api/losses/reasons'),
-        apiRequest<ColorOption[]>('/api/inventory'),
-        apiRequest<ResourceOption[]>('/resources'),
-        apiRequest<OperatorSummary[]>('/api/losses/operator-summary'),
-      ])
-      setReasons(reasonsData)
-      setColors(colorsData)
-      setResources(resourcesData)
-      setOperatorSummary(operatorData)
-    } catch (err) {
-      console.error('Failed to fetch form data', err)
-    }
+    apiRequest<LossReason[]>('/api/losses/reasons')
+      .then(setReasons)
+      .catch((err) => console.error('Failed to fetch reasons', err))
+
+    apiRequest<ColorOption[]>('/api/inventory')
+      .then(setColors)
+      .catch((err) => console.error('Failed to fetch inventory', err))
+
+    apiRequest<ResourceOption[]>('/resources')
+      .then(setResources)
+      .catch((err) => console.error('Failed to fetch resources', err))
+
+    apiRequest<OperatorSummary[]>('/api/losses/operator-summary')
+      .then(setOperatorSummary)
+      .catch((err) => console.error('Failed to fetch operator summary', err))
   }
 
   useEffect(() => {
@@ -142,10 +148,10 @@ export default function Losses() {
       quantity_units: '',
       quantity_kg: '',
     }))
-    if (color && color.packDistribution) {
+    if (color && Array.isArray(color.packDistribution) && color.packDistribution.length > 0) {
       setAvailablePackSizes(color.packDistribution.map((p) => parseFloat(p.size)))
     } else {
-      setAvailablePackSizes([])
+      setAvailablePackSizes([1, 4, 10, 20])
     }
   }
 
@@ -224,18 +230,25 @@ export default function Losses() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-6 md:grid-cols-3">
-        <div className="rounded-2xl border bg-white p-6 shadow-sm border-l-4 border-amber-500 hover:shadow-md transition-all group">
+      <div className="grid gap-6 md:grid-cols-2">
+        <div className="rounded-2xl border bg-white p-6 shadow-sm border-l-4 border-indigo-500 hover:shadow-md transition-all group">
           <div className="flex flex-row items-center justify-between space-y-0 pb-2">
             <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
-              Recent Losses (30d)
+              Colour Total Loss
             </p>
-            <AlertTriangle className="h-5 w-5 text-amber-500 group-hover:scale-110 transition-transform" />
+            <Droplets className="h-5 w-5 text-indigo-500 group-hover:scale-110 transition-transform" />
           </div>
           <div className="mt-2">
-            <div className="text-3xl font-black text-slate-900">{losses.length}</div>
+            <div className="text-3xl font-black text-slate-900">
+              {formatUnit(
+                allLosses
+                  .filter((l) => l.item_type === 'finished_good')
+                  .reduce((acc, curr) => acc + Number(curr.quantity_kg || 0), 0),
+                unitPref,
+              )}
+            </div>
             <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter italic">
-              Documented discrepancies
+              Cumulative finished goods loss
             </p>
           </div>
         </div>
@@ -243,39 +256,21 @@ export default function Losses() {
         <div className="rounded-2xl border bg-white p-6 shadow-sm border-l-4 border-blue-500 hover:shadow-md transition-all group">
           <div className="flex flex-row items-center justify-between space-y-0 pb-2">
             <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
-              Total Mass Lost
+              Raw Material Total Loss
             </p>
-            <Droplets className="h-5 w-5 text-blue-500 group-hover:scale-110 transition-transform" />
+            <Package className="h-5 w-5 text-blue-500 group-hover:scale-110 transition-transform" />
           </div>
           <div className="mt-2">
             <div className="text-3xl font-black text-slate-900">
               {formatUnit(
-                losses.reduce((acc, curr) => acc + curr.quantity_kg, 0),
+                allLosses
+                  .filter((l) => l.item_type === 'raw_material')
+                  .reduce((acc, curr) => acc + Number(curr.quantity_kg || 0), 0),
                 unitPref,
               )}
             </div>
             <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter italic">
-              Cumulative material loss
-            </p>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border bg-white p-6 shadow-sm border-l-4 border-indigo-500 hover:shadow-md transition-all group">
-          <div className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
-              Finished Goods Lost
-            </p>
-            <Package className="h-5 w-5 text-indigo-500 group-hover:scale-110 transition-transform" />
-          </div>
-          <div className="mt-2">
-            <div className="text-3xl font-black text-slate-900">
-              {losses
-                .filter((l) => l.item_type === 'finished_good')
-                .reduce((acc, curr) => acc + (curr.quantity_units || 0), 0)}
-              <span className="text-sm font-bold text-slate-400 ml-2">Units</span>
-            </div>
-            <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter italic">
-              Packaged products lost
+              Cumulative raw material loss
             </p>
           </div>
         </div>
@@ -295,19 +290,39 @@ export default function Losses() {
             </h2>
           </div>
 
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <div className="relative flex-1 md:w-48">
-              <Filter className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
-              <select
-                className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-[11px] font-bold uppercase tracking-wide focus:ring-2 focus:ring-blue-500/20 outline-none appearance-none"
-                value={filters.item_type}
-                onChange={(e) => setFilters((prev) => ({ ...prev, item_type: e.target.value }))}
-              >
-                <option value="all">ITEM TYPE: ALL</option>
-                <option value="finished_good">FINISHED GOODS</option>
-                <option value="raw_material">RAW MATERIALS</option>
-              </select>
-            </div>
+          <div className="flex p-1 bg-slate-100 rounded-xl gap-1">
+            <button
+              type="button"
+              onClick={() =>
+                setFilters((prev) => ({
+                  ...prev,
+                  item_type: 'finished_good',
+                }))
+              }
+              className={`px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-lg transition-all ${
+                filters.item_type === 'finished_good'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-slate-500 hover:bg-white/50'
+              }`}
+            >
+              Finished Goods
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setFilters((prev) => ({
+                  ...prev,
+                  item_type: 'raw_material',
+                }))
+              }
+              className={`px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-lg transition-all ${
+                filters.item_type === 'raw_material'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-slate-500 hover:bg-white/50'
+              }`}
+            >
+              Raw Materials
+            </button>
           </div>
         </div>
 
@@ -324,9 +339,11 @@ export default function Losses() {
                 <th className="px-6 py-4 text-left font-bold text-slate-500 text-[10px] uppercase tracking-widest">
                   Color / Item
                 </th>
-                <th className="px-6 py-4 text-center font-bold text-slate-500 text-[10px] uppercase tracking-widest">
-                  Target Quantity
-                </th>
+                {filters.item_type !== 'raw_material' && (
+                  <th className="px-6 py-4 text-center font-bold text-slate-500 text-[10px] uppercase tracking-widest">
+                    Target Quantity
+                  </th>
+                )}
                 <th className="px-6 py-4 text-center font-bold text-slate-500 text-[10px] uppercase tracking-widest">
                   Lost Quantity
                 </th>
@@ -359,7 +376,7 @@ export default function Losses() {
                     <td className="px-6 py-5">
                       <div className="flex flex-col">
                         <span className="font-bold text-slate-700 text-sm">
-                          {new Date(loss.documented_at).toLocaleDateString()}
+                          {formatDate(loss.documented_at, dateFormat)}
                         </span>
                         <span className="text-[10px] font-medium text-slate-400">
                           {new Date(loss.documented_at).toLocaleTimeString()}
@@ -381,19 +398,27 @@ export default function Losses() {
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-5 text-center">
-                      {loss.target_quantity_kg ? (
-                        <span className="text-sm font-bold text-slate-500">
-                          {formatUnit(parseFloat(loss.target_quantity_kg), unitPref)}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-slate-300">-</span>
-                      )}
-                    </td>
+                    {filters.item_type !== 'raw_material' && (
+                      <td className="px-6 py-5 text-center">
+                        {loss.item_type === 'finished_good' ? (
+                          <span className="text-sm font-bold text-slate-500">
+                            {loss.target_quantity_kg
+                              ? `${Math.round(parseFloat(loss.target_quantity_kg) / (loss.pack_size_kg || 1))}kg`
+                              : `${(loss.quantity_units || 0) + 20}kg`}
+                          </span>
+                        ) : loss.target_quantity_kg ? (
+                          <span className="text-sm font-bold text-slate-500">
+                            {formatUnit(parseFloat(loss.target_quantity_kg), unitPref)}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-300">-</span>
+                        )}
+                      </td>
+                    )}
                     <td className="px-6 py-5 text-center">
                       <span className="text-sm font-black text-red-600">
-                        {loss.item_type === 'finished_good' && loss.quantity_units 
-                          ? `${loss.quantity_units} Units` 
+                        {loss.item_type === 'finished_good' && loss.quantity_units
+                          ? `${loss.quantity_units}kg`
                           : formatUnit(loss.quantity_kg, unitPref)}
                       </span>
                     </td>

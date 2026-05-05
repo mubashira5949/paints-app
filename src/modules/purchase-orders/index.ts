@@ -266,4 +266,39 @@ export default async function (fastifyRaw: FastifyInstance) {
             }
         }
     })
+
+    /**
+     * GET /purchase-orders/shared/:token - Retrieve PO by share_token
+     */
+    fastify.get('/shared/:token', {
+        schema: {
+            params: Type.Object({ token: Type.String() })
+        },
+        handler: async (request, reply) => {
+            const { token } = request.params as { token: string }
+            try {
+                const result = await fastify.db.query(`
+                    SELECT po.*, s.name as supplier_name, s.email as supplier_email, s.address as supplier_address, s.phone as supplier_phone, s.gst_number as supplier_gst, s.pocs as supplier_pocs,
+                    COALESCE((SELECT json_agg(items) FROM (
+                        SELECT poi.*, r.name as resource_name 
+                        FROM purchase_order_items poi
+                        LEFT JOIN resources r ON poi.resource_id = r.id
+                        WHERE poi.purchase_order_id = po.id
+                    ) items), '[]'::json) as items
+                    FROM purchase_orders po
+                    LEFT JOIN suppliers s ON po.supplier_id = s.id
+                    WHERE po.share_token = $1
+                `, [token])
+
+                if (result.rows.length === 0) {
+                    return reply.status(404).send({ error: 'Not Found', message: 'Purchase Order not found or link is invalid.' })
+                }
+
+                return reply.send(result.rows[0])
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to retrieve shared PO' })
+            }
+        }
+    })
 }

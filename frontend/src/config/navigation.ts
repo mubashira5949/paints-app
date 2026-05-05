@@ -35,7 +35,7 @@ export const navigation: NavItem[] = [
     title: 'Analytics & Trends',
     path: '/trends',
     icon: TrendingUp,
-    roles: ['manager', 'admin', 'sales', 'operator'],
+    roles: ['manager', 'admin'],
   },
   {
     title: 'Production',
@@ -53,7 +53,7 @@ export const navigation: NavItem[] = [
     title: 'New Sale',
     path: '/sales/new',
     icon: ShoppingCart,
-    roles: ['manager', 'operator', 'sales', 'admin'],
+    roles: ['manager', 'sales', 'admin'],
   },
   {
     title: 'Sales History',
@@ -65,7 +65,7 @@ export const navigation: NavItem[] = [
     title: 'Orders',
     path: '/sales/orders',
     icon: ClipboardList,
-    roles: ['manager', 'sales', 'admin', 'operator'],
+    roles: ['manager', 'sales', 'admin'],
   },
   {
     title: 'Clients',

@@ -9,7 +9,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
   const { user, logout } = useAuth()
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-x-4 border-b bg-background px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-x-4 border-b bg-background px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8 print:hidden">
       <button
         type="button"
         className="-m-2.5 p-2.5 text-muted-foreground hover:text-foreground lg:hidden"

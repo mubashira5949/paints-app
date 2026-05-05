@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { apiRequest } from '../services/api'
+import { useDateFormatPreference, formatDate } from '../utils/dateFormatter'
 import {
   TrendingUp,
   Package,
@@ -11,6 +12,7 @@ import {
 } from 'lucide-react'
 
 export default function Trends() {
+  const dateFormat = useDateFormatPreference()
   const [trends, setTrends] = useState<any>(null)
   const [materials, setMaterials] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -46,8 +48,8 @@ export default function Trends() {
   }
 
   const safeMaterials = Array.isArray(materials) ? materials : []
-  const frequentlyUsed = safeMaterials.filter((m) => m.used_quantity > 0).slice(0, 5)
-  const stagnant = safeMaterials.filter((m) => !m.used_quantity).slice(0, 5)
+  const frequentlyUsed = safeMaterials.filter((m) => Number(m.used_quantity) > 0).slice(0, 5)
+  const stagnant = safeMaterials.filter((m) => Number(m.used_quantity) === 0).slice(0, 5)
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -192,7 +194,7 @@ export default function Trends() {
                   <div>
                     <p className="font-bold text-slate-800">{m.name}</p>
                     <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">
-                      Last used: {m.last_used ? new Date(m.last_used).toLocaleDateString() : 'N/A'}
+                      Last used: {formatDate(m.last_used, dateFormat)}
                     </p>
                   </div>
                   <div className="text-right">

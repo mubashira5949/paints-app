@@ -53,6 +53,7 @@ interface InventorySummary {
   totalMass: number
   packagedUnits: number
   lowStockColors: number
+  outOfStockColors: number
 }
 
 interface Supplier {
@@ -91,13 +92,14 @@ export default function Inventory() {
 
   const [productTypeOptions, setProductTypeOptions] = useState<{ id: number; name: string }[]>([])
   const [seriesOptions, setSeriesOptions] = useState<{ id: number; name: string }[]>([])
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
   // Purchase Order Modal state
   const [showPOModal, setShowPOModal] = useState(false)
   const [poDraftItem, setPODraftItem] = useState<PODraftItem | null>(null)
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [selectedSupplierId, setSelectedSupplierId] = useState<number | null>(null)
-  const [poQuantity, setPOQuantity] = useState<number>(0)
+  const [poQuantity, setPOQuantity] = useState<number | string>('')
   const [poNotes, setPONotes] = useState('')
   const [poSubmitting, setPOSubmitting] = useState(false)
 
@@ -209,14 +211,14 @@ export default function Inventory() {
       })
       setShowPOModal(false)
       setPODraftItem(null)
-      alert(`✅ Purchase Order created for ${poDraftItem.resource_name}!\nNavigate to Procurement to review.`)
+      setSuccessMsg(`✅ Purchase Order created for ${poDraftItem.resource_name}! Navigate to Procurement to review.`)
+      setTimeout(() => setSuccessMsg(null), 4000)
     } catch (err: any) {
       alert(err.message || 'Failed to create purchase order')
     } finally {
       setPOSubmitting(false)
     }
   }
-
 
   useEffect(() => {
     fetchInventory()
@@ -233,7 +235,16 @@ export default function Inventory() {
     : alerts
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {successMsg && (
+        <div className="fixed bottom-6 right-6 z-[300] bg-slate-900 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300">
+          <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+          <p className="text-sm font-bold">{successMsg}</p>
+          <button onClick={() => setSuccessMsg(null)} className="ml-2 text-slate-400 hover:text-white">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Inventory Management</h1>
@@ -251,7 +262,7 @@ export default function Inventory() {
         </button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border bg-card p-6 shadow-sm border-t-4 border-blue-500 hover:shadow-md transition-shadow">
           <div className="flex flex-row items-center justify-between space-y-0 pb-2">
             <p className="text-sm font-medium">Total Finished Stock</p>
@@ -287,7 +298,20 @@ export default function Inventory() {
               {summary ? summary.lowStockColors : '0'}
               <span className="text-sm font-normal text-muted-foreground ml-1">Colors</span>
             </div>
-            <p className="text-xs text-muted-foreground">Below minimum threshold</p>
+            <p className="text-xs text-muted-foreground">Has stock, but below threshold</p>
+          </div>
+        </div>
+        <div className="rounded-xl border bg-card p-6 shadow-sm border-t-4 border-red-400 hover:shadow-md transition-shadow">
+          <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <p className="text-sm font-medium">Out of Stock Colors</p>
+            <BarChart3 className="h-4 w-4 text-red-400" />
+          </div>
+          <div>
+            <div className="text-2xl font-bold">
+              {summary ? summary.outOfStockColors : '0'}
+              <span className="text-sm font-normal text-muted-foreground ml-1">Colors</span>
+            </div>
+            <p className="text-xs text-muted-foreground">Zero stock available</p>
           </div>
         </div>
       </div>
@@ -464,8 +488,7 @@ export default function Inventory() {
                 (showAllInventory ? inventory : inventory.slice(0, 5)).map((item) => (
                   <React.Fragment key={item.id}>
                     <tr
-                      onClick={() => toggleRow(item.id)}
-                      className="hover:bg-gray-50 transition-colors cursor-pointer group"
+                      className="hover:bg-gray-50 transition-colors group"
                     >
                       <td className="p-6 font-medium">
                         <div className="flex items-center gap-3">
@@ -476,7 +499,7 @@ export default function Inventory() {
                               textShadow: '0px 1px 2px rgba(0,0,0,0.5)',
                             }}
                           >
-                            {item.status === 'low' && '!'}
+                            {item.mass === 0 ? '×' : (item.status === 'low' ? '!' : '')}
                           </div>
                           <div className="flex flex-col">
                             <span className="font-extrabold text-[15px] text-slate-900">
@@ -551,16 +574,22 @@ export default function Inventory() {
                         </div>
                       </td>
                       <td className="p-6">
-                        {item.status === 'healthy' && (
+                        {item.mass > 0 && item.status === 'healthy' && (
                           <div className="flex items-center justify-center gap-2 text-emerald-600 font-bold text-xs uppercase tracking-wide">
                             <CheckCircle2 className="h-5 w-5" />
                             <span>Healthy</span>
                           </div>
                         )}
-                        {item.status === 'low' && (
+                        {item.mass > 0 && item.status === 'low' && (
                           <div className="flex items-center justify-center gap-2 text-amber-600 font-bold text-xs uppercase tracking-wide">
                             <AlertTriangle className="h-5 w-5" />
                             <span>Low Stock</span>
+                          </div>
+                        )}
+                        {item.mass === 0 && (
+                          <div className="flex items-center justify-center gap-2 text-slate-400 font-bold text-xs uppercase tracking-wide">
+                            <AlertTriangle className="h-5 w-5" />
+                            <span>Out of Stock</span>
                           </div>
                         )}
                       </td>
@@ -922,8 +951,11 @@ export default function Inventory() {
                   type="number"
                   min={1}
                   step="0.1"
-                  value={poQuantity}
-                  onChange={(e) => setPOQuantity(Number(e.target.value))}
+                  value={poQuantity === '' ? '' : Number(poQuantity).toString()}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/^0+(?=\d)/, '');
+                    setPOQuantity(val === '' ? '' : val);
+                  }}
                   className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all"
                 />
               </div>

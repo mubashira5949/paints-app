@@ -185,7 +185,7 @@ export default function Suppliers() {
             Partner Intelligence
           </h1>
           <p className="text-muted-foreground mt-1 text-sm font-medium">
-            Multi-stakeholder management and active material catalogs.
+            Partner management and active material catalogs.
           </p>
         </div>
         <button
@@ -205,7 +205,7 @@ export default function Suppliers() {
           <Search className="absolute left-4 top-9 h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
           <input
             type="text"
-            placeholder="Search company or stakeholder..."
+            placeholder="Search company or contact..."
             className="w-full pl-12 pr-4 py-3.5 rounded-2xl border border-slate-200 bg-white shadow-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold"
             value={supplierSearch}
             onChange={(e) => setSupplierSearch(e.target.value)}
@@ -247,13 +247,13 @@ export default function Suppliers() {
           {filteredSuppliers.map((supplier) => (
             <div
               key={supplier.id}
-              className={`group relative overflow-hidden rounded-[32px] border bg-white p-1 hover:shadow-2xl transition-all duration-500 ${
+              className={`group relative overflow-hidden rounded-[32px] border bg-white p-1 hover:shadow-md hover:border-blue-200 transition-all duration-300 ${
                 componentSearch && supplier.match_count && supplier.match_count > 0
                   ? 'border-blue-300 ring-2 ring-blue-500/10'
                   : 'border-slate-100'
               }`}
             >
-              <div className="p-8">
+              <div className="p-6">
                 <div className="flex items-start justify-between mb-8">
                   <div className="flex items-center gap-5">
                     <div
@@ -299,17 +299,17 @@ export default function Suppliers() {
                   </div>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-8">
+                <div className="grid md:grid-cols-2 gap-4">
                   {/* POC Section */}
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                      <UserCircle2 className="h-4 w-4" /> Primary Stakeholders
+                      <UserCircle2 className="h-4 w-4" /> Primary Contacts
                     </h4>
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       {supplier.pocs?.map((poc, idx) => (
                         <div
                           key={idx}
-                          className="p-4 rounded-2xl bg-slate-50 border border-slate-100 group/poc hover:border-blue-200 transition-colors"
+                          className="p-3 rounded-2xl bg-slate-50 border border-slate-100 group/poc hover:border-blue-200 transition-colors"
                         >
                           <div className="flex items-center justify-between mb-1">
                             <p className="font-black text-slate-900 text-sm tracking-tight">
@@ -343,47 +343,37 @@ export default function Suppliers() {
                   </div>
 
                   {/* Catalog Section */}
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <h4 className="text-[11px] font-black text-blue-500 uppercase tracking-[0.2em] flex items-center gap-2">
                       <PackageCheck className="h-4 w-4" /> Supply Catalog
                     </h4>
-                    <div className="grid grid-cols-1 gap-2">
+                    <div className="flex flex-wrap gap-2">
                       {supplier.catalog && supplier.catalog.length > 0 ? (
-                        supplier.catalog.slice(0, 4).map((mat) => (
-                          <div
+                        supplier.catalog.map((mat) => (
+                          <span
                             key={mat.id}
-                            className="flex items-center justify-between p-3 rounded-xl bg-blue-50/30 border border-blue-100/50"
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50/50 border border-blue-100 text-[11px] font-bold text-slate-700 hover:bg-blue-100 transition-colors cursor-default"
                           >
-                            <div className="flex items-center gap-3">
-                              <div
-                                className="h-3 w-3 rounded-full shadow-sm border border-white"
-                                style={{
-                                  backgroundColor: mat.color || '#cbd5e1',
-                                }}
-                              />
-                              <span className="text-xs font-bold text-slate-700">{mat.name}</span>
-                            </div>
-                            <ChevronRight className="h-3 w-3 text-blue-300" />
-                          </div>
+                            <div
+                              className="h-2 w-2 rounded-full border border-black/10"
+                              style={{ backgroundColor: mat.color || '#cbd5e1' }}
+                            />
+                            {mat.name}
+                          </span>
                         ))
                       ) : (
-                        <div className="h-full flex flex-col items-center justify-center py-6 text-center border-2 border-dashed border-slate-100 rounded-3xl">
+                        <div className="h-full flex flex-col items-center justify-center py-6 text-center border-2 border-dashed border-slate-100 rounded-3xl w-full">
                           <Tag className="h-8 w-8 text-slate-100 mb-2" />
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                             No Active Catalog
                           </p>
                         </div>
                       )}
-                      {supplier.catalog && supplier.catalog.length > 4 && (
-                        <p className="text-[9px] font-black text-center text-slate-400 mt-1 uppercase tracking-widest">
-                          + {supplier.catalog.length - 4} more materials
-                        </p>
-                      )}
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-8 flex items-center justify-between pt-6 border-t border-slate-50 text-[11px] font-bold text-slate-500">
+                <div className="mt-6 flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold text-slate-500">
                   <div className="flex items-center gap-4">
                     {supplier.website && (
                       <a
@@ -427,7 +417,7 @@ export default function Suppliers() {
                     {editingSupplier ? 'Collaborator Profile' : 'New Strategic Partner'}
                   </h2>
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">
-                    Multi-stakeholder Registration
+                    Partner Registration
                   </p>
                 </div>
               </div>
@@ -445,12 +435,6 @@ export default function Suppliers() {
                 className={`pb-4 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'info' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
               >
                 Core Intelligence
-              </button>
-              <button
-                onClick={() => setActiveTab('stakeholders')}
-                className={`pb-4 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'stakeholders' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-              >
-                Stakeholders ({formData.pocs.length})
               </button>
             </div>
 
@@ -485,7 +469,7 @@ export default function Suppliers() {
 
                     <div className="pt-4 space-y-4 border-t border-slate-50 mt-4">
                       <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                        Primary Stakeholder
+                        Primary Contact
                       </h3>
                       <div className="space-y-4 bg-slate-50/50 p-6 rounded-3xl border border-slate-100">
                         <div className="space-y-2">
@@ -578,7 +562,7 @@ export default function Suppliers() {
                 <div className="space-y-6">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">
-                      Additional Stakeholders
+                      Additional Contacts
                     </h3>
                     <button
                       type="button"

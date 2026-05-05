@@ -242,13 +242,15 @@ export default function RawMaterials() {
             </p>
           </div>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white hover:bg-slate-800 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Add NEW Component
-        </button>
+        {canEditStock && (
+          <button
+            onClick={() => handleOpenModal()}
+            className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white hover:bg-slate-800 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add NEW Component
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -362,7 +364,7 @@ export default function RawMaterials() {
                         Availability
                       </span>
                       <div className="text-2xl font-black text-slate-900 tracking-tighter">
-                        {resource.current_stock}
+                        {Number(resource.current_stock)}
                         <span className="text-xs text-slate-400 ml-1 font-bold uppercase">
                           {resource.unit}
                         </span>
@@ -379,14 +381,16 @@ export default function RawMaterials() {
 
                     {/* Actions Slider */}
                     <div className="py-4 flex gap-2">
-                      <button
-                        onClick={() => handleOpenOrderModal(resource)}
-                        title="Create Purchase Order"
-                        className="p-3 rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2 group-hover:scale-105"
-                      >
-                        <ShoppingCart className="h-4 w-4" />
-                        <span className="text-[10px] font-black uppercase">ORDER</span>
-                      </button>
+                      {canEditStock && (
+                        <button
+                          onClick={() => handleOpenOrderModal(resource)}
+                          title="Create Purchase Order"
+                          className="p-3 rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2 group-hover:scale-105"
+                        >
+                          <ShoppingCart className="h-4 w-4" />
+                          <span className="text-[10px] font-black uppercase">ORDER</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => handleOpenModal(resource)}
                         className="p-3 rounded-2xl bg-slate-100 text-slate-500 hover:bg-slate-200 transition-all shadow-sm"
