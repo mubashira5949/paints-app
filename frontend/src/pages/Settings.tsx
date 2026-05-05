@@ -31,6 +31,9 @@ import {
   UserCircle,
 } from 'lucide-react'
 
+declare const __APP_VERSION__: string;
+declare const __BUILD_DATE__: string;
+
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('general')
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'restart'>('idle')
@@ -790,9 +793,9 @@ export default function Settings() {
           <span className="font-medium">Paint Production System</span>
         </div>
         <div className="flex items-center gap-4 mt-4 sm:mt-0">
-          <span>Version 1.0</span>
+          <span>Version {typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0'}</span>
           <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-          <span>Last deployment: Jan 2026</span>
+          <span>Last deployment: {typeof __BUILD_DATE__ !== 'undefined' ? __BUILD_DATE__ : 'Unknown'}</span>
         </div>
       </div>
     </div>

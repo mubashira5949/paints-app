@@ -101,7 +101,7 @@ export default function Sales() {
       item.business_code.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
-  const availablePacks = selectedProduct?.packs.filter((p) => p.quantity_units > 0) || []
+  const availablePacks = (selectedProduct?.packs || []).filter((p) => p.quantity_units > 0)
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -296,12 +296,7 @@ export default function Sales() {
                       </label>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                      {availablePacks.length === 0 ? (
-                        <div className="col-span-full p-6 text-center bg-red-50 text-red-600 rounded-xl border border-red-100 font-bold uppercase tracking-widest text-xs">
-                          Out of Stock in all sizes
-                        </div>
-                      ) : (
-                        availablePacks.map((pack) => (
+                      {availablePacks.map((pack) => (
                           <button
                             key={pack.pack_size_kg}
                             type="button"
@@ -319,8 +314,43 @@ export default function Sales() {
                               {pack.quantity_units} Units left
                             </span>
                           </button>
-                        ))
-                      )}
+                        ))}
+                        
+                        <div className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-2 ${
+                          selectedPackSize && !availablePacks.find(p => p.pack_size_kg === selectedPackSize)
+                            ? 'bg-emerald-600 border-emerald-700 text-white shadow-lg shadow-emerald-200 scale-105'
+                            : 'bg-slate-50 border-slate-100 text-slate-600 focus-within:border-emerald-300 focus-within:bg-white'
+                        }`}>
+                          <div className="flex items-center gap-1 w-full justify-center">
+                            <input 
+                              type="number" 
+                              min="0.1" 
+                              step="0.1"
+                              placeholder="Custom" 
+                              className={`w-16 bg-transparent text-xl font-black text-center outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                                selectedPackSize && !availablePacks.find(p => p.pack_size_kg === selectedPackSize)
+                                  ? 'text-white placeholder:text-emerald-300'
+                                  : 'text-slate-700 placeholder:text-slate-400'
+                              }`}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value);
+                                if (!isNaN(val)) setSelectedPackSize(val);
+                                else setSelectedPackSize(null);
+                              }}
+                              onFocus={(e) => {
+                                 const val = parseFloat(e.target.value);
+                                 if (!isNaN(val)) setSelectedPackSize(val);
+                              }}
+                            />
+                            <span className="text-xl font-black opacity-70">kg</span>
+                          </div>
+                          <span className={`text-[10px] font-black uppercase tracking-tight ${
+                             selectedPackSize && !availablePacks.find(p => p.pack_size_kg === selectedPackSize)
+                               ? 'text-emerald-100' : 'text-slate-400'
+                          }`}>
+                            Other Size
+                          </span>
+                        </div>
                     </div>
                   </div>
 
@@ -338,7 +368,7 @@ export default function Sales() {
                           min="1"
                           max={
                             selectedPackSize
-                              ? selectedProduct.packs.find(
+                              ? (selectedProduct.packs || []).find(
                                   (p) => p.pack_size_kg === selectedPackSize,
                                 )?.quantity_units
                               : undefined
@@ -400,9 +430,10 @@ export default function Sales() {
               </div>
 
               {/* Stock Warning Banner */}
-              {selectedPackSize &&
+              {selectedPackSize !== null && selectedPackSize > 0 &&
+                availablePacks.some((p) => p.pack_size_kg === selectedPackSize) &&
                 quantity >
-                  (selectedProduct.packs.find((p) => p.pack_size_kg === selectedPackSize)
+                  ((selectedProduct.packs || []).find((p) => p.pack_size_kg === selectedPackSize)
                     ?.quantity_units || 0) && (
                   <div className="rounded-2xl border border-red-200 bg-red-50 p-4 flex items-center gap-3 animate-in shake duration-500">
                     <AlertTriangle className="w-5 h-5 text-red-600" />
