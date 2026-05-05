@@ -15,7 +15,6 @@ import {
   ShieldCheck,
   Zap,
   UserCircle2,
-  ChevronRight,
   PackageCheck,
   Tag,
 } from 'lucide-react'
@@ -247,21 +246,19 @@ export default function Suppliers() {
           {filteredSuppliers.map((supplier) => (
             <div
               key={supplier.id}
-              className={`group relative overflow-hidden rounded-[32px] border bg-white p-1 hover:shadow-md hover:border-blue-200 transition-all duration-300 ${
-                componentSearch && supplier.match_count && supplier.match_count > 0
+              className={`group relative overflow-hidden rounded-[32px] border bg-white p-1 hover:shadow-md hover:border-blue-200 transition-all duration-300 ${componentSearch && supplier.match_count && supplier.match_count > 0
                   ? 'border-blue-300 ring-2 ring-blue-500/10'
                   : 'border-slate-100'
-              }`}
+                }`}
             >
               <div className="p-6">
                 <div className="flex items-start justify-between mb-8">
                   <div className="flex items-center gap-5">
                     <div
-                      className={`h-16 w-16 shrink-0 rounded-2xl flex items-center justify-center text-white shadow-xl ${
-                        componentSearch && supplier.match_count && supplier.match_count > 0
+                      className={`h-16 w-16 shrink-0 rounded-2xl flex items-center justify-center text-white shadow-xl ${componentSearch && supplier.match_count && supplier.match_count > 0
                           ? 'bg-gradient-to-br from-blue-600 to-indigo-700'
                           : 'bg-gradient-to-br from-slate-800 to-slate-900'
-                      }`}
+                        }`}
                     >
                       <Users className="h-8 w-8" />
                     </div>

@@ -244,7 +244,7 @@ EXECUTE FUNCTION update_resource_stock_from_transaction();
 async function setup() {
     try {
         console.log('Starting database schema creation...');
-        // Run the combined SQKG schema string.
+        // Run the combined SQL schema string.
         await pool.query(schema);
         console.log('Database schema created successfully!');
         process.exit(0);
