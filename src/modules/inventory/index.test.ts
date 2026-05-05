@@ -165,7 +165,7 @@ describe('Inventory Module API', () => {
             expect(mockClient.query).toHaveBeenCalledWith('COMMIT')
         })
 
-        it('should return 400 if stock is insufficient', async () => {
+        it('should allow sale and deduct stock even when quantity goes negative', async () => {
             const postRoute = routes['POST /sales']
             const req = {
                 headers: { authorization: 'Bearer sales:testuser' },
@@ -177,9 +177,9 @@ describe('Inventory Module API', () => {
             } as unknown as FastifyRequest
             const rep = createMockReply()
 
-            // Mock stock check (insufficient stock)
+            // Mock stock check (existing pack size with less stock than requested)
             mockClient.query.mockImplementation(async (query: string) => {
-                if (query === 'BEGIN' || query === 'ROLLBACK') return { rowCount: 1 }
+                if (query === 'BEGIN' || query === 'COMMIT') return { rowCount: 1 }
                 if (query.includes('SELECT quantity_units')) return { rows: [{ quantity_units: 5 }] }
                 return { rowCount: 1 }
             })
@@ -187,9 +187,14 @@ describe('Inventory Module API', () => {
             for (const handler of postRoute.preHandler) { await handler(req, rep) }
             await postRoute.handler(req, rep)
 
-            expect((rep as any).getStatusCode()).toBe(400)
-            expect((rep as any).getBody().message).toContain('Insufficient stock')
-            expect(mockClient.query).toHaveBeenCalledWith('ROLLBACK')
+            // New behaviour: sale is allowed even with insufficient stock (goes negative)
+            expect((rep as any).getStatusCode()).toBe(200)
+            expect((rep as any).getBody().message).toBe('Sale recorded successfully')
+            expect(mockClient.query).toHaveBeenCalledWith('COMMIT')
+            expect(mockClient.query).toHaveBeenCalledWith(
+                expect.stringContaining('UPDATE finished_stock'),
+                expect.any(Array)
+            )
         })
     })
 })
