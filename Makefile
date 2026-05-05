@@ -1,4 +1,5 @@
-.PHONY: setup-ssl start-prod stop-prod test-env logs backup-ssl restore-ssl
+.PHONY: setup-ssl start-prod stop-prod test-env logs backup-ssl restore-ssl \
+	db-setup db-migrate db-seed db-seed-demo db-init db-init-demo
 
 DOMAINS_FRONTEND = app.beautyflexinks.com
 DOMAINS_BACKEND = service.beautyflexinks.com
@@ -72,3 +73,29 @@ setup-ssl:
 
 setup-db:
 	docker --context beautyflex-production-server compose -f docker-compose.prod.yml run --rm backend node dist/scripts/setup-db.js
+
+# --- Local DB scripts (run against DATABASE_URL from .env) ---
+
+# Schema
+db-setup:
+	npx tsx src/scripts/setup-db.ts
+
+db-migrate:
+	npx tsx src/scripts/run-migrations.ts
+
+# Production seed: roles, ink grades, 1 admin user, 42 colors. No demo data.
+# Requires ADMIN_PASSWORD env var (ADMIN_USERNAME, ADMIN_EMAIL optional).
+db-seed:
+	npx tsx src/scripts/seed-production.ts
+
+# Demo seed: dashboard sample data + presentation users (manager/operator/sales/testusers).
+# Do NOT run in production.
+db-seed-demo:
+	npx tsx src/scripts/seed-dashboard.ts
+	npx tsx src/scripts/seed-presentation-users.ts
+
+# Full production bootstrap: schema + migrations + production seed.
+db-init: db-setup db-migrate db-seed
+
+# Demo bootstrap: production init plus demo data on top.
+db-init-demo: db-init db-seed-demo

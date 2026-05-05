@@ -60,18 +60,6 @@ export default function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
 
 
-  const notifyManager = async (resource_id: number) => {
-    try {
-      await apiRequest('/api/inventory/notify-manager', {
-        method: 'POST',
-        body: { resource_id }
-      })
-      alert('Manager notified successfully')
-      fetchDashboardData() // Refresh dashboard
-    } catch (err) {
-      alert('Failed to notify manager')
-    }
-  }
 
   // Toggle states for tables
   const [showAllRuns, setShowAllRuns] = useState(false)
@@ -313,14 +301,14 @@ export default function Dashboard() {
               user?.role === 'manager' ||
               user?.role === 'operator' ||
               user?.role === 'sales') && (
-              <button
-                onClick={() => navigate('/sales/new')}
-                className="w-full flex items-center p-3 rounded-lg border border-transparent bg-emerald-600 hover:bg-emerald-700 text-white transition-all text-sm font-medium shadow-sm group"
-              >
-                <ShoppingCart className="mr-3 h-5 w-5 text-emerald-100 group-hover:scale-110 transition-transform" />
-                <span>Record New Sale</span>
-              </button>
-            )}
+                <button
+                  onClick={() => navigate('/sales/new')}
+                  className="w-full flex items-center p-3 rounded-lg border border-transparent bg-emerald-600 hover:bg-emerald-700 text-white transition-all text-sm font-medium shadow-sm group"
+                >
+                  <ShoppingCart className="mr-3 h-5 w-5 text-emerald-100 group-hover:scale-110 transition-transform" />
+                  <span>Record New Sale</span>
+                </button>
+              )}
 
             {(user?.role === 'admin' || user?.role === 'manager' || user?.role === 'sales') && (
               <button
@@ -485,11 +473,10 @@ export default function Dashboard() {
                         <td className="px-4 py-4 text-right">
                           <div className="flex flex-col items-end gap-1.5">
                             <span
-                              className={`inline-flex items-center px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                                alert.status === 'critical'
-                                  ? 'bg-red-100 text-red-700'
-                                  : 'bg-amber-100 text-amber-700'
-                              }`}
+                              className={`inline-flex items-center px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${alert.status === 'critical'
+                                ? 'bg-red-100 text-red-700'
+                                : 'bg-amber-100 text-amber-700'
+                                }`}
                             >
                               {alert.status}
                             </span>
