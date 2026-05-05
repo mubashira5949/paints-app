@@ -247,19 +247,18 @@ export default async function (fastifyRaw: FastifyInstance) {
                     [colorId, packSizeKg]
                 )
 
-                if (stockRes.rows.length === 0 || stockRes.rows[0].quantity_units < quantityUnits) {
-                    await client.query('ROLLBACK')
-                    return reply.status(400).send({
-                        error: 'Bad Request',
-                        message: 'Insufficient stock or invalid product configuration for this sale'
-                    })
+                if (stockRes.rows.length === 0) {
+                    await client.query(
+                        'INSERT INTO finished_stock (color_id, pack_size_kg, quantity_units) VALUES ($1, $2, $3)',
+                        [colorId, packSizeKg, -quantityUnits]
+                    )
+                } else {
+                    // 2. Deduct stock
+                    await client.query(
+                        'UPDATE finished_stock SET quantity_units = quantity_units - $1, updated_at = CURRENT_TIMESTAMP WHERE color_id = $2 AND pack_size_kg = $3',
+                        [quantityUnits, colorId, packSizeKg]
+                    )
                 }
-
-                // 2. Deduct stock
-                await client.query(
-                    'UPDATE finished_stock SET quantity_units = quantity_units - $1, updated_at = CURRENT_TIMESTAMP WHERE color_id = $2 AND pack_size_kg = $3',
-                    [quantityUnits, colorId, packSizeKg]
-                )
 
                 // 3. Record transaction
                 await client.query(
