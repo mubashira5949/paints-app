@@ -10,8 +10,8 @@
     "test": "vitest run src/",
     "test:watch": "vitest src/",
     "migrate:create": "migrate create -ext sql -dir db/migrations -seq",
-    "migrate:up": "migrate -path db/migrations -database \"$DATABASE_URL\" up",
-    "migrate:down": "migrate -path db/migrations -database \"$DATABASE_URL\" down 1"
+    "migrate:up": "dotenv -e .env -- sh -c 'migrate -path db/migrations -database \"$DATABASE_URL\" up'",
+    "migrate:down": "dotenv -e .env -- sh -c 'migrate -path db/migrations -database \"$DATABASE_URL\" down 1'"
   },
   "keywords": [],
   "author": "",
@@ -41,6 +41,7 @@
     "@types/bcrypt": "^6.0.0",
     "@types/node": "^25.3.2",
     "@types/pg": "^8.16.0",
+    "dotenv-cli": "^11.0.0",
     "nodemon": "^3.1.11",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
