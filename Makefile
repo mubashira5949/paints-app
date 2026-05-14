@@ -88,14 +88,5 @@ db-migrate:
 db-seed:
 	npx tsx src/scripts/seed-production.ts
 
-# Demo seed: dashboard sample data + presentation users (manager/operator/sales/testusers).
-# Do NOT run in production.
-db-seed-demo:
-	npx tsx src/scripts/seed-dashboard.ts
-	npx tsx src/scripts/seed-presentation-users.ts
-
 # Full production bootstrap: schema + migrations + production seed.
 db-init: db-setup db-migrate db-seed
-
-# Demo bootstrap: production init plus demo data on top.
-db-init-demo: db-init db-seed-demo
