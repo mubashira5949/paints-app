@@ -1,58 +1,35 @@
 {
-  "name": "paints-app",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "dev": "tsx watch src/app.ts",
-    "build": "tsc",
-    "start": "node dist/app.js",
-    "test": "vitest run src/",
-    "test:watch": "vitest src/",
-    "migrate:create": "migrate create -ext sql -dir db/migrations -seq",
-    "migrate:up": "dotenv -e .env -- sh -c 'migrate -path db/migrations -database \"$DATABASE_URL\" up'",
-    "migrate:down": "dotenv -e .env -- sh -c 'migrate -path db/migrations -database \"$DATABASE_URL\" down 1'",
-    "db:seed": "npm run --prefix backend db:seed",
-    "backend:dev": "npm run --prefix backend dev",
-    "backend:build": "npm run --prefix backend build",
-    "backend:start": "npm run --prefix backend start",
-    "backend:test": "npm run --prefix backend test",
-    "frontend:dev": "npm run --prefix frontend dev",
-    "frontend:build": "npm run --prefix frontend build"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "engines": {
-    "node": ">=20"
-  },
-  "dependencies": {
-    "@fastify/cors": "^11.2.0",
-    "@fastify/jwt": "^10.0.0",
-    "@fastify/swagger": "^9.7.0",
-    "@fastify/swagger-ui": "^5.2.5",
-    "@fastify/type-provider-typebox": "^6.1.0",
-    "@railway/cli": "^4.31.0",
-    "@sinclair/typebox": "^0.34.48",
-    "bcrypt": "^6.0.0",
-    "dotenv": "^17.3.1",
-    "fastify": "^5.7.4",
-    "fastify-plugin": "^5.1.0",
-    "pg": "^8.18.0",
-    "pino": "^10.3.1",
-    "pino-pretty": "^13.1.3",
-    "typescript": "^5.9.3"
-  },
-  "devDependencies": {
-    "@types/bcrypt": "^6.0.0",
-    "@types/node": "^25.3.2",
-    "@types/pg": "^8.16.0",
-    "dotenv-cli": "^11.0.0",
-    "nodemon": "^3.1.11",
-    "ts-node": "^10.9.2",
-    "ts-node-dev": "^2.0.0",
-    "tsx": "^4.21.0",
-    "vitest": "^4.0.18"
-  }
+	"name": "@mubashira5949/paints-app",
+	"description": "Reclaim Protocol Builder Monorepo",
+	"version": "0.0.0",
+	"workspaces": [
+		"packages/backend",
+		"packages/frontend"
+	],
+	"type": "module",
+	"repository": {
+		"url": "https://github.com/mubashira5949/paints-app",
+		"type": "git"
+	},
+	"scripts": {
+		"lint": "eslint --ext .js,.ts,.jsx,.tsx",
+		"lint:fix": "npm run lint -- --fix",
+		"test": "node --test packages/*/tests/*.test.ts --test-timeout=30000 --concurrency",
+		"build": "npm run build --workspaces --if-present",
+		"dev": "node --env-file=.development.env packages/app/scripts/dev.ts",
+		"pgtyped:typegen": "sh scripts/pgtyped.sh"
+	},
+	"devDependencies": {
+		"@adiwajshing/eslint-config": "github:adiwajshing/eslint-config",
+		"@electric-sql/pglite": "^0.4.0",
+		"@eslint/css": "^1.1.0",
+		"@kristiandupont/recase": "^1.4.1",
+		"@pgtyped/cli": "^2.4.3",
+		"@types/node": "^24.0.0",
+		"eslint": "^9.0.0",
+		"kanel": "^3.16.0",
+		"kanel-kysely": "^0.8.0",
+		"openapi-typescript": "^7.13.0",
+		"typescript": "^5.9.0"
+	}
 }
