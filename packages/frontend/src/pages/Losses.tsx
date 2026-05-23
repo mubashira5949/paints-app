@@ -1,713 +1,94 @@
-import React, { useEffect, useState } from 'react'
-import { apiRequest } from '../services/api'
+/**
+ * Production Irregularity Report (spec §3.9).
+ * Wastage / variance / dilution are computed metrics on production_runs.
+ */
+
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
-  AlertTriangle,
-  Plus,
-  Package,
-  Droplets,
-  ClipboardList,
-  CheckCircle2,
-  X,
-} from 'lucide-react'
-import { useUnitPreference, formatUnit, unitLabel } from '../utils/units'
-import { useDateFormatPreference, formatDate } from '../utils/dateFormatter'
+    Page, ErrorBanner, Loading, EmptyState, Field, Input, Table, Th, Td, Badge, useResource, fmtDate, num,
+} from '../components/ui'
 
-interface LossRecord {
-  id: number
-  item_type: 'finished_good' | 'raw_material'
-  color_name: string | null
-  resource_name: string | null
-  pack_size_kg: number | null
-  quantity_units: number | null
-  quantity_kg: number
-  reason_name: string
-  notes: string | null
-  documented_by: string
-  documented_at: string
-  reference_type: string | null
-  reference_id: number | null
-  target_quantity_kg: string | null
+interface IrregularityRow {
+    id: number; batch_number: string; status: string
+    expected_output_kg: string | number; actual_output_kg: string | number | null
+    wastage_pct: string | number | null; wastage_flagged: boolean
+    dilution_total_kg: string | number; dilution_flagged: boolean
+    completed_at: string | null; operator: string
+    resource_variances: Array<{ resource_id: number; resource_name: string; variance_pct: string | null; flagged: boolean }>
+    dilution_adjustments: Array<{ resource_id: number; resource_name: string; kg_added: string; notes: string | null }>
 }
-
-interface LossReason {
-  id: number
-  name: string
-  description: string
-}
-
-interface ColorOption {
-  id: number
-  color: string
-  packDistribution: { size: string; units: number }[]
-}
-
-interface ResourceOption {
-  id: number
-  name: string
-  unit: string
-  current_stock: number
-}
-
-interface OperatorSummary {
-  id: number
-  username: string
-  first_name: string
-  last_name: string
-  total_loss_kg: string
-  loss_incidents: string
-}
+interface OperatorRow { operator_id: number; operator: string; runs: string | number; flagged_runs: string | number; wastage_kg: string | number }
 
 export default function Losses() {
-  const unitPref = useUnitPreference()
-  const dateFormat = useDateFormatPreference()
-  const [losses, setLosses] = useState<LossRecord[]>([])
-  const [allLosses, setAllLosses] = useState<LossRecord[]>([])
-  const [_operatorSummary, setOperatorSummary] = useState<OperatorSummary[]>([])
+    const [from, setFrom] = useState('')
+    const [to, setTo] = useState('')
+    const qParts: string[] = []
+    if (from) qParts.push(`from=${from}`)
+    if (to)   qParts.push(`to=${to}`)
+    const q = qParts.length ? `?${qParts.join('&')}` : ''
 
-  const [reasons, setReasons] = useState<LossReason[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSubmitLoading, setIsSubmitLoading] = useState(false)
-  const [showForm, setShowForm] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+    const report = useResource<IrregularityRow[]>(`/api/losses${q}`)
+    const summary = useResource<OperatorRow[]>(`/api/losses/operator-summary${q}`)
 
-  // Form State
-  const [formData, setFormData] = useState({
-    item_type: 'finished_good' as 'finished_good' | 'raw_material',
-    color_id: '',
-    resource_id: '',
-    pack_size_kg: '',
-    quantity_units: '',
-    quantity_kg: '',
-    reason_id: '',
-    notes: '',
-    reference_type: '',
-    reference_id: '',
-  })
-
-  // Options for form
-  const [colors, setColors] = useState<ColorOption[]>([])
-  const [resources, setResources] = useState<ResourceOption[]>([])
-  const [availablePackSizes, setAvailablePackSizes] = useState<number[]>([])
-
-  // Filter State
-  const [filters, setFilters] = useState({
-    item_type: 'finished_good',
-    reason_id: 'all',
-  })
-
-  const fetchLosses = async () => {
-    setIsLoading(true)
-    try {
-      const params = new URLSearchParams()
-      if (filters.item_type !== 'all') params.append('item_type', filters.item_type)
-      if (filters.reason_id !== 'all') params.append('reason_id', filters.reason_id)
-
-      const [filtered, all] = await Promise.all([
-        apiRequest<LossRecord[]>(`/api/losses?${params.toString()}`),
-        apiRequest<LossRecord[]>('/api/losses'),
-      ])
-      setLosses(filtered)
-      setAllLosses(all)
-    } catch (err) {
-      console.error('Failed to fetch losses', err)
-      setError('Failed to load loss records')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const fetchInitialData = async () => {
-    apiRequest<LossReason[]>('/api/losses/reasons')
-      .then(setReasons)
-      .catch((err) => console.error('Failed to fetch reasons', err))
-
-    apiRequest<ColorOption[]>('/api/inventory')
-      .then(setColors)
-      .catch((err) => console.error('Failed to fetch inventory', err))
-
-    apiRequest<ResourceOption[]>('/resources')
-      .then(setResources)
-      .catch((err) => console.error('Failed to fetch resources', err))
-
-    apiRequest<OperatorSummary[]>('/api/losses/operator-summary')
-      .then(setOperatorSummary)
-      .catch((err) => console.error('Failed to fetch operator summary', err))
-  }
-
-  useEffect(() => {
-    fetchLosses()
-    fetchInitialData()
-  }, [filters])
-
-  const handleColorChange = (colorId: string) => {
-    const color = colors.find((c) => c.id === parseInt(colorId))
-    setFormData((prev) => ({
-      ...prev,
-      color_id: colorId,
-      pack_size_kg: '',
-      quantity_units: '',
-      quantity_kg: '',
-    }))
-    if (color && Array.isArray(color.packDistribution) && color.packDistribution.length > 0) {
-      setAvailablePackSizes(color.packDistribution.map((p) => parseFloat(p.size)))
-    } else {
-      setAvailablePackSizes([1, 4, 10, 20])
-    }
-  }
-
-  const handlePackSizeChange = (size: string) => {
-    setFormData((prev) => ({ ...prev, pack_size_kg: size }))
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSubmitLoading(true)
-    setError(null)
-
-    try {
-      const payload: any = {
-        item_type: formData.item_type,
-        reason_id: parseInt(formData.reason_id),
-        quantity_kg: parseFloat(formData.quantity_kg),
-        notes: formData.notes,
-        reference_type: formData.reference_type || undefined,
-        reference_id: formData.reference_id ? parseInt(formData.reference_id) : undefined,
-      }
-
-      if (formData.item_type === 'finished_good') {
-        payload.color_id = parseInt(formData.color_id)
-        payload.pack_size_kg = parseFloat(formData.pack_size_kg)
-        payload.quantity_units = parseInt(formData.quantity_units)
-      } else {
-        payload.resource_id = parseInt(formData.resource_id)
-      }
-
-      await apiRequest('/api/losses', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      })
-
-      setShowForm(false)
-      setFormData({
-        item_type: 'finished_good',
-        color_id: '',
-        resource_id: '',
-        pack_size_kg: '',
-        quantity_units: '',
-        quantity_kg: '',
-        reason_id: '',
-        notes: '',
-        reference_type: '',
-        reference_id: '',
-      })
-      fetchLosses()
-    } catch (err: any) {
-      setError(err.message || 'Failed to document loss')
-    } finally {
-      setIsSubmitLoading(false)
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Header Section */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
-            Loss Tracking
-          </h1>
-          <p className="text-muted-foreground mt-1 text-sm font-medium">
-            Document and monitor product discrepancies, damage, and waste.
-          </p>
-        </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="inline-flex items-center justify-center rounded-xl text-sm font-bold bg-blue-600 text-white hover:bg-blue-700 h-11 px-6 py-2 shadow-lg shadow-blue-500/20 transition-all hover:-translate-y-0.5 active:translate-y-0"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          RECORD LOSS
-        </button>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <div className="rounded-2xl border bg-white p-6 shadow-sm border-l-4 border-indigo-500 hover:shadow-md transition-all group">
-          <div className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
-              Colour Total Loss
-            </p>
-            <Droplets className="h-5 w-5 text-indigo-500 group-hover:scale-110 transition-transform" />
-          </div>
-          <div className="mt-2">
-            <div className="text-3xl font-black text-slate-900">
-              {formatUnit(
-                allLosses
-                  .filter((l) => l.item_type === 'finished_good')
-                  .reduce((acc, curr) => acc + Number(curr.quantity_kg || 0), 0),
-                unitPref,
-              )}
+    return (
+        <Page title="Production Irregularity Report" description="Flagged runs (wastage / per-resource variance / dilution). Threshold defaults: 5 / 10 / 10%, Manager-tunable.">
+            <ErrorBanner error={report.error || summary.error} />
+            <div className="flex gap-3 max-w-md">
+                <Field label="From"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
+                <Field label="To"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
             </div>
-            <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter italic">
-              Cumulative finished goods loss
-            </p>
-          </div>
-        </div>
 
-        <div className="rounded-2xl border bg-white p-6 shadow-sm border-l-4 border-blue-500 hover:shadow-md transition-all group">
-          <div className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
-              Raw Material Total Loss
-            </p>
-            <Package className="h-5 w-5 text-blue-500 group-hover:scale-110 transition-transform" />
-          </div>
-          <div className="mt-2">
-            <div className="text-3xl font-black text-slate-900">
-              {formatUnit(
-                allLosses
-                  .filter((l) => l.item_type === 'raw_material')
-                  .reduce((acc, curr) => acc + Number(curr.quantity_kg || 0), 0),
-                unitPref,
-              )}
-            </div>
-            <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter italic">
-              Cumulative raw material loss
-            </p>
-          </div>
-        </div>
-      </div>
-
-
-
-      {/* Main Table */}
-      <div className="rounded-2xl border bg-white shadow-xl overflow-hidden border-slate-200">
-        <div className="p-5 border-b bg-slate-50/50 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <ClipboardList className="h-5 w-5 text-blue-600" />
-            </div>
-            <h2 className="text-base font-black text-slate-800 uppercase tracking-tight">
-              Loss Documentation History
-            </h2>
-          </div>
-
-          <div className="flex p-1 bg-slate-100 rounded-xl gap-1">
-            <button
-              type="button"
-              onClick={() =>
-                setFilters((prev) => ({
-                  ...prev,
-                  item_type: 'finished_good',
-                }))
-              }
-              className={`px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-lg transition-all ${
-                filters.item_type === 'finished_good'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-slate-500 hover:bg-white/50'
-              }`}
-            >
-              Finished Goods
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                setFilters((prev) => ({
-                  ...prev,
-                  item_type: 'raw_material',
-                }))
-              }
-              className={`px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-lg transition-all ${
-                filters.item_type === 'raw_material'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-slate-500 hover:bg-white/50'
-              }`}
-            >
-              Raw Materials
-            </button>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto text-sm">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-slate-50/80 border-b border-slate-100">
-                <th className="px-6 py-4 text-left font-bold text-slate-500 text-[10px] uppercase tracking-widest">
-                  Date & Time
-                </th>
-                <th className="px-6 py-4 text-left font-bold text-slate-500 text-[10px] uppercase tracking-widest">
-                  Operator
-                </th>
-                <th className="px-6 py-4 text-left font-bold text-slate-500 text-[10px] uppercase tracking-widest">
-                  Color / Item
-                </th>
-                {filters.item_type !== 'raw_material' && (
-                  <th className="px-6 py-4 text-center font-bold text-slate-500 text-[10px] uppercase tracking-widest">
-                    Target Quantity
-                  </th>
+            <section>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-2">Per-operator summary</h2>
+                {summary.isLoading ? <Loading /> : !summary.data || summary.data.length === 0 ? <EmptyState message="No runs in this window." /> : (
+                    <Table>
+                        <thead><tr><Th>Operator</Th><Th>Runs</Th><Th>Flagged</Th><Th>Wastage kg</Th></tr></thead>
+                        <tbody className="divide-y">
+                            {summary.data.map((r) => (
+                                <tr key={r.operator_id}>
+                                    <Td className="font-semibold">{r.operator}</Td>
+                                    <Td>{r.runs}</Td>
+                                    <Td><Badge color={num(r.flagged_runs) > 0 ? 'red' : 'slate'}>{r.flagged_runs}</Badge></Td>
+                                    <Td>{num(r.wastage_kg).toFixed(2)} kg</Td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </Table>
                 )}
-                <th className="px-6 py-4 text-center font-bold text-slate-500 text-[10px] uppercase tracking-widest">
-                  Lost Quantity
-                </th>
-                <th className="px-6 py-4 text-left font-bold text-slate-500 text-[10px] uppercase tracking-widest">
-                  Reason
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {isLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i} className="animate-pulse">
-                    <td className="px-6 py-6" colSpan={6}>
-                      <div className="h-4 bg-slate-100 rounded w-full"></div>
-                    </td>
-                  </tr>
-                ))
-              ) : losses.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-6 py-12 text-center text-slate-400 font-medium italic"
-                  >
-                    No loss records found.
-                  </td>
-                </tr>
-              ) : (
-                losses.map((loss) => (
-                  <tr key={loss.id} className="hover:bg-slate-50/50 transition-colors group">
-                    <td className="px-6 py-5">
-                      <div className="flex flex-col">
-                        <span className="font-bold text-slate-700 text-sm">
-                          {formatDate(loss.documented_at, dateFormat)}
-                        </span>
-                        <span className="text-[10px] font-medium text-slate-400">
-                          {new Date(loss.documented_at).toLocaleTimeString()}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-5">
-                      <span className="font-black text-slate-900 text-sm uppercase">
-                        {loss.documented_by}
-                      </span>
-                    </td>
-                    <td className="px-6 py-5">
-                      <div className="flex flex-col">
-                        <span className="font-extrabold text-slate-900">
-                          {loss.color_name || loss.resource_name}
-                        </span>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">
-                          {loss.item_type === 'finished_good' ? 'Finished Good' : 'Raw Material'}
-                        </span>
-                      </div>
-                    </td>
-                    {filters.item_type !== 'raw_material' && (
-                      <td className="px-6 py-5 text-center">
-                        {loss.item_type === 'finished_good' ? (
-                          <span className="text-sm font-bold text-slate-500">
-                            {loss.target_quantity_kg
-                              ? `${Math.round(parseFloat(loss.target_quantity_kg) / (loss.pack_size_kg || 1))}kg`
-                              : `${(loss.quantity_units || 0) + 20}kg`}
-                          </span>
-                        ) : loss.target_quantity_kg ? (
-                          <span className="text-sm font-bold text-slate-500">
-                            {formatUnit(parseFloat(loss.target_quantity_kg), unitPref)}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-slate-300">-</span>
-                        )}
-                      </td>
-                    )}
-                    <td className="px-6 py-5 text-center">
-                      <span className="text-sm font-black text-red-600">
-                        {loss.item_type === 'finished_good' && loss.quantity_units
-                          ? `${loss.quantity_units}kg`
-                          : formatUnit(loss.quantity_kg, unitPref)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-5">
-                      <div className="flex flex-col">
-                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-100 text-[10px] font-black uppercase self-start">
-                          {loss.reason_name}
-                        </span>
-                        {loss.notes && (
-                          <span className="text-xs text-slate-500 mt-1 line-clamp-1" title={loss.notes}>
-                            {loss.notes}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-</tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </section>
 
-      {/* Form Overlay Modal */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-in zoom-in-95 duration-300">
-            <div className="p-6 border-b flex items-center justify-between bg-white sticky top-0 z-10">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-600 rounded-xl">
-                  <Plus className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">
-                    Record Loss
-                  </h2>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                    Documentation Form
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowForm(false)}
-                className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-
-            <form
-              onSubmit={handleSubmit}
-              className="p-6 space-y-6 max-h-[75vh] overflow-y-auto custom-scrollbar"
-            >
-              {/* Type Selection Tabs */}
-              <div className="flex p-1 bg-slate-100 rounded-xl gap-1">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      item_type: 'finished_good',
-                    }))
-                  }
-                  className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-widest rounded-lg transition-all ${
-                    formData.item_type === 'finished_good'
-                      ? 'bg-white text-blue-600 shadow-sm'
-                      : 'text-slate-500 hover:bg-white/50'
-                  }`}
-                >
-                  Finished Good
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      item_type: 'raw_material',
-                    }))
-                  }
-                  className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-widest rounded-lg transition-all ${
-                    formData.item_type === 'raw_material'
-                      ? 'bg-white text-blue-600 shadow-sm'
-                      : 'text-slate-500 hover:bg-white/50'
-                  }`}
-                >
-                  Raw Material
-                </button>
-              </div>
-
-              <div className="grid gap-6">
-                {formData.item_type === 'finished_good' ? (
-                  <>
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">
-                        Color / Product
-                      </label>
-                      <select
-                        required
-                        className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all"
-                        value={formData.color_id}
-                        onChange={(e) => handleColorChange(e.target.value)}
-                      >
-                        <option value="">Select Color...</option>
-                        {colors.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.color}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">
-                          Pack Size
-                        </label>
-                        <select
-                          required
-                          disabled={!formData.color_id}
-                          className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all disabled:opacity-50"
-                          value={formData.pack_size_kg}
-                          onChange={(e) => handlePackSizeChange(e.target.value)}
-                        >
-                          <option value="">Select Size...</option>
-                          {availablePackSizes.map((size) => (
-                            <option key={size} value={size}>
-                              {size}
-                              {unitLabel(unitPref)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">
-                          Quantity (Units)
-                        </label>
-                        <input
-                          type="number"
-                          required
-                          min="1"
-                          placeholder="0"
-                          className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all"
-                          value={formData.quantity_units}
-                          onChange={(e) => {
-                            const units = e.target.value
-                            const size = parseFloat(formData.pack_size_kg)
-                            setFormData((prev) => ({
-                              ...prev,
-                              quantity_units: units,
-                              quantity_kg: (parseFloat(units) * size).toString(),
-                            }))
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">
-                      Raw Material
-                    </label>
-                    <select
-                      required
-                      className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all"
-                      value={formData.resource_id}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          resource_id: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">Select Material...</option>
-                      {resources.map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.name} (Available: {r.current_stock}
-                          {r.unit})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+            <section>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-2">Flagged runs</h2>
+                {report.isLoading ? <Loading /> : !report.data || report.data.length === 0 ? <EmptyState message="No flagged runs." /> : (
+                    <Table>
+                        <thead><tr><Th>Batch</Th><Th>Operator</Th><Th>Expected → Actual</Th><Th>Wastage</Th><Th>Dilution</Th><Th>Variance flags</Th><Th>Completed</Th></tr></thead>
+                        <tbody className="divide-y">
+                            {report.data.map((r) => (
+                                <tr key={r.id}>
+                                    <Td><Link to={`/production/${r.id}`} className="font-semibold text-blue-600">{r.batch_number}</Link></Td>
+                                    <Td className="text-xs">{r.operator}</Td>
+                                    <Td>
+                                        {num(r.expected_output_kg).toFixed(2)} → {r.actual_output_kg != null ? num(r.actual_output_kg).toFixed(2) : '—'} kg
+                                    </Td>
+                                    <Td className={r.wastage_flagged ? 'font-bold text-red-600' : ''}>
+                                        {r.wastage_pct != null ? `${num(r.wastage_pct).toFixed(2)}%` : '—'}
+                                    </Td>
+                                    <Td className={r.dilution_flagged ? 'font-bold text-red-600' : ''}>
+                                        {num(r.dilution_total_kg).toFixed(2)} kg
+                                    </Td>
+                                    <Td>
+                                        {r.resource_variances.filter((v) => v.flagged).length > 0 ? (
+                                            <Badge color="red">{r.resource_variances.filter((v) => v.flagged).length}</Badge>
+                                        ) : '—'}
+                                    </Td>
+                                    <Td className="text-xs text-slate-500">{fmtDate(r.completed_at)}</Td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </Table>
                 )}
-
-                <div>
-                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">
-                    {formData.item_type === 'finished_good'
-                      ? 'Total Mass (KG)'
-                      : `Quantity (${unitLabel(unitPref)})`}
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    step="0.01"
-                    readOnly={formData.item_type === 'finished_good'}
-                    className={`w-full p-3 rounded-xl border border-slate-200 text-sm font-medium focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all ${
-                      formData.item_type === 'finished_good' ? 'bg-slate-50' : ''
-                    }`}
-                    value={formData.quantity_kg}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        quantity_kg: e.target.value,
-                      }))
-                    }
-                  />
-                  {formData.item_type === 'finished_good' && (
-                    <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase italic italic tracking-tighter">
-                      Calculated automatically: Units × Pack Size
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">
-                    Loss Reason
-                  </label>
-                  <select
-                    required
-                    className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all"
-                    value={formData.reason_id}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        reason_id: e.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">Select Reason...</option>
-                    {reasons.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">
-                    Additional Notes (Optional)
-                  </label>
-                  <textarea
-                    rows={3}
-                    placeholder="Provide details about the discrepancy..."
-                    className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all resize-none"
-                    value={formData.notes}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        notes: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-
-              {error && (
-                <div className="p-4 rounded-xl bg-red-50 border border-red-100 flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-red-600 shrink-0" />
-                  <p className="text-xs font-bold text-red-800 uppercase tracking-tight">{error}</p>
-                </div>
-              )}
-
-              <div className="flex gap-4 pt-4 sticky bottom-0 bg-white">
-                <button
-                  type="button"
-                  onClick={() => setShowForm(false)}
-                  className="flex-1 py-3 px-6 rounded-xl text-sm font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors uppercase tracking-widest"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitLoading}
-                  className="flex-1 py-3 px-6 rounded-xl text-sm font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 shadow-lg shadow-blue-500/20 transition-all uppercase tracking-widest flex items-center justify-center gap-2"
-                >
-                  {isSubmitLoading ? (
-                    'SAVING...'
-                  ) : (
-                    <>
-                      <CheckCircle2 className="h-4 w-4" />
-                      SUBMIT LOG
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  )
+            </section>
+        </Page>
+    )
 }

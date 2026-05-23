@@ -1,274 +1,150 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { apiRequest } from '../services/api'
-import { History, Loader2, Package, Search, Download, Filter } from 'lucide-react'
-import { formatUnit, useUnitPreference } from '../utils/units'
-import { useDateFormatPreference, formatDate } from '../utils/dateFormatter'
-import { useAuth } from '../contexts/AuthContext'
+import {
+    Page, ErrorBanner, Loading, EmptyState, Button, Field, Input, Select,
+    Modal, Table, Th, Td, Badge, useResource, fmtMoney, fmtDate, num,
+} from '../components/ui'
+import { Plus, Receipt } from 'lucide-react'
 
-interface SalesTransaction {
-  id: number
-  color_id: number
-  color_name: string
-  business_code: string
-  pack_size_kg: number
-  quantity_units: number
-  quantity_kg: number
-  notes: string
-  created_at: string
-  logged_by: string | null
+interface SaleListItem {
+    id: number; order_id: number; customer_id: number; customer_name: string
+    currency: string; sale_date: string; due_date: string | null; created_by: number
+    billed: string | number | null; collected: string | number | null
+    payment_status: 'unpaid' | 'partial' | 'paid' | 'overpaid' | null
+}
+interface SaleDetail extends SaleListItem {
+    items: Array<{ id: number; paint_name: string; classification: string; ink_series: string; pack_size_kg: string | number; quantity: number; price_per_pack: string | number | null }>
+    payments: Array<{ id: number; amount: string | number; currency: string; date_received: string; method: string; reference_number: string | null }>
+    notes: string | null
+}
+
+const STATUS_COLOR: Record<NonNullable<SaleListItem['payment_status']>, 'slate' | 'green' | 'amber' | 'red'> = {
+    unpaid: 'slate', partial: 'amber', paid: 'green', overpaid: 'red',
 }
 
 export default function SalesHistory() {
-  const { user } = useAuth()
-  const dateFormat = useDateFormatPreference()
-  const unitPref = useUnitPreference()
-  const [transactions, setTransactions] = useState<SalesTransaction[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [colorFilter, setColorFilter] = useState('')
-  const [isExporting, setIsExporting] = useState(false)
+    const { data, isLoading, error, reload } = useResource<SaleListItem[]>(`/sales/transactions`)
+    const [detail, setDetail] = useState<number | null>(null)
 
-  const uniqueColors = Array.from(
-    new Set(
-      transactions
-        .filter((t) => user?.role !== 'sales' || t.logged_by?.toLowerCase() === user.username?.toLowerCase())
-        .map((t) => t.color_name)
-    )
-  ).sort()
-
-  useEffect(() => {
-    fetchTransactions()
-  }, [])
-
-  const fetchTransactions = async () => {
-    try {
-      const res = await apiRequest<SalesTransaction[]>('/sales/transactions')
-      setTransactions(res)
-    } catch (err) {
-      console.error('Failed to fetch transactions', err)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleExportHSN = async () => {
-    setIsExporting(true)
-    try {
-      const token = localStorage.getItem('token')
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-      const response = await fetch(`${baseUrl}/sales/export-hsn`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      if (!response.ok) {
-        const errorBody = await response.json().catch(() => ({}))
-        throw new Error(
-          `Server error (${response.status}): ${errorBody.message || response.statusText}`,
-        )
-      }
-
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `HSN_Sales_Report_${new Date().toISOString().split('T')[0]}.csv`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-    } catch (err: any) {
-      console.error('Export failed', err)
-      alert('Failed to export report: ' + (err.message || String(err)))
-    } finally {
-      setIsExporting(false)
-    }
-  }
-
-  const filtered = transactions.filter((t) => {
-    if (user?.role === 'sales' && t.logged_by?.toLowerCase() !== user.username?.toLowerCase()) {
-      return false
-    }
-
-    const matchesSearch =
-      t.color_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (t.notes && t.notes.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (t.logged_by && t.logged_by.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (t.business_code && t.business_code.toLowerCase().includes(searchTerm.toLowerCase()))
-
-    const matchesColor = colorFilter ? t.color_name === colorFilter : true
-
-    let matchesDate = true
-    if (dateFrom || dateTo) {
-      const tDate = new Date(t.created_at).setHours(0, 0, 0, 0)
-      const fromD = dateFrom ? new Date(dateFrom).setHours(0, 0, 0, 0) : -Infinity
-      const toD = dateTo ? new Date(dateTo).setHours(23, 59, 59, 999) : Infinity
-      matchesDate = tDate >= fromD && tDate <= toD
-    }
-
-    return matchesSearch && matchesColor && matchesDate
-  })
-
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-black tracking-tight flex items-center gap-3 text-slate-900">
-            <div className="bg-emerald-600 p-2 rounded-xl shadow-lg shadow-emerald-200">
-              <History className="h-6 w-6 text-white" />
-            </div>
-            Sales History
-          </h1>
-          <p className="text-slate-500 mt-2 font-medium">View completed sales dispatches.</p>
-        </div>
-
-        {(user?.role === 'admin' || user?.role === 'manager') && (
-          <button
-            onClick={handleExportHSN}
-            disabled={isExporting}
-            className="inline-flex items-center gap-2 bg-slate-900 text-white px-5 py-3 rounded-xl font-bold uppercase tracking-widest text-xs shadow-xl shadow-slate-200 hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-50"
-          >
-            {isExporting ? (
-              <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-            ) : (
-              <Download className="w-4 h-4 text-emerald-400" />
+    return (
+        <Page title="Sales History" description="All sales you can see. Sales reps only see their own financials (§3.4).">
+            <ErrorBanner error={error} />
+            {isLoading ? <Loading /> : !data || data.length === 0 ? <EmptyState message="No sales yet." /> : (
+                <Table>
+                    <thead><tr><Th>Sale</Th><Th>Order</Th><Th>Customer</Th><Th>Sale date</Th><Th>Billed</Th><Th>Collected</Th><Th>Status</Th></tr></thead>
+                    <tbody className="divide-y">
+                        {data.map((s) => (
+                            <tr key={s.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setDetail(s.id)}>
+                                <Td className="font-semibold text-blue-600">SAL-{s.id}</Td>
+                                <Td>ORD-{s.order_id}</Td>
+                                <Td>{s.customer_name}</Td>
+                                <Td className="text-xs text-slate-500">{fmtDate(s.sale_date)}</Td>
+                                <Td>{s.billed != null ? fmtMoney(s.billed, s.currency) : <span className="text-slate-400">restricted</span>}</Td>
+                                <Td>{s.collected != null ? fmtMoney(s.collected, s.currency) : <span className="text-slate-400">restricted</span>}</Td>
+                                <Td>{s.payment_status ? <Badge color={STATUS_COLOR[s.payment_status]}>{s.payment_status}</Badge> : '—'}</Td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </Table>
             )}
-            {isExporting ? 'Generating...' : 'HSN Report (CSV)'}
-          </button>
-        )}
-      </div>
+            {detail !== null && <SaleDetailModal id={detail} onClose={() => setDetail(null)} onChanged={reload} />}
+        </Page>
+    )
+}
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col items-stretch">
-        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row items-center gap-4 justify-between">
-          <div className="relative w-full md:w-96">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by product, agent or notes..."
-              className="w-full pl-9 pr-4 py-2 rounded-xl border-slate-200 bg-white text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
+function SaleDetailModal({ id, onClose, onChanged }: { id: number; onClose: () => void; onChanged: () => void }) {
+    const { data, isLoading, error, reload } = useResource<SaleDetail>(`/sales/transactions/${id}`, { deps: [id] })
+    const [payOpen, setPayOpen] = useState(false)
 
-          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto mt-3 md:mt-0">
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-slate-400" />
-              <select
-                value={colorFilter}
-                onChange={(e) => setColorFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none min-w-[120px]"
-              >
-                <option value="">All Colors</option>
-                {uniqueColors.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+    if (isLoading || !data) return <Modal open onClose={onClose} title="Sale">{error ? <ErrorBanner error={error} /> : <Loading />}</Modal>
+
+    const billed = num(data.billed); const collected = num(data.collected)
+
+    return (
+        <Modal open onClose={onClose} title={`SAL-${data.id} · ${data.customer_name}`} size="lg">
+            <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-3 text-sm">
+                    {data.payment_status && <Badge color={STATUS_COLOR[data.payment_status]}>{data.payment_status}</Badge>}
+                    <span className="text-slate-500">Billed: {fmtMoney(billed, data.currency)}</span>
+                    <span className="text-slate-500">Collected: {fmtMoney(collected, data.currency)}</span>
+                    {data.due_date && <span className="text-slate-500">Due: {fmtDate(data.due_date)}</span>}
+                </div>
+                <section>
+                    <div className="text-xs font-medium uppercase tracking-wider text-slate-500 mb-2">Items</div>
+                    <Table>
+                        <thead><tr><Th>Variant</Th><Th>Pack × Qty</Th><Th>Price</Th></tr></thead>
+                        <tbody className="divide-y">
+                            {data.items.map((it) => (
+                                <tr key={it.id}>
+                                    <Td>{it.paint_name} <span className="text-xs text-slate-500">({it.classification} · {it.ink_series})</span></Td>
+                                    <Td>{num(it.pack_size_kg)} kg × {it.quantity}</Td>
+                                    <Td>{it.price_per_pack != null ? fmtMoney(it.price_per_pack, data.currency) : '—'}</Td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </Table>
+                </section>
+                <section>
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="text-xs font-medium uppercase tracking-wider text-slate-500">Payments ({data.payments.length})</div>
+                        <Button variant="ghost" onClick={() => setPayOpen(true)}><Plus size={14} /> Record payment</Button>
+                    </div>
+                    {data.payments.length === 0 ? <EmptyState message="No payments yet." /> : (
+                        <Table>
+                            <thead><tr><Th>Date</Th><Th>Amount</Th><Th>Method</Th><Th>Reference</Th></tr></thead>
+                            <tbody className="divide-y">
+                                {data.payments.map((p) => (
+                                    <tr key={p.id}>
+                                        <Td>{fmtDate(p.date_received)}</Td>
+                                        <Td>{fmtMoney(p.amount, p.currency)}</Td>
+                                        <Td><Badge>{p.method}</Badge></Td>
+                                        <Td className="text-xs text-slate-500">{p.reference_number ?? '—'}</Td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </Table>
+                    )}
+                </section>
+                {payOpen && <PaymentModal saleId={data.id} currency={data.currency} onClose={() => setPayOpen(false)} onSaved={() => { setPayOpen(false); reload(); onChanged() }} />}
             </div>
+        </Modal>
+    )
+}
 
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
-              />
-              <span className="text-slate-400 text-xs font-bold uppercase">to</span>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
-              />
-            </div>
-          </div>
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap ml-auto md:ml-0">
-            {filtered.length} entries
-          </p>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-              <tr>
-                <th className="px-6 py-4 border-b border-slate-100 w-48">Date</th>
-                <th className="px-6 py-4 border-b border-slate-100">Product</th>
-                <th className="px-6 py-4 border-b border-slate-100 text-center">Pack Size</th>
-                <th className="px-6 py-4 border-b border-slate-100 text-center">Units</th>
-                <th className="px-6 py-4 border-b border-slate-100 text-right">Total Mass</th>
-                <th className="px-6 py-4 border-b border-slate-100">Notes</th>
-                <th className="px-6 py-4 border-b border-slate-100">Logged By</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
-                    <Loader2 className="w-8 h-8 animate-spin mx-auto text-emerald-500 mb-3" />
-                    <p className="text-xs font-bold uppercase tracking-widest">
-                      Loading transactions...
-                    </p>
-                  </td>
-                </tr>
-              ) : filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
-                    <Package className="w-10 h-10 mx-auto text-slate-200 mb-3" />
-                    <p className="text-sm font-bold">No sales transactions found</p>
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((t) => (
-                  <tr key={t.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <p className="font-bold text-slate-700">
-                        {formatDate(t.created_at, dateFormat)}
-                      </p>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wider">
-                        {new Date(t.created_at).toLocaleTimeString()}
-                      </p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="font-bold text-slate-900">{t.color_name}</p>
-                      <p className="text-[10px] text-slate-500 uppercase tracking-wider">
-                        {t.business_code}
-                      </p>
-                    </td>
-                    <td className="px-6 py-4 text-center font-bold text-slate-600">
-                      {t.pack_size_kg}kg
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="inline-flex bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg font-black text-sm border border-emerald-100 shadow-sm">
-                        {t.quantity_units}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right font-black text-slate-800">
-                      {formatUnit(Math.abs(t.quantity_kg), unitPref)}
-                    </td>
-                    <td className="px-6 py-4 text-slate-600 max-w-[200px] truncate" title={t.notes}>
-                      {t.notes || '—'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {t.logged_by ? (
-                        <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md text-xs font-bold. border border-slate-200 uppercase tracking-wider">
-                          {t.logged_by}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 text-xs italic">System / Unknown</span>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  )
+function PaymentModal({ saleId, currency, onClose, onSaved }: { saleId: number; currency: string; onClose: () => void; onSaved: () => void }) {
+    const [f, setF] = useState({ amount: '', date_received: new Date().toISOString().slice(0, 10), method: 'upi', reference_number: '', notes: '' })
+    const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null)
+    async function submit(e: React.FormEvent) {
+        e.preventDefault()
+        if (!f.amount || !f.date_received) { setErr('Amount and date required'); return }
+        setBusy(true); setErr(null)
+        try {
+            const body: any = {
+                amount: Number(f.amount), currency, date_received: f.date_received, method: f.method,
+                reference_number: f.reference_number || undefined,
+                notes: f.notes || undefined,
+            }
+            await apiRequest(`/sales/transactions/${saleId}/payments`, { method: 'POST', body })
+            onSaved()
+        } catch (e: any) { setErr(e.message) } finally { setBusy(false) }
+    }
+    return (
+        <Modal open onClose={onClose} title="Record payment"
+            footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={submit} loading={busy}><Receipt size={14} /> Save</Button></>}>
+            <form onSubmit={submit} className="space-y-3">
+                <ErrorBanner error={err} />
+                <div className="grid grid-cols-2 gap-3">
+                    <Field label={`Amount (${currency})`}><Input type="number" step="0.01" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} required /></Field>
+                    <Field label="Date received"><Input type="date" value={f.date_received} onChange={(e) => setF({ ...f, date_received: e.target.value })} required /></Field>
+                    <Field label="Method">
+                        <Select value={f.method} onChange={(e) => setF({ ...f, method: e.target.value })}>
+                            {['cash', 'bank_transfer', 'upi', 'cheque', 'card', 'other'].map((m) => <option key={m} value={m}>{m}</option>)}
+                        </Select>
+                    </Field>
+                    <Field label="Reference #"><Input value={f.reference_number} onChange={(e) => setF({ ...f, reference_number: e.target.value })} /></Field>
+                </div>
+                <Field label="Notes"><Input value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></Field>
+            </form>
+        </Modal>
+    )
 }

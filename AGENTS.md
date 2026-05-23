@@ -4,9 +4,34 @@ Be clear and concise in your explanations. Sacrifice grammar for brevity if need
 
 Do not ask me to execute a command or any other task, unless you explicitly cannot do so.
 
-After reading this document, read all `packages/*/AGENTS.md` files too.
+After reading this document, **read `doc/status.md` first** (current build status — spec coverage, what's wired, what's missing) and then read all `packages/*/AGENTS.md` files.
 
 NEVER COMMIT OR PUSH ANYTHING ON YOUR OWN.
+
+# Build Status — `doc/status.md`
+
+`doc/status.md` is the **living source of truth** for what is and isn't built
+against `doc/pr-1_spec.md`. Treat it like a README that you actually own:
+
+- **Read it before starting any work.** It tells you which spec sections are
+  wired, which are stubs, which DDL tables aren't yet exposed, and where the
+  P0 / P1 backlog lives. Skipping this leads to duplicate work or re-breaking
+  things that were already shipped.
+- **Update it whenever you finish a meaningful unit of work** — a module
+  rewrite, a spec section closing or opening, an endpoint set added or
+  removed, a DDL table that becomes (or stops being) referenced.
+  - Move items between **Must-fix (P0)** → **P1** → **Done** as work lands.
+  - Flip the matching ✅ / ⚠️ / ❌ cells in the spec-coverage matrix.
+  - Bump the `Last verified` date at the top.
+- **Re-run the smoke checks** before claiming a section is green:
+  - Backend endpoint sweep (login + the per-endpoint loop documented at the
+    bottom of `doc/status.md`).
+  - DDL ↔ queries diff (two-way `comm` comparison).
+  - Frontend pages compile via Vite.
+- **Mention `doc/status.md` in your PR description** so the reviewer can
+  verify the claim without re-doing the audit.
+- If you delete or stub an endpoint, the matrix row needs to flip back to
+  ❌ or ⚠️ in the same change. Stale "✅" cells are worse than missing ones.
 
 # Writing Code
 

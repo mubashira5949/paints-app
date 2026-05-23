@@ -7,10 +7,11 @@ import Fastify from 'fastify'
 import dbConnector from './plugins/db'
 import jwtConnector from './plugins/jwt'
 import dotenv from 'dotenv'
+import fs from 'fs'
+import path from 'path'
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
-import swagger from '@fastify/swagger'
-import swaggerUI from '@fastify/swagger-ui'
-import cors from '@fastify/cors'
+import cors from '@fastify/cors';
+import scalarApiReference from '@scalar/fastify-api-reference'
 
 // Load environment variables from .env file
 dotenv.config()
@@ -34,6 +35,16 @@ fastify.register(cors, {
     allowedHeaders: ['Content-Type', 'Authorization'],
 })
 
+// Many POST endpoints (e.g. /production/runs/:id/start, /archive, /restore)
+// don't take a body. Default fastify JSON parsing rejects an empty body when
+// content-type is application/json; relax that so callers can omit the body.
+fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+    const raw = body as string
+    if (!raw) return done(null, undefined)
+    try { done(null, JSON.parse(raw)) }
+    catch (err) { done(err as Error) }
+})
+
 // Global Error Handler to catch and format TypeBox Validation Failures
 fastify.setErrorHandler((error: any, request, reply) => {
     if (error.validation) {
@@ -50,33 +61,22 @@ fastify.setErrorHandler((error: any, request, reply) => {
     }
 })
 
-// Register Swagger API documentation
-fastify.register(swagger, {
-    openapi: {
-        info: {
-            title: 'Paints App API',
-            description: 'API documentation for Paints App',
-            version: '1.0.0'
-        },
-        components: {
-            securitySchemes: {
-                bearerAuth: {
-                    type: 'http',
-                    scheme: 'bearer',
-                    bearerFormat: 'JWT'
-                }
-            }
-        },
-        security: [{ bearerAuth: [] }]
-    }
+// API docs: serve the hand-authored openapi.yaml and render it with Scalar.
+// The yaml is the single source of truth — also fed to `openapi-typescript`
+// to generate request/response types (src/types/openapi.gen.ts).
+const OPENAPI_YAML_PATH = path.resolve(__dirname, '..', 'openapi.yaml')
+const OPENAPI_YAML = fs.readFileSync(OPENAPI_YAML_PATH, 'utf-8')
+
+fastify.get('/openapi.yaml', async (_request, reply) => {
+    reply.type('application/yaml').send(OPENAPI_YAML)
 })
 
-fastify.register(swaggerUI, {
+fastify.register(scalarApiReference, {
     routePrefix: '/docs',
-    uiConfig: {
-        docExpansion: 'list',
-        deepLinking: false
-    }
+    configuration: {
+        url: '/openapi.yaml',
+        theme: 'default',
+    },
 })
 
 // Register core plugins: Database connection and JWT Authentication
@@ -87,97 +87,32 @@ fastify.register(jwtConnector)
 import userModule from './modules/users'
 import authModule from './modules/auth'
 import resourcesModule from './modules/resources'
-import colorsModule from './modules/colors'
+import paintsModule from './modules/paints'
 import formulasModule from './modules/formulas'
 import productionModule from './modules/production'
 import dashboardModule from './modules/dashboard'
-
-/**
- * Register dashboard module with a '/api' prefix (since user asked for /api/dashboard).
- * Actually, usually we prefix feature modules. Let's see how others are done.
- * The user asked for GET /api/dashboard.
- */
-fastify.register(dashboardModule, { prefix: '/api' })
-
-/**
- * Register user management module.
- */
-fastify.register(userModule)
-
-/**
- * Register authentication module with a '/auth' prefix.
- */
-fastify.register(authModule, { prefix: '/auth' })
-
-/**
- * Register resources module with a '/resources' prefix.
- */
-fastify.register(resourcesModule, { prefix: '/resources' })
-
-/**
- * Register colors module with a '/colors' prefix.
- */
-fastify.register(colorsModule, { prefix: '/colors' })
-
-/**
- * Register formulas module with a '/formulas' prefix.
- */
-fastify.register(formulasModule, { prefix: '/formulas' })
-
-/**
- * Register production runs module with a '/production-runs' prefix.
- */
-fastify.register(productionModule, { prefix: '/production-runs' })
-
 import inventoryModule from './modules/inventory'
-
-/**
- * Register inventory module with a '/inventory' prefix.
- */
-fastify.register(inventoryModule, { prefix: '/inventory' })
-
-import inventoryApi from './modules/inventory/inventory.api'
-
-/**
- * Register core inventory API with '/api/inventory' prefix.
- */
-fastify.register(inventoryApi, { prefix: '/api/inventory' })
-
 import salesModule from './modules/sales'
-
-// Register sales module with a '/sales' prefix.
-fastify.register(salesModule, { prefix: '/sales' })
-
-import clientsModule from './modules/clients'
+import customersModule from './modules/customers'
 import settingsModule from './modules/settings'
 import suppliersModule from './modules/suppliers'
 import purchaseOrdersModule from './modules/purchase-orders'
-
-/**
- * Register purchase orders module with a '/purchase-orders' prefix.
- */
-fastify.register(purchaseOrdersModule, { prefix: '/purchase-orders' })
-
-/**
- * Register suppliers module with a '/suppliers' prefix.
- */
-fastify.register(suppliersModule, { prefix: '/suppliers' })
-
-/**
- * Register clients module with a '/clients' prefix.
- */
-fastify.register(clientsModule, { prefix: '/clients' })
-
-/**
- * Register settings module with a '/settings' prefix.
- */
-fastify.register(settingsModule, { prefix: '/settings' })
-
 import lossesModule from './modules/losses'
+import { IPgClientLike } from './types/misc'
 
-/**
- * Register losses module with a '/api/losses' prefix.
- */
+fastify.register(authModule, { prefix: '/auth' })
+fastify.register(userModule)
+fastify.register(paintsModule, { prefix: '/paints' })
+fastify.register(formulasModule, { prefix: '/formulas' })
+fastify.register(resourcesModule, { prefix: '/resources' })
+fastify.register(customersModule, { prefix: '/customers' })
+fastify.register(suppliersModule, { prefix: '/suppliers' })
+fastify.register(purchaseOrdersModule, { prefix: '/purchase-orders' })
+fastify.register(settingsModule, { prefix: '/settings' })
+fastify.register(productionModule, { prefix: '/production' })
+fastify.register(salesModule, { prefix: '/sales' })
+fastify.register(inventoryModule, { prefix: '/inventory' })
+fastify.register(dashboardModule, { prefix: '/api' })
 fastify.register(lossesModule, { prefix: '/api/losses' })
 
 /**
@@ -200,7 +135,7 @@ fastify.get('/', async (request, reply) => {
 fastify.get('/health', async (request, reply) => {
     try {
         // Verify database connection by running a simple query
-        await fastify.db.query('SELECT 1')
+        await fastify.db.query('SELECT 1', [])
         return {
             status: 'ok',
             database: 'healthy'

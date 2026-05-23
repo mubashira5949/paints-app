@@ -1,304 +1,351 @@
 /**
- * Purchase Orders Module
- * Handles procurement flow, order tracking, and returns with inventory synchronization.
+ * Supplier Purchase Orders (spec §3.2).
+ *
+ * Status flow: draft → ordered → shipped → received (or cancelled). On
+ * receive, resource lines insert into resource_stock_transactions (DDL
+ * trigger maintains weighted-avg cost), finished_paint lines insert
+ * supplier-source rows into finished_paint_packs.
  */
 
 import { FastifyInstance } from 'fastify'
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
 import { Type } from '@sinclair/typebox'
 import { authorizeRole } from '../../utils/authorizeRole'
+import { withTransaction } from '../../utils/withTransaction'
+import {
+    listPurchaseOrders, getPurchaseOrder, insertPurchaseOrder, insertPurchaseOrderItem,
+    patchPurchaseOrder, getPoItemForEdit, patchPurchaseOrderItem, deletePurchaseOrderItem,
+    getPurchaseOrderStatus, setPurchaseOrderStatus,
+    lockPurchaseOrderForReceive, lockPoItemForReceive,
+    insertResourceReceipt, bumpReceivedQuantityKg,
+    insertSupplierFinishedPack, bumpReceivedPacks,
+    countPendingPoItems, markPurchaseOrderReceived,
+    archivePurchaseOrder, restorePurchaseOrder,
+} from '../../queries'
+
+const IdParam     = Type.Object({ id:     Type.Integer({ minimum: 1 }) })
+const ItemIdParam = Type.Object({ itemId: Type.Integer({ minimum: 1 }) })
+
+const Currency = Type.String({ pattern: '^[A-Z]{3}$', maxLength: 3 })
+const Kind = Type.Union([Type.Literal('resource'), Type.Literal('finished_paint')])
+
+const POItemInput = Type.Object({
+    kind:               Kind,
+    resource_id:        Type.Optional(Type.Integer({ minimum: 1 })),
+    variant_id:         Type.Optional(Type.Integer({ minimum: 1 })),
+    pack_size_kg:       Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+    quantity_kg:        Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+    quantity_packs:     Type.Optional(Type.Integer({ exclusiveMinimum: 0 })),
+    landed_cost_per_kg: Type.Number({ minimum: 0 }),
+})
+
+const CreateBody = Type.Object({
+    supplier_id: Type.Integer({ minimum: 1 }),
+    currency:    Type.Optional(Currency),
+    notes:       Type.Optional(Type.String()),
+    items:       Type.Array(POItemInput, { minItems: 1, maxItems: 200 }),
+})
+
+const PatchHeaderBody = Type.Object({
+    currency: Type.Optional(Currency),
+    notes:    Type.Optional(Type.String()),
+})
+
+const PatchItemBody = Type.Object({
+    pack_size_kg:       Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+    quantity_kg:        Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+    quantity_packs:     Type.Optional(Type.Integer({ exclusiveMinimum: 0 })),
+    landed_cost_per_kg: Type.Optional(Type.Number({ minimum: 0 })),
+})
+
+const TransitionBody = Type.Object({
+    to: Type.Union([Type.Literal('ordered'), Type.Literal('shipped'), Type.Literal('cancelled')]),
+})
+
+const ReceiveBody = Type.Object({
+    items: Type.Array(Type.Object({
+        id:                  Type.Integer({ minimum: 1 }),
+        received_quantity_kg: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+        received_packs:       Type.Optional(Type.Integer({ exclusiveMinimum: 0 })),
+    }), { minItems: 1, maxItems: 200 }),
+})
+
+const ListQuery = Type.Object({
+    page:        Type.Optional(Type.Integer({ minimum: 1 })),
+    page_size:   Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+    status:      Type.Optional(Type.Union([
+        Type.Literal('draft'), Type.Literal('ordered'),
+        Type.Literal('shipped'), Type.Literal('received'),
+        Type.Literal('cancelled'),
+    ])),
+    supplier_id:      Type.Optional(Type.Integer({ minimum: 1 })),
+    include_archived: Type.Optional(Type.Boolean()),
+})
+
+const FORWARD: Record<string, ReadonlyArray<string>> = {
+    draft:     ['ordered',   'cancelled'],
+    ordered:   ['shipped',   'cancelled'],
+    shipped:   ['received',  'cancelled'],
+    received:  [],
+    cancelled: [],
+}
+
+function validateItem(item: any): void {
+    if (item.kind === 'resource') {
+        if (!item.resource_id || !item.quantity_kg || item.quantity_kg <= 0) {
+            throw Object.assign(new Error('Resource line requires resource_id + quantity_kg > 0'), { statusCode: 400 })
+        }
+    } else {
+        if (!item.variant_id || !item.pack_size_kg || !item.quantity_packs || item.pack_size_kg <= 0 || item.quantity_packs <= 0) {
+            throw Object.assign(new Error('Finished-paint line requires variant_id, pack_size_kg > 0, quantity_packs > 0'), { statusCode: 400 })
+        }
+    }
+}
 
 export default async function (fastifyRaw: FastifyInstance) {
     const fastify = fastifyRaw.withTypeProvider<TypeBoxTypeProvider>()
 
-    const CreatePOItemSchema = Type.Object({
-        resource_id: Type.Integer(),
-        quantity: Type.Number(),
-        unit: Type.String(),
-        unit_price: Type.Optional(Type.Number())
-    })
-
-    const CreatePOSchema = Type.Object({
-        supplier_id: Type.Integer(),
-        notes: Type.Optional(Type.String()),
-        items: Type.Array(CreatePOItemSchema)
-    })
-
-    const POIdParamSchema = Type.Object({
-        id: Type.Integer()
-    })
-
-    /**
-     * GET /purchase-orders - Retrieve all POs
-     */
     fastify.get('/', {
         preHandler: [fastify.authenticate],
-        handler: async (request, reply) => {
-            try {
-                const result = await fastify.db.query(`
-                    SELECT po.*, s.name as supplier_name, s.email as supplier_email, s.address as supplier_address, s.phone as supplier_phone, s.gst_number as supplier_gst, s.pocs as supplier_pocs,
-                    (SELECT json_agg(items) FROM (
-                        SELECT poi.*, r.name as resource_name 
-                        FROM purchase_order_items poi
-                        LEFT JOIN resources r ON poi.resource_id = r.id
-                        WHERE poi.purchase_order_id = po.id
-                    ) items) as items
-                    FROM purchase_orders po
-                    LEFT JOIN suppliers s ON po.supplier_id = s.id
-                    ORDER BY po.created_at DESC
-                `)
-                return reply.send(result.rows)
-            } catch (err) {
-                fastify.log.error(err)
-                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to retrieve POs' })
-            }
-        }
+        schema: { querystring: ListQuery },
+        handler: async (request) => {
+            const q = request.query
+            const page = q.page ?? 1
+            const page_size = q.page_size ?? 20
+            const rows = await listPurchaseOrders.run({
+                page_size, page_offset: (page - 1) * page_size,
+                status:           (q.status ?? null) as any,
+                supplier_id:      q.supplier_id ?? null,
+                include_archived: q.include_archived ?? null,
+            }, fastify.db)
+            const total = rows[0]?._total ? Number(rows[0]._total) : 0
+            return { items: rows.map(({ _total, ...r }) => r), total, page, page_size }
+        },
     })
 
-    /**
-     * POST /purchase-orders - Create a new PO
-     */
-    fastify.post('/', {
-        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
-        schema: {
-            body: CreatePOSchema
-        },
+    fastify.get('/:id', {
+        preHandler: [fastify.authenticate],
+        schema: { params: IdParam },
         handler: async (request, reply) => {
-            const { supplier_id, notes, items } = request.body
-            const client = await fastify.db.connect()
+            const rows = await getPurchaseOrder.run({ id: request.params.id }, fastify.db)
+            if (rows.length === 0) return reply.status(404).send({ error: 'Not Found', message: 'Purchase order not found' })
+            return rows[0]
+        },
+    })
+
+    fastify.post('/', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { body: CreateBody },
+        handler: async (request, reply) => {
+            const user = request.user as any
+            const b = request.body
             try {
-                await client.query('BEGIN')
-                
-                const poResult = await client.query(
-                    'INSERT INTO purchase_orders (supplier_id, notes, status) VALUES ($1, $2, $3) RETURNING *',
-                    [supplier_id, notes, 'pending']
-                )
-                const poId = poResult.rows[0].id
-
-                for (const item of items) {
-                    await client.query(
-                        `INSERT INTO purchase_order_items (purchase_order_id, resource_id, quantity, unit, unit_price) 
-                         VALUES ($1, $2, $3, $4, $5)`,
-                        [poId, item.resource_id, item.quantity, item.unit, item.unit_price || 0]
-                    )
-                }
-
-                await client.query('COMMIT')
-                
-                const fullPO = await client.query(`
-                    SELECT po.*, s.name as supplier_name, s.email as supplier_email, s.address as supplier_address, s.phone as supplier_phone, s.gst_number as supplier_gst, s.pocs as supplier_pocs,
-                    (SELECT json_agg(items) FROM (
-                        SELECT poi.*, r.name as resource_name 
-                        FROM purchase_order_items poi
-                        LEFT JOIN resources r ON poi.resource_id = r.id
-                        WHERE poi.purchase_order_id = po.id
-                    ) items) as items
-                    FROM purchase_orders po
-                    LEFT JOIN suppliers s ON po.supplier_id = s.id
-                    WHERE po.id = $1
-                `, [poId])
-
-                return reply.status(201).send(fullPO.rows[0])
-            } catch (err) {
-                await client.query('ROLLBACK')
+                const id = await withTransaction(fastify.db, async (tx) => {
+                    const [po] = await insertPurchaseOrder.run({
+                        supplier_id: b.supplier_id, currency: b.currency ?? null, notes: b.notes ?? null, user_id: user.id,
+                    }, tx)
+                    for (const item of b.items) {
+                        validateItem(item)
+                        await insertPurchaseOrderItem.run({
+                            po_id: po.id, kind: item.kind,
+                            resource_id: item.resource_id ?? null, variant_id: item.variant_id ?? null,
+                            pack_size_kg: (item.pack_size_kg ?? null) as any,
+                            quantity_kg: (item.quantity_kg ?? null) as any,
+                            quantity_packs: item.quantity_packs ?? null,
+                            landed_cost_per_kg: item.landed_cost_per_kg as any,
+                        }, tx)
+                    }
+                    return po.id
+                })
+                return reply.status(201).send({ id })
+            } catch (err: any) {
+                if (err.statusCode === 400) return reply.status(400).send({ error: 'Bad Request', message: err.message })
+                if (err.code === '23503') return reply.status(400).send({ error: 'Bad Request', message: 'Unknown supplier/resource/variant id' })
                 fastify.log.error(err)
                 return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to create PO' })
-            } finally {
-                client.release()
             }
-        }
+        },
     })
 
-    /**
-     * PUT /purchase-orders/:id/status - Update PO status and sync inventory
-     */
-    fastify.put('/:id/status', {
-        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
-        schema: {
-            params: POIdParamSchema,
-            body: Type.Object({ status: Type.String() })
-        },
+    fastify.patch('/:id', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { params: IdParam, body: PatchHeaderBody },
         handler: async (request, reply) => {
-            const { id } = request.params
-            const { status } = request.body
-            const client = await fastify.db.connect()
-            try {
-                await client.query('BEGIN')
-                
-                // Get pre-update status to prevent double-counting
-                const currentPO = await client.query('SELECT status FROM purchase_orders WHERE id = $1', [id])
-                if (currentPO.rows.length === 0) {
-                    await client.query('ROLLBACK')
-                    return reply.status(404).send({ error: 'Not Found', message: 'PO not found' })
-                }
-                
-                const oldStatus = currentPO.rows[0].status
-                
-                // Update the PO status
-                const upResult = await client.query(
-                    'UPDATE purchase_orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
-                    [status, id]
-                )
+            const b = request.body
+            if (b.currency === undefined && b.notes === undefined) {
+                return reply.status(400).send({ error: 'Bad Request', message: 'No fields to update' })
+            }
+            const rows = await patchPurchaseOrder.run({
+                id: request.params.id, currency: b.currency ?? null, notes: b.notes ?? null,
+            }, fastify.db)
+            if (rows.length === 0) return reply.status(404).send({ error: 'Not Found', message: 'PO not found' })
+            return { id: rows[0].id }
+        },
+    })
 
-                // If status changed to 'received' and it wasn't already received
-                if (status === 'received' && oldStatus !== 'received') {
-                    const items = await client.query('SELECT resource_id, quantity FROM purchase_order_items WHERE purchase_order_id = $1', [id])
-                    for (const item of items.rows) {
-                        if (item.resource_id) {
-                            await client.query(
-                                'UPDATE resources SET current_stock = current_stock + $1 WHERE id = $2',
-                                [item.quantity, item.resource_id]
-                            )
+    fastify.post('/:id/items', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { params: IdParam, body: POItemInput },
+        handler: async (request, reply) => {
+            const id = request.params.id
+            const item = request.body
+            try {
+                validateItem(item)
+                const status = await getPurchaseOrderStatus.run({ id }, fastify.db)
+                if (status.length === 0) return reply.status(404).send({ error: 'Not Found', message: 'PO not found' })
+                if (status[0].status !== 'draft') return reply.status(409).send({ error: 'Conflict', message: 'PO items can only be added while draft' })
+                const [r] = await insertPurchaseOrderItem.run({
+                    po_id: id, kind: item.kind,
+                    resource_id: item.resource_id ?? null, variant_id: item.variant_id ?? null,
+                    pack_size_kg: (item.pack_size_kg ?? null) as any,
+                    quantity_kg: (item.quantity_kg ?? null) as any,
+                    quantity_packs: item.quantity_packs ?? null,
+                    landed_cost_per_kg: item.landed_cost_per_kg as any,
+                }, fastify.db)
+                return reply.status(201).send({ id: r.id })
+            } catch (err: any) {
+                if (err.statusCode === 400) return reply.status(400).send({ error: 'Bad Request', message: err.message })
+                if (err.code === '23503') return reply.status(400).send({ error: 'Bad Request', message: 'Unknown resource/variant id' })
+                fastify.log.error(err)
+                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to add item' })
+            }
+        },
+    })
+
+    fastify.patch('/items/:itemId', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { params: ItemIdParam, body: PatchItemBody },
+        handler: async (request, reply) => {
+            const itemId = request.params.itemId
+            const b = request.body
+            const cur = await getPoItemForEdit.run({ id: itemId }, fastify.db)
+            if (cur.length === 0) return reply.status(404).send({ error: 'Not Found', message: 'Item not found' })
+            if (cur[0].po_status !== 'draft') return reply.status(409).send({ error: 'Conflict', message: 'PO items are read-only after the PO leaves draft' })
+            if (b.pack_size_kg === undefined && b.quantity_kg === undefined && b.quantity_packs === undefined && b.landed_cost_per_kg === undefined) {
+                return reply.status(400).send({ error: 'Bad Request', message: 'No fields to update' })
+            }
+            const [r] = await patchPurchaseOrderItem.run({
+                id: itemId,
+                pack_size_kg: (b.pack_size_kg ?? null) as any,
+                quantity_kg:  (b.quantity_kg ?? null) as any,
+                quantity_packs: b.quantity_packs ?? null,
+                landed_cost_per_kg: (b.landed_cost_per_kg ?? null) as any,
+            }, fastify.db)
+            return { id: r.id }
+        },
+    })
+
+    fastify.delete('/items/:itemId', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { params: ItemIdParam },
+        handler: async (request, reply) => {
+            const itemId = request.params.itemId
+            const cur = await getPoItemForEdit.run({ id: itemId }, fastify.db)
+            if (cur.length === 0) return reply.status(404).send({ error: 'Not Found', message: 'Item not found' })
+            if (cur[0].po_status !== 'draft') return reply.status(409).send({ error: 'Conflict', message: 'PO items can only be removed while draft' })
+            await deletePurchaseOrderItem.run({ id: itemId }, fastify.db)
+            return { id: itemId }
+        },
+    })
+
+    fastify.post('/:id/transition', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { params: IdParam, body: TransitionBody },
+        handler: async (request, reply) => {
+            const id = request.params.id
+            const to = request.body.to
+            const cur = await getPurchaseOrderStatus.run({ id }, fastify.db)
+            if (cur.length === 0) return reply.status(404).send({ error: 'Not Found', message: 'PO not found' })
+            const from = cur[0].status as string
+            if (!FORWARD[from]?.includes(to)) {
+                return reply.status(409).send({ error: 'Conflict', message: `Cannot transition from ${from} to ${to}` })
+            }
+            await setPurchaseOrderStatus.run({
+                id, status: to as any,
+                stamp_ordered:  to === 'ordered',
+                stamp_shipped:  to === 'shipped',
+                stamp_received: false,
+            }, fastify.db)
+            return { id, status: to }
+        },
+    })
+
+    fastify.post('/:id/receive', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { params: IdParam, body: ReceiveBody },
+        handler: async (request, reply) => {
+            const user = request.user as any
+            const id = request.params.id
+            try {
+                await withTransaction(fastify.db, async (tx) => {
+                    const po = await lockPurchaseOrderForReceive.run({ id }, tx)
+                    if (po.length === 0) throw Object.assign(new Error('PO not found'), { statusCode: 404 })
+                    if (!['ordered', 'shipped'].includes(po[0].status as string)) {
+                        throw Object.assign(new Error('PO must be ordered or shipped before receiving'), { statusCode: 409 })
+                    }
+                    for (const r of request.body.items) {
+                        const li = await lockPoItemForReceive.run({ id: r.id, po_id: id }, tx)
+                        if (li.length === 0) throw Object.assign(new Error(`Item ${r.id} not in PO ${id}`), { statusCode: 400 })
+                        const item = li[0]
+                        if (item.kind === 'resource') {
+                            const remaining = Number(item.quantity_kg) - Number(item.received_quantity_kg)
+                            const add = r.received_quantity_kg ?? remaining
+                            if (add <= 0) continue
+                            if (add > remaining + 1e-9) throw Object.assign(new Error(`Item ${r.id}: receive ${add}kg exceeds remaining ${remaining}kg`), { statusCode: 400 })
+                            await insertResourceReceipt.run({
+                                resource_id: item.resource_id!, quantity_kg: add as any,
+                                unit_cost_per_kg: item.landed_cost_per_kg as any,
+                                po_item_id: r.id, user_id: user.id,
+                            }, tx)
+                            await bumpReceivedQuantityKg.run({ id: r.id, delta: add as any }, tx)
+                        } else {
+                            const remaining = Number(item.quantity_packs) - Number(item.received_packs)
+                            const add = r.received_packs ?? remaining
+                            if (add <= 0) continue
+                            if (add > remaining) throw Object.assign(new Error(`Item ${r.id}: receive ${add} packs exceeds remaining ${remaining}`), { statusCode: 400 })
+                            for (let i = 0; i < add; i++) {
+                                await insertSupplierFinishedPack.run({
+                                    variant_id: item.variant_id!,
+                                    pack_size_kg: item.pack_size_kg as any,
+                                    po_item_id: r.id,
+                                    cost_per_kg: item.landed_cost_per_kg as any,
+                                }, tx)
+                            }
+                            await bumpReceivedPacks.run({ id: r.id, delta: add }, tx)
                         }
                     }
-                }
-
-                await client.query('COMMIT')
-                return reply.send(upResult.rows[0])
-            } catch (err) {
-                await client.query('ROLLBACK')
+                    const pending = await countPendingPoItems.run({ po_id: id }, tx)
+                    if (Number(pending[0].pending) === 0) await markPurchaseOrderReceived.run({ id }, tx)
+                })
+                return { id }
+            } catch (err: any) {
+                if (err.statusCode === 404) return reply.status(404).send({ error: 'Not Found', message: err.message })
+                if (err.statusCode === 409) return reply.status(409).send({ error: 'Conflict', message: err.message })
+                if (err.statusCode === 400) return reply.status(400).send({ error: 'Bad Request', message: err.message })
                 fastify.log.error(err)
-                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to update order status' })
-            } finally {
-                client.release()
+                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to receive PO' })
             }
-        }
+        },
     })
 
-    /**
-     * PUT /purchase-orders/:id/items/:item_id - Update item quantity/meta
-     */
-    fastify.put('/:id/items/:item_id', {
-        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
-        schema: {
-            params: Type.Object({ id: Type.Integer(), item_id: Type.Integer() }),
-            body: Type.Object({
-                quantity: Type.Number(),
-                unit_price: Type.Optional(Type.Number())
-            })
-        },
+    fastify.post('/:id/archive', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { params: IdParam },
         handler: async (request, reply) => {
-            const { item_id } = request.params
-            const { quantity, unit_price } = request.body
-            try {
-                const updates: string[] = ['quantity = $1']
-                const values: any[] = [quantity]
-                
-                if (unit_price !== undefined) {
-                    updates.push(`unit_price = $${values.length + 1}`)
-                    values.push(unit_price)
-                }
-
-                values.push(item_id)
-                const result = await fastify.db.query(
-                    `UPDATE purchase_order_items SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP 
-                     WHERE id = $${values.length} RETURNING *`,
-                    values
-                )
-                return reply.send(result.rows[0])
-            } catch (err) {
-                fastify.log.error(err)
-                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to update order item' })
-            }
-        }
+            const user = request.user as any
+            const rows = await archivePurchaseOrder.run({ id: request.params.id, user_id: user.id }, fastify.db)
+            if (rows.length === 0) return reply.status(404).send({ error: 'Not Found', message: 'PO not found or already archived' })
+            return { id: rows[0].id }
+        },
     })
 
-    /**
-     * POST /purchase-orders/:id/refund - Handle partial refund/return and sync inventory
-     */
-    fastify.post('/:id/refund', {
-        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
-        schema: {
-            params: POIdParamSchema,
-            body: Type.Object({
-                item_id: Type.Integer(),
-                refunded_quantity: Type.Number(),
-                refund_status: Type.String()
-            })
-        },
+    fastify.post('/:id/restore', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { params: IdParam },
         handler: async (request, reply) => {
-            const { item_id, refunded_quantity, refund_status } = request.body
-            const client = await fastify.db.connect()
-            try {
-                await client.query('BEGIN')
-                
-                // Get item and PO status to see if it was already received
-                const itemData = await client.query(`
-                    SELECT poi.resource_id, poi.refund_status, po.status as po_status
-                    FROM purchase_order_items poi
-                    JOIN purchase_orders po ON poi.purchase_order_id = po.id
-                    WHERE poi.id = $1
-                `, [item_id])
-
-                if (itemData.rows.length === 0) {
-                    await client.query('ROLLBACK')
-                    return reply.status(404).send({ error: 'Not Found', message: 'Item not found' })
-                }
-
-                const item = itemData.rows[0]
-                
-                // Update refund status
-                const result = await client.query(
-                    `UPDATE purchase_order_items 
-                     SET refunded_quantity = $1, refund_status = $2, updated_at = CURRENT_TIMESTAMP 
-                     WHERE id = $3 RETURNING *`,
-                    [refunded_quantity, refund_status, item_id]
-                )
-
-                // If refund is completed and the PO was already received, deduct from inventory
-                if (refund_status === 'completed' && item.refund_status !== 'completed' && item.po_status === 'received') {
-                    if (item.resource_id) {
-                        await client.query(
-                            'UPDATE resources SET current_stock = current_stock - $1 WHERE id = $2',
-                            [refunded_quantity, item.resource_id]
-                        )
-                    }
-                }
-
-                await client.query('COMMIT')
-                return reply.send(result.rows[0])
-            } catch (err) {
-                await client.query('ROLLBACK')
-                fastify.log.error(err)
-                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to process refund' })
-            } finally {
-                client.release()
-            }
-        }
-    })
-
-    /**
-     * GET /purchase-orders/shared/:token - Retrieve PO by share_token
-     */
-    fastify.get('/shared/:token', {
-        schema: {
-            params: Type.Object({ token: Type.String() })
+            const rows = await restorePurchaseOrder.run({ id: request.params.id }, fastify.db)
+            if (rows.length === 0) return reply.status(404).send({ error: 'Not Found', message: 'PO not found' })
+            return { id: rows[0].id }
         },
-        handler: async (request, reply) => {
-            const { token } = request.params as { token: string }
-            try {
-                const result = await fastify.db.query(`
-                    SELECT po.*, s.name as supplier_name, s.email as supplier_email, s.address as supplier_address, s.phone as supplier_phone, s.gst_number as supplier_gst, s.pocs as supplier_pocs,
-                    COALESCE((SELECT json_agg(items) FROM (
-                        SELECT poi.*, r.name as resource_name 
-                        FROM purchase_order_items poi
-                        LEFT JOIN resources r ON poi.resource_id = r.id
-                        WHERE poi.purchase_order_id = po.id
-                    ) items), '[]'::json) as items
-                    FROM purchase_orders po
-                    LEFT JOIN suppliers s ON po.supplier_id = s.id
-                    WHERE po.share_token = $1
-                `, [token])
-
-                if (result.rows.length === 0) {
-                    return reply.status(404).send({ error: 'Not Found', message: 'Purchase Order not found or link is invalid.' })
-                }
-
-                return reply.send(result.rows[0])
-            } catch (err) {
-                fastify.log.error(err)
-                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to retrieve shared PO' })
-            }
-        }
     })
 }

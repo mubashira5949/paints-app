@@ -1,225 +1,117 @@
 /**
- * Settings Module
- * Handles system configuration such as Dynamic Product Types.
+ * Settings + pack sizes (spec §3.3, §3.6).
  */
 
 import { FastifyInstance } from 'fastify'
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
 import { Type } from '@sinclair/typebox'
 import { authorizeRole } from '../../utils/authorizeRole'
+import {
+    listAppSettings, getAppSetting, upsertAppSetting, deleteAppSetting,
+    listPackSizes, upsertPackSize, disablePackSize,
+} from '../../queries'
+
+const KEY_DEFAULTS: Record<string, unknown> = {
+    wastage_threshold_pct:           5,
+    resource_variance_threshold_pct: 10,
+    dilution_threshold_pct:          10,
+    financial_tolerance:             { mode: 'pct', value: 1 },
+    low_stock_threshold_kg:          { kg: 0 },
+}
+
+const KeyParam     = Type.Object({ key: Type.String({ pattern: '^[a-z][a-z0-9_.]*$', maxLength: 100 }) })
+const KgParam      = Type.Object({ kg:  Type.Number({ exclusiveMinimum: 0 }) })
+const UpsertBody   = Type.Object({ value: Type.Unknown() })
+const PackSizeBody = Type.Object({ pack_size_kg: Type.Number({ exclusiveMinimum: 0 }) })
 
 export default async function (fastifyRaw: FastifyInstance) {
     const fastify = fastifyRaw.withTypeProvider<TypeBoxTypeProvider>()
 
-    const ProductTypeSchema = Type.Object({
-        id: Type.Integer(),
-        name: Type.String(),
-        created_at: Type.String()
-    })
-
-    const CreateProductTypeSchema = Type.Object({
-        name: Type.String({ minLength: 1, maxLength: 50 })
-    })
-
-    const CategorySchema = Type.Object({
-        id: Type.Integer(),
-        name: Type.String(),
-        created_at: Type.String()
-    })
-
-    const GradeSchema = Type.Object({
-        id: Type.Integer(),
-        name: Type.String(),
-        created_at: Type.String()
-    })
-
-    /**
-     * GET /settings/product-types - List all available product types.
-     */
-    fastify.get('/product-types', {
+    fastify.get('/', {
         preHandler: [fastify.authenticate],
-        schema: {
-            response: {
-                200: Type.Array(ProductTypeSchema),
-                400: Type.Object({ error: Type.String(), message: Type.String() }),
-                500: Type.Object({ error: Type.String(), message: Type.String() })
-            }
-        },
-        handler: async (request, reply) => {
-            try {
-                const result = await fastify.db.query(
-                    'SELECT id, name, created_at FROM product_types ORDER BY name ASC'
-                )
-                return reply.send(result.rows)
-            } catch (err) {
-                fastify.log.error(err)
-                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to fetch product types' })
-            }
-        }
-    })
-
-    /**
-     * POST /settings/product-types - Add a new product type.
-     * Restricted to admin/manager.
-     */
-    fastify.post('/product-types', {
-        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
-        schema: {
-            body: CreateProductTypeSchema,
-            response: {
-                201: ProductTypeSchema,
-                400: Type.Object({ error: Type.String(), message: Type.String() }),
-                500: Type.Object({ error: Type.String(), message: Type.String() })
-            }
-        },
-        handler: async (request, reply) => {
-            const { name } = request.body
-            try {
-                const result = await fastify.db.query(
-                    'INSERT INTO product_types (name) VALUES ($1) RETURNING id, name, created_at',
-                    [name]
-                )
-                return reply.status(201).send(result.rows[0])
-            } catch (err: any) {
-                if (err.code === '23505') {
-                    return reply.status(400).send({ error: 'Bad Request', message: 'Product type already exists' })
+        handler: async () => {
+            const rows = await listAppSettings.run(undefined as any, fastify.db)
+            const stored = new Map<string, any>(rows.map((r: any) => [r.key, r]))
+            const out: Record<string, any> = {}
+            for (const [key, def] of Object.entries(KEY_DEFAULTS)) {
+                if (stored.has(key)) {
+                    const row = stored.get(key)
+                    out[key] = { value: row.value, source: 'configured', updated_at: row.updated_at, updated_by: row.updated_by }
+                } else {
+                    out[key] = { value: def, source: 'default' }
                 }
-                fastify.log.error(err)
-                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to create product type' })
             }
-        }
-    })
-
-    /**
-     * DELETE /settings/product-types/:id - Remove a product type.
-     * Restricted to admin/manager.
-     */
-    fastify.delete('/product-types/:id', {
-        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
-        schema: {
-            params: Type.Object({ id: Type.Integer() }),
-            response: {
-                200: Type.Object({ message: Type.String() }),
-                400: Type.Object({ error: Type.String(), message: Type.String() }),
-                404: Type.Object({ error: Type.String(), message: Type.String() }),
-                500: Type.Object({ error: Type.String(), message: Type.String() })
+            for (const [key, row] of stored) {
+                if (!(key in out)) out[key] = { value: row.value, source: 'configured', updated_at: row.updated_at, updated_by: row.updated_by }
             }
+            return out
         },
-        handler: async (request, reply) => {
-            const { id } = request.params
-            try {
-                // First check if any color is using this type via junction table
-                const usageRes = await fastify.db.query(
-                    'SELECT 1 FROM color_product_types WHERE type_id = $1 LIMIT 1',
-                    [id]
-                )
-
-                if (usageRes.rows.length > 0) {
-                    return reply.status(400).send({ 
-                        error: 'Conflict', 
-                        message: 'Cannot delete product type because it is being used by existing colors' 
-                    })
-                }
-
-                const delRes = await fastify.db.query('DELETE FROM product_types WHERE id = $1 RETURNING id', [id])
-                if (delRes.rows.length === 0) {
-                    return reply.status(404).send({ error: 'Not Found', message: 'Product type not found' })
-                }
-                return reply.send({ message: 'Product type deleted' })
-            } catch (err) {
-                fastify.log.error(err)
-                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to delete product type' })
-            }
-        }
     })
 
-    /**
-     * GET /settings/product-series - List all series categories.
-     */
-    fastify.get('/product-series', {
+    fastify.get('/:key', {
         preHandler: [fastify.authenticate],
-        schema: {
-            response: {
-                200: Type.Array(CategorySchema),
-                500: Type.Object({ error: Type.String(), message: Type.String() })
-            }
-        },
+        schema: { params: KeyParam },
         handler: async (request, reply) => {
-            try {
-                const result = await fastify.db.query('SELECT id, name, created_at FROM product_series_categories ORDER BY name ASC')
-                return reply.send(result.rows)
-            } catch (err) {
-                fastify.log.error(err)
-                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to fetch series categories' })
-            }
-        }
+            const key = request.params.key
+            const rows = await getAppSetting.run({ key }, fastify.db)
+            if (rows.length > 0) return { key, value: rows[0].value, source: 'configured', updated_at: rows[0].updated_at, updated_by: rows[0].updated_by }
+            if (key in KEY_DEFAULTS)  return { key, value: KEY_DEFAULTS[key], source: 'default' }
+            return reply.status(404).send({ error: 'Not Found', message: 'Setting not found' })
+        },
     })
 
-    /**
-     * GET /settings/ink-grades - List all ink grades.
-     */
-    fastify.get('/ink-grades', {
+    fastify.put('/:key', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { params: KeyParam, body: UpsertBody },
+        handler: async (request, reply) => {
+            const user = request.user as any
+            const key = request.params.key
+            try {
+                await upsertAppSetting.run({ key, value: JSON.stringify(request.body.value), user_id: user.id }, fastify.db)
+                return { key, value: request.body.value, source: 'configured' }
+            } catch (err) {
+                fastify.log.error(err)
+                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to save setting' })
+            }
+        },
+    })
+
+    fastify.delete('/:key', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { params: KeyParam },
+        handler: async (request) => {
+            await deleteAppSetting.run({ key: request.params.key }, fastify.db)
+            return { key: request.params.key, value: KEY_DEFAULTS[request.params.key] ?? null, source: 'default' }
+        },
+    })
+
+    fastify.get('/pack-sizes', {
         preHandler: [fastify.authenticate],
-        schema: {
-            response: {
-                200: Type.Array(GradeSchema),
-                500: Type.Object({ error: Type.String(), message: Type.String() })
-            }
-        },
-        handler: async (request, reply) => {
-            try {
-                const result = await fastify.db.query('SELECT id, name, created_at FROM ink_grades ORDER BY name ASC')
-                return reply.send(result.rows)
-            } catch (err) {
-                fastify.log.error(err)
-                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to fetch ink grades' })
-            }
-        }
+        handler: async () => listPackSizes.run(undefined as any, fastify.db),
     })
 
-    /**
-     * GET /settings/threshold
-     * Returns the global low stock alert threshold.
-     */
-    fastify.get('/threshold', {
-        preHandler: [fastify.authenticate],
+    fastify.post('/pack-sizes', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { body: PackSizeBody },
         handler: async (request, reply) => {
+            const kg = request.body.pack_size_kg
             try {
-                const result = await fastify.db.query(
-                    "SELECT value FROM app_settings WHERE key = 'low_stock_threshold'"
-                )
-                const threshold = result.rows.length > 0 ? Number(result.rows[0].value) : 20
-                return reply.send({ threshold })
+                await upsertPackSize.run({ pack_size_kg: kg as any }, fastify.db)
+                return reply.status(201).send({ pack_size_kg: kg })
             } catch (err) {
                 fastify.log.error(err)
-                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to fetch threshold' })
+                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to add pack size' })
             }
-        }
+        },
     })
 
-    /**
-     * PUT /settings/threshold
-     * Updates the global low stock alert threshold.
-     */
-    fastify.put('/threshold', {
-        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
-        schema: {
-            body: Type.Object({ threshold: Type.Number({ minimum: 0 }) })
-        },
+    fastify.delete('/pack-sizes/:kg', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { params: KgParam },
         handler: async (request, reply) => {
-            const { threshold } = request.body
-            try {
-                await fastify.db.query(
-                    `INSERT INTO app_settings (key, value, updated_at)
-                     VALUES ('low_stock_threshold', $1, NOW())
-                     ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
-                    [threshold.toString()]
-                )
-                return reply.send({ threshold, message: 'Threshold updated successfully' })
-            } catch (err) {
-                fastify.log.error(err)
-                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to update threshold' })
-            }
-        }
+            const rows = await disablePackSize.run({ pack_size_kg: request.params.kg as any }, fastify.db)
+            if (rows.length === 0) return reply.status(404).send({ error: 'Not Found', message: 'Pack size not found or already inactive' })
+            return { pack_size_kg: rows[0].pack_size_kg, is_active: false }
+        },
     })
 }

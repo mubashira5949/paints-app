@@ -1,1 +1,2624 @@
-openapi: 3.1.1
+openapi: 3.1.0
+info:
+  title: Paints App API
+  version: 1.0.0
+  description: |
+    Backend API for the **Paint Production & Inventory App** (spec:
+    `doc/pr-1_spec.md`). This document is the single source of truth for
+    request/response shapes — `openapi-typescript` generates
+    `src/types/openapi.gen.ts` from it, and Scalar renders it at `/docs`.
+servers:
+  - url: http://localhost:3000
+    description: Local dev
+  - url: https://service-dev.beautyflexinks.com
+    description: Dev environment
+  - url: https://service.beautyflexinks.com
+    description: Production
+
+tags:
+  - name: Auth
+  - name: Users
+  - name: Paints
+  - name: Formulas
+  - name: Resources
+  - name: Customers
+  - name: Suppliers
+  - name: Settings
+  - name: Purchase Orders
+  - name: Production
+  - name: Sales
+  - name: Inventory
+  - name: Dashboard
+  - name: Reports
+
+security:
+  - bearerAuth: []
+
+# ============================================================================
+# Components
+# ============================================================================
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: ES256-signed JWT issued by `POST /auth/login`.
+
+  parameters:
+    Id:
+      in: path
+      name: id
+      required: true
+      schema: { type: integer, minimum: 1 }
+    Page:
+      in: query
+      name: page
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      in: query
+      name: page_size
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Search:
+      in: query
+      name: search
+      schema: { type: string, maxLength: 100 }
+    IncludeArchived:
+      in: query
+      name: include_archived
+      schema: { type: boolean, default: false }
+
+  responses:
+    Created:
+      description: Resource created
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/IdRef' }
+    Updated:
+      description: Resource updated
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/IdRef' }
+    NoContent:
+      description: Empty success response
+    BadRequest:
+      description: Validation failure or unknown FK
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unauthorized:
+      description: Missing or invalid JWT
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: Authenticated but not permitted (role / device gate)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: No matching resource
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Conflict:
+      description: State machine violation or duplicate key
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    InternalError:
+      description: Unhandled server error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+    # ---------- enums (mirror sql/ddl.sql) ----------
+    UserRole:        { type: string, enum: [manager, operator, sales] }
+    DeviceStatus:    { type: string, enum: [pending, approved, rejected] }
+    Classification:  { type: string, enum: [oil_based, water_based] }
+    InkSeries:       { type: string, enum: [LCS, STD, OPQ_JS] }
+    PoStatus:        { type: string, enum: [draft, ordered, shipped, received, cancelled] }
+    PoLineKind:      { type: string, enum: [resource, finished_paint] }
+    OrderStatus:
+      type: string
+      enum: [draft, pending_approval, approved, in_production, ready_for_shipment, shipped, completed, cancelled]
+    PaymentTerms:    { type: string, enum: [prepaid, cod, net] }
+    PaymentMethod:   { type: string, enum: [cash, bank_transfer, upi, cheque, card, other] }
+    PackSource:      { type: string, enum: [produced, supplier] }
+    PackStatus:      { type: string, enum: [in_stock, ready_for_shipment, shipped, sold, lost, returned] }
+    ProductionRequestStatus:
+      type: string
+      enum: [pending, in_production, completed, cancelled]
+    ProductionRunStatus:
+      type: string
+      enum: [planned, in_progress, completed, cancelled]
+    ReturnCondition:   { type: string, enum: [good, damaged, expired, other] }
+    ReturnDisposition: { type: string, enum: [re_inventory, lost] }
+    RefundStatus:      { type: string, enum: [pending_approval, approved, rejected, paid_out, n_a] }
+    StashTxnAction:    { type: string, enum: [added, consumed, repackaged, manual_adjustment] }
+    Currency:          { type: string, pattern: '^[A-Z]{3}$', maxLength: 3, examples: [INR] }
+
+    # ---------- shared helpers ----------
+    IdRef:
+      type: object
+      required: [id]
+      properties: { id: { type: integer } }
+
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:   { type: string, examples: [Bad Request] }
+        message: { type: string }
+        code:    { type: string, description: 'Optional machine code (e.g. device_pending_approval)' }
+        details: { type: array, items: { type: object } }
+
+    Page:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:     { type: array, items: { type: object } }
+        total:     { type: integer }
+        page:      { type: integer }
+        page_size: { type: integer }
+
+    # ---------- auth / users ----------
+    LoginRequest:
+      type: object
+      required: [identifier, password, clientId]
+      properties:
+        identifier: { type: string, minLength: 1, description: Email address or username }
+        password:   { type: string, minLength: 1 }
+        clientId:   { type: string, format: uuid, description: 'Random UUID generated and stored client-side (spec §2.2)' }
+
+    LoginResponse:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, description: ES256 JWT (24h expiry) }
+
+    PublicKeyResponse:
+      type: object
+      required: [algorithm, publicKey]
+      properties:
+        algorithm: { type: string, examples: [ES256] }
+        publicKey: { type: string, description: PEM-formatted public key }
+
+    User:
+      type: object
+      required: [id, username, role, is_active]
+      properties:
+        id:         { type: integer }
+        username:   { type: string }
+        email:      { type: [string, 'null'], format: email }
+        role:       { $ref: '#/components/schemas/UserRole' }
+        is_active:  { type: boolean }
+        last_login: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+
+    CreateUserRequest:
+      type: object
+      required: [username, email, password, role]
+      properties:
+        username: { type: string }
+        email:    { type: string, format: email }
+        password: { type: string, minLength: 6 }
+        role:     { $ref: '#/components/schemas/UserRole' }
+
+    PatchUserRequest:
+      type: object
+      properties:
+        username:  { type: string }
+        email:     { type: string, format: email }
+        role:      { $ref: '#/components/schemas/UserRole' }
+        password:  { type: string, minLength: 6 }
+        is_active: { type: boolean }
+
+    UsersSummary:
+      type: object
+      properties:
+        total_users: { type: integer }
+        managers:    { type: integer }
+        operators:   { type: integer }
+        sales:       { type: integer }
+
+    DeviceRequest:
+      type: object
+      required: [id, user, status]
+      properties:
+        id:           { type: integer }
+        user:         { type: string }
+        device:       { type: [string, 'null'] }
+        last_seen_ip: { type: [string, 'null'] }
+        requested_at: { type: string, format: date-time }
+        status:       { $ref: '#/components/schemas/DeviceStatus' }
+
+    # ---------- paints ----------
+    PaintVariantSummary:
+      type: object
+      required: [id, classification, ink_series]
+      properties:
+        id:             { type: integer }
+        classification: { $ref: '#/components/schemas/Classification' }
+        ink_series:     { $ref: '#/components/schemas/InkSeries' }
+        archived_at:    { type: [string, 'null'], format: date-time }
+
+    PaintListItem:
+      type: object
+      required: [id, name]
+      properties:
+        id:              { type: integer }
+        name:            { type: string }
+        swatch:          { type: [string, 'null'] }
+        notes:           { type: [string, 'null'] }
+        hsn_code:        { type: [string, 'null'] }
+        product_code:    { type: [string, 'null'] }
+        tags:            { type: array, items: { type: string } }
+        classifications: { type: array, items: { $ref: '#/components/schemas/Classification' } }
+        ink_series:      { type: array, items: { $ref: '#/components/schemas/InkSeries' } }
+        variant_count:   { type: [integer, string] }
+        archived_at:     { type: [string, 'null'], format: date-time }
+        created_at:      { type: string, format: date-time }
+        updated_at:      { type: string, format: date-time }
+
+    Paint:
+      allOf:
+        - $ref: '#/components/schemas/PaintListItem'
+        - type: object
+          properties:
+            variants: { type: array, items: { $ref: '#/components/schemas/PaintVariantSummary' } }
+
+    CreatePaintRequest:
+      type: object
+      required: [name, classifications, ink_series]
+      properties:
+        name:            { type: string, minLength: 1, maxLength: 255 }
+        swatch:          { type: string, maxLength: 50 }
+        notes:           { type: string }
+        hsn_code:        { type: string, maxLength: 50 }
+        product_code:    { type: string, maxLength: 50 }
+        tags:            { type: array, items: { type: string, maxLength: 50 }, maxItems: 32 }
+        classifications: { type: array, items: { $ref: '#/components/schemas/Classification' }, minItems: 1, maxItems: 2, uniqueItems: true }
+        ink_series:      { type: array, items: { $ref: '#/components/schemas/InkSeries' },      minItems: 1, maxItems: 3, uniqueItems: true }
+
+    PatchPaintRequest:
+      type: object
+      properties:
+        name:         { type: string, minLength: 1, maxLength: 255 }
+        swatch:       { type: string, maxLength: 50 }
+        notes:        { type: string }
+        hsn_code:     { type: string, maxLength: 50 }
+        product_code: { type: string, maxLength: 50 }
+        tags:         { type: array, items: { type: string, maxLength: 50 }, maxItems: 32 }
+
+    AddVariantsRequest:
+      type: object
+      required: [classifications, ink_series]
+      properties:
+        classifications: { type: array, items: { $ref: '#/components/schemas/Classification' }, minItems: 1, maxItems: 2, uniqueItems: true }
+        ink_series:      { type: array, items: { $ref: '#/components/schemas/InkSeries' },      minItems: 1, maxItems: 3, uniqueItems: true }
+
+    Variant:
+      type: object
+      required: [id, paint_id, classification, ink_series, paint_name]
+      properties:
+        id:             { type: integer }
+        paint_id:       { type: integer }
+        classification: { $ref: '#/components/schemas/Classification' }
+        ink_series:     { $ref: '#/components/schemas/InkSeries' }
+        archived_at:    { type: [string, 'null'], format: date-time }
+        paint_name:     { type: string }
+        hsn_code:       { type: [string, 'null'] }
+        product_code:   { type: [string, 'null'] }
+        swatch:         { type: [string, 'null'] }
+
+    # ---------- formulas ----------
+    FormulaIngredient:
+      type: object
+      required: [resource_id, quantity_kg]
+      properties:
+        resource_id:   { type: integer }
+        resource_name: { type: string }
+        quantity_kg:   { type: [number, string] }
+
+    FormulaListItem:
+      type: object
+      required: [id, variant_id, name, standard_output_kg]
+      properties:
+        id:                              { type: integer }
+        variant_id:                      { type: integer }
+        paint_id:                        { type: integer }
+        paint_name:                      { type: string }
+        classification:                  { $ref: '#/components/schemas/Classification' }
+        ink_series:                      { $ref: '#/components/schemas/InkSeries' }
+        name:                            { type: string }
+        notes:                           { type: [string, 'null'] }
+        standard_output_kg:              { type: [number, string] }
+        is_default:                      { type: boolean }
+        wastage_threshold_pct:           { type: [number, string, 'null'] }
+        resource_variance_threshold_pct: { type: [number, string, 'null'] }
+        dilution_threshold_pct:          { type: [number, string, 'null'] }
+        archived_at:                     { type: [string, 'null'], format: date-time }
+        created_at:                      { type: string, format: date-time }
+        updated_at:                      { type: string, format: date-time }
+
+    Formula:
+      allOf:
+        - $ref: '#/components/schemas/FormulaListItem'
+        - type: object
+          properties:
+            ingredients: { type: array, items: { $ref: '#/components/schemas/FormulaIngredient' } }
+
+    CreateFormulaRequest:
+      type: object
+      required: [variant_id, name, standard_output_kg, ingredients]
+      properties:
+        variant_id:                      { type: integer, minimum: 1 }
+        name:                            { type: string, minLength: 1, maxLength: 255 }
+        notes:                           { type: string }
+        standard_output_kg:              { type: number, exclusiveMinimum: 0 }
+        is_default:                      { type: boolean }
+        wastage_threshold_pct:           { type: number, minimum: 0 }
+        resource_variance_threshold_pct: { type: number, minimum: 0 }
+        dilution_threshold_pct:          { type: number, minimum: 0 }
+        ingredients:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: object
+            required: [resource_id, quantity_kg]
+            properties:
+              resource_id: { type: integer, minimum: 1 }
+              quantity_kg: { type: number, exclusiveMinimum: 0 }
+
+    PatchFormulaRequest:
+      type: object
+      properties:
+        name:                            { type: string, minLength: 1, maxLength: 255 }
+        notes:                           { type: string }
+        standard_output_kg:              { type: number, exclusiveMinimum: 0 }
+        wastage_threshold_pct:           { type: [number, 'null'], minimum: 0 }
+        resource_variance_threshold_pct: { type: [number, 'null'], minimum: 0 }
+        dilution_threshold_pct:          { type: [number, 'null'], minimum: 0 }
+
+    CopyFormulaRequest:
+      type: object
+      properties:
+        variant_id: { type: integer, minimum: 1 }
+        name:       { type: string, minLength: 1, maxLength: 255 }
+
+    ReplaceIngredientsRequest:
+      type: object
+      required: [ingredients]
+      properties:
+        ingredients:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: object
+            required: [resource_id, quantity_kg]
+            properties:
+              resource_id: { type: integer, minimum: 1 }
+              quantity_kg: { type: number, exclusiveMinimum: 0 }
+
+    # ---------- resources ----------
+    ResourceTxnType: { type: string, enum: [po_receipt, production_consumption, dilution_consumption, manual_adjustment] }
+
+    ResourceTransaction:
+      type: object
+      required: [id, txn_type, quantity_kg, created_at]
+      properties:
+        id:               { type: [integer, string] }
+        txn_type:         { $ref: '#/components/schemas/ResourceTxnType' }
+        quantity_kg:      { type: [number, string] }
+        unit_cost_per_kg: { type: [number, string, 'null'] }
+        reference_type:   { type: [string, 'null'] }
+        reference_id:     { type: [integer, string, 'null'] }
+        notes:            { type: [string, 'null'] }
+        created_at:       { type: string, format: date-time }
+
+    ResourceListItem:
+      type: object
+      required: [id, name]
+      properties:
+        id:                       { type: integer }
+        name:                     { type: string }
+        description:              { type: [string, 'null'] }
+        aliases:                  { type: array, items: { type: string } }
+        import_source:            { type: [string, 'null'] }
+        current_stock_kg:         { type: [number, string] }
+        weighted_avg_cost_per_kg: { type: [number, string] }
+        low_stock_threshold_kg:   { type: [number, string, 'null'] }
+        archived_at:              { type: [string, 'null'], format: date-time }
+        created_at:               { type: string, format: date-time }
+        updated_at:               { type: string, format: date-time }
+
+    Resource:
+      allOf:
+        - $ref: '#/components/schemas/ResourceListItem'
+        - type: object
+          properties:
+            recent_transactions:
+              type: array
+              items: { $ref: '#/components/schemas/ResourceTransaction' }
+
+    CreateResourceRequest:
+      type: object
+      required: [name]
+      properties:
+        name:                   { type: string, minLength: 1, maxLength: 255 }
+        description:            { type: string }
+        aliases:                { type: array, items: { type: string, maxLength: 100 }, maxItems: 32 }
+        import_source:          { type: string, maxLength: 255 }
+        low_stock_threshold_kg: { type: number, minimum: 0 }
+
+    PatchResourceRequest:
+      type: object
+      properties:
+        name:                   { type: string, minLength: 1, maxLength: 255 }
+        description:            { type: string }
+        aliases:                { type: array, items: { type: string, maxLength: 100 }, maxItems: 32 }
+        import_source:          { type: string, maxLength: 255 }
+        low_stock_threshold_kg: { type: [number, 'null'], minimum: 0 }
+
+    # ---------- customers ----------
+    ShippingAddress:
+      type: object
+      required: [id, label, address, is_default]
+      properties:
+        id:         { type: integer }
+        label:      { type: string }
+        address:    { type: string }
+        is_default: { type: boolean }
+
+    CustomerListItem:
+      type: object
+      required: [id, name]
+      properties:
+        id:               { type: integer }
+        name:             { type: string }
+        contact_name:     { type: [string, 'null'] }
+        contact_phone:    { type: [string, 'null'] }
+        contact_email:    { type: [string, 'null'] }
+        gst_number:       { type: [string, 'null'] }
+        default_currency: { $ref: '#/components/schemas/Currency' }
+        archived_at:      { type: [string, 'null'], format: date-time }
+        created_at:       { type: string, format: date-time }
+
+    Customer:
+      allOf:
+        - $ref: '#/components/schemas/CustomerListItem'
+        - type: object
+          properties:
+            billing_address:    { type: [string, 'null'] }
+            notes:              { type: [string, 'null'] }
+            updated_at:         { type: string, format: date-time }
+            shipping_addresses: { type: array, items: { $ref: '#/components/schemas/ShippingAddress' } }
+
+    CreateCustomerRequest:
+      type: object
+      required: [name]
+      properties:
+        name:             { type: string, minLength: 1, maxLength: 255 }
+        contact_name:     { type: string, maxLength: 255 }
+        contact_phone:    { type: string, maxLength: 50 }
+        contact_email:    { type: string, format: email, maxLength: 255 }
+        billing_address:  { type: string }
+        gst_number:       { type: string, maxLength: 20 }
+        default_currency: { $ref: '#/components/schemas/Currency' }
+        notes:            { type: string }
+
+    PatchCustomerRequest:
+      type: object
+      properties:
+        name:             { type: string, minLength: 1, maxLength: 255 }
+        contact_name:     { type: string, maxLength: 255 }
+        contact_phone:    { type: string, maxLength: 50 }
+        contact_email:    { type: string, format: email, maxLength: 255 }
+        billing_address:  { type: string }
+        gst_number:       { type: [string, 'null'], maxLength: 20 }
+        default_currency: { $ref: '#/components/schemas/Currency' }
+        notes:            { type: string }
+
+    ShippingAddressRequest:
+      type: object
+      required: [label, address]
+      properties:
+        label:      { type: string, minLength: 1, maxLength: 100 }
+        address:    { type: string, minLength: 1 }
+        is_default: { type: boolean }
+
+    PatchShippingAddressRequest:
+      type: object
+      properties:
+        label:      { type: string, minLength: 1, maxLength: 100 }
+        address:    { type: string, minLength: 1 }
+        is_default: { type: boolean }
+
+    # ---------- suppliers ----------
+    SupplierPOC:
+      type: object
+      required: [name]
+      properties:
+        name:  { type: string, minLength: 1, maxLength: 255 }
+        email: { type: string, format: email, maxLength: 255 }
+        phone: { type: string, maxLength: 50 }
+        role:  { type: string, maxLength: 100 }
+
+    SupplierListItem:
+      type: object
+      required: [id, name]
+      properties:
+        id:           { type: integer }
+        name:         { type: string }
+        contact_name: { type: [string, 'null'] }
+        email:        { type: [string, 'null'] }
+        phone:        { type: [string, 'null'] }
+        gst_number:   { type: [string, 'null'] }
+        archived_at:  { type: [string, 'null'], format: date-time }
+        created_at:   { type: string, format: date-time }
+
+    Supplier:
+      allOf:
+        - $ref: '#/components/schemas/SupplierListItem'
+        - type: object
+          properties:
+            address:    { type: [string, 'null'] }
+            website:    { type: [string, 'null'] }
+            pocs:       { type: array, items: { $ref: '#/components/schemas/SupplierPOC' } }
+            notes:      { type: [string, 'null'] }
+            updated_at: { type: string, format: date-time }
+
+    CreateSupplierRequest:
+      type: object
+      required: [name]
+      properties:
+        name:         { type: string, minLength: 1, maxLength: 255 }
+        contact_name: { type: string, maxLength: 255 }
+        email:        { type: string, format: email, maxLength: 255 }
+        phone:        { type: string, maxLength: 50 }
+        address:      { type: string }
+        website:      { type: string, maxLength: 255 }
+        gst_number:   { type: string, maxLength: 20 }
+        pocs:         { type: array, items: { $ref: '#/components/schemas/SupplierPOC' }, maxItems: 32 }
+        notes:        { type: string }
+
+    PatchSupplierRequest:
+      $ref: '#/components/schemas/CreateSupplierRequest'
+
+    # ---------- settings + pack sizes ----------
+    SettingEntry:
+      type: object
+      required: [value, source]
+      properties:
+        value:      {}
+        source:     { type: string, enum: [configured, default] }
+        updated_at: { type: [string, 'null'], format: date-time }
+        updated_by: { type: [integer, 'null'] }
+
+    UpsertSettingRequest:
+      type: object
+      required: [value]
+      properties:
+        value: {}
+
+    PackSize:
+      type: object
+      required: [pack_size_kg, is_active]
+      properties:
+        pack_size_kg: { type: [number, string] }
+        is_active:    { type: boolean }
+        created_at:   { type: string, format: date-time }
+
+    # ---------- purchase orders ----------
+    PurchaseOrderItem:
+      type: object
+      required: [id, kind, landed_cost_per_kg]
+      properties:
+        id:                   { type: integer }
+        kind:                 { $ref: '#/components/schemas/PoLineKind' }
+        resource_id:          { type: [integer, 'null'] }
+        resource_name:        { type: [string, 'null'] }
+        variant_id:           { type: [integer, 'null'] }
+        paint_name:           { type: [string, 'null'] }
+        classification:       { oneOf: [ { $ref: '#/components/schemas/Classification' }, { type: 'null' } ] }
+        ink_series:           { oneOf: [ { $ref: '#/components/schemas/InkSeries' }, { type: 'null' } ] }
+        pack_size_kg:         { type: [number, string, 'null'] }
+        quantity_kg:          { type: [number, string, 'null'] }
+        quantity_packs:       { type: [integer, 'null'] }
+        landed_cost_per_kg:   { type: [number, string] }
+        received_quantity_kg: { type: [number, string] }
+        received_packs:       { type: [integer, string] }
+
+    PurchaseOrderListItem:
+      type: object
+      required: [id, supplier_id, status, currency]
+      properties:
+        id:            { type: integer }
+        supplier_id:   { type: integer }
+        supplier_name: { type: string }
+        status:        { $ref: '#/components/schemas/PoStatus' }
+        currency:      { $ref: '#/components/schemas/Currency' }
+        notes:         { type: [string, 'null'] }
+        ordered_at:    { type: [string, 'null'], format: date-time }
+        shipped_at:    { type: [string, 'null'], format: date-time }
+        received_at:   { type: [string, 'null'], format: date-time }
+        archived_at:   { type: [string, 'null'], format: date-time }
+        created_at:    { type: string, format: date-time }
+        total_cost:    { type: [number, string] }
+        item_count:    { type: [integer, string] }
+
+    PurchaseOrder:
+      allOf:
+        - $ref: '#/components/schemas/PurchaseOrderListItem'
+        - type: object
+          properties:
+            share_token: { type: string, format: uuid }
+            updated_at:  { type: string, format: date-time }
+            items:       { type: array, items: { $ref: '#/components/schemas/PurchaseOrderItem' } }
+
+    POItemInput:
+      type: object
+      required: [kind, landed_cost_per_kg]
+      properties:
+        kind:               { $ref: '#/components/schemas/PoLineKind' }
+        resource_id:        { type: integer, minimum: 1 }
+        variant_id:         { type: integer, minimum: 1 }
+        pack_size_kg:       { type: number, exclusiveMinimum: 0 }
+        quantity_kg:        { type: number, exclusiveMinimum: 0 }
+        quantity_packs:     { type: integer, exclusiveMinimum: 0 }
+        landed_cost_per_kg: { type: number, minimum: 0 }
+
+    CreatePORequest:
+      type: object
+      required: [supplier_id, items]
+      properties:
+        supplier_id: { type: integer, minimum: 1 }
+        currency:    { $ref: '#/components/schemas/Currency' }
+        notes:       { type: string }
+        items:       { type: array, minItems: 1, maxItems: 200, items: { $ref: '#/components/schemas/POItemInput' } }
+
+    PatchPORequest:
+      type: object
+      properties:
+        currency: { $ref: '#/components/schemas/Currency' }
+        notes:    { type: string }
+
+    PatchPOItemRequest:
+      type: object
+      properties:
+        pack_size_kg:       { type: number, exclusiveMinimum: 0 }
+        quantity_kg:        { type: number, exclusiveMinimum: 0 }
+        quantity_packs:     { type: integer, exclusiveMinimum: 0 }
+        landed_cost_per_kg: { type: number, minimum: 0 }
+
+    TransitionPORequest:
+      type: object
+      required: [to]
+      properties:
+        to: { type: string, enum: [ordered, shipped, cancelled] }
+
+    ReceivePORequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: object
+            required: [id]
+            properties:
+              id:                   { type: integer, minimum: 1 }
+              received_quantity_kg: { type: number, exclusiveMinimum: 0 }
+              received_packs:       { type: integer, exclusiveMinimum: 0 }
+
+    # ---------- production ----------
+    ProductionRequest:
+      type: object
+      required: [id, variant_id, pack_size_kg, quantity_packs, origin, status]
+      properties:
+        id:             { type: integer }
+        variant_id:     { type: integer }
+        pack_size_kg:   { type: [number, string] }
+        quantity_packs: { type: integer }
+        origin:         { type: string, enum: [customer_order, demand_suggestion] }
+        order_item_id:  { type: [integer, 'null'] }
+        status:         { $ref: '#/components/schemas/ProductionRequestStatus' }
+        notes:          { type: [string, 'null'] }
+        created_at:     { type: string, format: date-time }
+        paint_name:     { type: string }
+        classification: { $ref: '#/components/schemas/Classification' }
+        ink_series:     { $ref: '#/components/schemas/InkSeries' }
+
+    CreateProductionRequestRequest:
+      type: object
+      required: [variant_id, pack_size_kg, quantity_packs]
+      properties:
+        variant_id:     { type: integer, minimum: 1 }
+        pack_size_kg:   { type: number, exclusiveMinimum: 0 }
+        quantity_packs: { type: integer, exclusiveMinimum: 0 }
+        notes:          { type: string }
+
+    ProductionRunListItem:
+      type: object
+      required: [id, batch_number, variant_id, formula_id, status]
+      properties:
+        id:                 { type: integer }
+        batch_number:       { type: string }
+        variant_id:         { type: integer }
+        formula_id:         { type: integer }
+        status:             { $ref: '#/components/schemas/ProductionRunStatus' }
+        expected_output_kg: { type: [number, string] }
+        actual_output_kg:   { type: [number, string, 'null'] }
+        wastage_pct:        { type: [number, string, 'null'] }
+        wastage_flagged:    { type: boolean }
+        dilution_total_kg:  { type: [number, string] }
+        dilution_flagged:   { type: boolean }
+        started_at:         { type: [string, 'null'], format: date-time }
+        completed_at:       { type: [string, 'null'], format: date-time }
+        created_at:         { type: string, format: date-time }
+        operator:           { type: string }
+        paint_name:         { type: string }
+        classification:     { $ref: '#/components/schemas/Classification' }
+        ink_series:         { $ref: '#/components/schemas/InkSeries' }
+
+    ResourceActual:
+      type: object
+      required: [resource_id, expected_kg, actual_kg, flagged]
+      properties:
+        resource_id:   { type: integer }
+        resource_name: { type: string }
+        expected_kg:   { type: [number, string] }
+        actual_kg:     { type: [number, string] }
+        variance_pct:  { type: [number, string, 'null'] }
+        flagged:       { type: boolean }
+
+    DilutionAdjustment:
+      type: object
+      required: [id, resource_id, kg_added]
+      properties:
+        id:            { type: integer }
+        resource_id:   { type: integer }
+        resource_name: { type: string }
+        kg_added:      { type: [number, string] }
+        notes:         { type: [string, 'null'] }
+        created_at:    { type: string, format: date-time }
+
+    RunPackSummary:
+      type: object
+      properties:
+        id:           { type: integer }
+        pack_size_kg: { type: [number, string] }
+        status:       { $ref: '#/components/schemas/PackStatus' }
+        cost_per_kg:  { type: [number, string] }
+
+    ProductionRun:
+      allOf:
+        - $ref: '#/components/schemas/ProductionRunListItem'
+        - type: object
+          properties:
+            request_id:         { type: [integer, 'null'] }
+            notes:              { type: [string, 'null'] }
+            formula_name:       { type: string }
+            standard_output_kg: { type: [number, string] }
+            actuals:            { type: array, items: { $ref: '#/components/schemas/ResourceActual' } }
+            dilution:           { type: array, items: { $ref: '#/components/schemas/DilutionAdjustment' } }
+            packs:              { type: array, items: { $ref: '#/components/schemas/RunPackSummary' } }
+            archived_at:        { type: [string, 'null'], format: date-time }
+            archived_by:        { type: [integer, 'null'] }
+            created_by:         { type: integer }
+            updated_at:         { type: string, format: date-time }
+
+    CreateRunRequest:
+      type: object
+      required: [variant_id, batch_number, expected_output_kg]
+      properties:
+        request_id:         { type: integer, minimum: 1 }
+        variant_id:         { type: integer, minimum: 1 }
+        formula_id:         { type: integer, minimum: 1, description: 'Default = variant''s is_default formula' }
+        batch_number:       { type: string, minLength: 1, maxLength: 50 }
+        expected_output_kg: { type: number, exclusiveMinimum: 0 }
+        notes:              { type: string }
+
+    ActualsRequest:
+      type: object
+      required: [actual_output_kg, resources]
+      properties:
+        actual_output_kg: { type: number, minimum: 0 }
+        resources:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: object
+            required: [resource_id, actual_kg]
+            properties:
+              resource_id: { type: integer, minimum: 1 }
+              actual_kg:   { type: number, minimum: 0 }
+
+    DilutionRequest:
+      type: object
+      required: [resource_id, kg_added]
+      properties:
+        resource_id: { type: integer, minimum: 1 }
+        kg_added:    { type: number, exclusiveMinimum: 0 }
+        notes:       { type: string }
+
+    PackagingRequest:
+      type: object
+      required: [packs]
+      properties:
+        packs:
+          type: array
+          minItems: 0
+          maxItems: 50
+          items:
+            type: object
+            required: [pack_size_kg, units]
+            properties:
+              pack_size_kg: { type: number, exclusiveMinimum: 0 }
+              units:        { type: integer, minimum: 1 }
+              location:     { type: string, maxLength: 255 }
+        stash_kg: { type: number, minimum: 0 }
+        notes:    { type: string }
+
+    RepackageRequest:
+      type: object
+      required: [pack_size_kg, units]
+      properties:
+        pack_size_kg: { type: number, exclusiveMinimum: 0 }
+        units:        { type: integer, minimum: 1 }
+        notes:        { type: string }
+
+    ProductionSummary:
+      type: object
+      properties:
+        by_status:
+          type: array
+          items:
+            type: object
+            properties:
+              status: { $ref: '#/components/schemas/ProductionRunStatus' }
+              count:  { type: [integer, string] }
+        flagged_last_30_days: { type: integer }
+
+    # ---------- sales ----------
+    CustomerOrderItem:
+      type: object
+      required: [id, variant_id, pack_size_kg, quantity]
+      properties:
+        id:                        { type: integer }
+        variant_id:                { type: integer }
+        paint_name:                { type: string }
+        classification:            { $ref: '#/components/schemas/Classification' }
+        ink_series:                { $ref: '#/components/schemas/InkSeries' }
+        pack_size_kg:              { type: [number, string] }
+        quantity:                  { type: integer }
+        negotiated_price_per_pack: { type: [number, string, 'null'], description: 'Null for non-owner Sales reps (§3.4)' }
+        cost_to_build_per_pack:    { type: [number, string, 'null'] }
+
+    CustomerOrderListItem:
+      type: object
+      required: [id, customer_id, status, currency, payment_terms]
+      properties:
+        id:                  { type: integer }
+        customer_id:         { type: integer }
+        customer_name:       { type: string }
+        status:              { $ref: '#/components/schemas/OrderStatus' }
+        currency:            { $ref: '#/components/schemas/Currency' }
+        payment_terms:       { $ref: '#/components/schemas/PaymentTerms' }
+        payment_net_days:    { type: [integer, 'null'] }
+        order_date:          { type: string, format: date-time }
+        scheduled_ship_date: { type: [string, 'null'], format: date }
+        due_date:            { type: [string, 'null'], format: date }
+        created_by:          { type: integer }
+        created_by_name:     { type: string }
+        approved_by:         { type: [integer, 'null'] }
+        approved_at:         { type: [string, 'null'], format: date-time }
+        item_count:          { type: [integer, string] }
+
+    CustomerOrder:
+      allOf:
+        - $ref: '#/components/schemas/CustomerOrderListItem'
+        - type: object
+          properties:
+            shipping_address_id: { type: [integer, 'null'] }
+            shipping_label:      { type: [string, 'null'] }
+            shipping_address:    { type: [string, 'null'] }
+            gst_number:          { type: [string, 'null'] }
+            notes:               { type: [string, 'null'] }
+            shipped_at:          { type: [string, 'null'], format: date-time }
+            completed_at:        { type: [string, 'null'], format: date-time }
+            cancelled_at:        { type: [string, 'null'], format: date-time }
+            archived_at:         { type: [string, 'null'], format: date-time }
+            updated_at:          { type: string, format: date-time }
+            items:               { type: array, items: { $ref: '#/components/schemas/CustomerOrderItem' } }
+
+    OrderItemInput:
+      type: object
+      required: [variant_id, pack_size_kg, quantity, negotiated_price_per_pack]
+      properties:
+        variant_id:                { type: integer, minimum: 1 }
+        pack_size_kg:              { type: number, exclusiveMinimum: 0 }
+        quantity:                  { type: integer, exclusiveMinimum: 0 }
+        negotiated_price_per_pack: { type: number, minimum: 0 }
+
+    CreateOrderRequest:
+      type: object
+      required: [customer_id, items]
+      properties:
+        customer_id:         { type: integer, minimum: 1 }
+        shipping_address_id: { type: integer, minimum: 1 }
+        currency:            { $ref: '#/components/schemas/Currency' }
+        payment_terms:       { $ref: '#/components/schemas/PaymentTerms' }
+        payment_net_days:    { type: integer, minimum: 0 }
+        scheduled_ship_date: { type: string, format: date }
+        notes:               { type: string }
+        items:               { type: array, minItems: 1, maxItems: 200, items: { $ref: '#/components/schemas/OrderItemInput' } }
+
+    PatchOrderRequest:
+      type: object
+      properties:
+        shipping_address_id: { type: integer, minimum: 1 }
+        currency:            { $ref: '#/components/schemas/Currency' }
+        payment_terms:       { $ref: '#/components/schemas/PaymentTerms' }
+        payment_net_days:    { type: [integer, 'null'], minimum: 0 }
+        scheduled_ship_date: { type: [string, 'null'], format: date }
+        notes:               { type: string }
+
+    OrderConfirmation:
+      type: object
+      required: [confirmation, payload]
+      properties:
+        confirmation:
+          type: object
+          properties:
+            id:         { type: integer }
+            version:    { type: integer }
+            created_at: { type: string, format: date-time }
+        payload:
+          type: object
+          additionalProperties: true
+
+    CostToBuildLine:
+      type: object
+      properties:
+        id:                     { type: integer }
+        variant_id:             { type: integer }
+        pack_size_kg:           { type: [number, string] }
+        quantity:               { type: integer }
+        cost_to_build_per_pack: { type: [number, 'null'] }
+        line_cost:              { type: [number, 'null'] }
+
+    SaleItemInput:
+      type: object
+      required: [order_item_id, variant_id, pack_size_kg, quantity]
+      properties:
+        order_item_id:  { type: integer, minimum: 1 }
+        variant_id:     { type: integer, minimum: 1 }
+        pack_size_kg:   { type: number, exclusiveMinimum: 0 }
+        quantity:       { type: integer, exclusiveMinimum: 0 }
+        price_per_pack: { type: number, minimum: 0, description: 'Override; default = customer_order_items.negotiated_price_per_pack' }
+        pack_ids:       { type: array, items: { type: integer, minimum: 1 }, minItems: 1, maxItems: 500, description: 'Specific finished_paint_packs to assign' }
+
+    CreateSaleRequest:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, minItems: 1, maxItems: 200, items: { $ref: '#/components/schemas/SaleItemInput' } }
+        notes: { type: string }
+
+    SaleItem:
+      type: object
+      properties:
+        id:             { type: integer }
+        variant_id:     { type: integer }
+        pack_size_kg:   { type: [number, string] }
+        quantity:       { type: integer }
+        price_per_pack: { type: [number, string, 'null'] }
+        cost_per_pack:  { type: [number, string, 'null'] }
+        paint_name:     { type: string }
+        classification: { $ref: '#/components/schemas/Classification' }
+        ink_series:     { $ref: '#/components/schemas/InkSeries' }
+
+    Payment:
+      type: object
+      properties:
+        id:               { type: integer }
+        amount:           { type: [number, string] }
+        currency:         { $ref: '#/components/schemas/Currency' }
+        date_received:    { type: string, format: date }
+        method:           { $ref: '#/components/schemas/PaymentMethod' }
+        reference_number: { type: [string, 'null'] }
+
+    PaymentStatus: { type: string, enum: [unpaid, partial, paid, overpaid] }
+
+    SaleListItem:
+      type: object
+      properties:
+        id:             { type: integer }
+        order_id:       { type: integer }
+        customer_id:    { type: integer }
+        customer_name:  { type: string }
+        currency:       { $ref: '#/components/schemas/Currency' }
+        sale_date:      { type: string, format: date-time }
+        due_date:       { type: [string, 'null'], format: date }
+        created_by:     { type: integer }
+        billed:         { type: [number, string, 'null'] }
+        collected:      { type: [number, string, 'null'] }
+        payment_status: { oneOf: [ { $ref: '#/components/schemas/PaymentStatus' }, { type: 'null' } ] }
+
+    Sale:
+      allOf:
+        - $ref: '#/components/schemas/SaleListItem'
+        - type: object
+          properties:
+            notes:      { type: [string, 'null'] }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+            items:      { type: array, items: { $ref: '#/components/schemas/SaleItem' } }
+            payments:   { type: array, items: { $ref: '#/components/schemas/Payment' } }
+
+    CreatePaymentRequest:
+      type: object
+      required: [amount, currency, date_received, method]
+      properties:
+        amount:            { type: number, exclusiveMinimum: 0 }
+        currency:          { $ref: '#/components/schemas/Currency' }
+        date_received:     { type: string, format: date }
+        method:            { $ref: '#/components/schemas/PaymentMethod' }
+        reference_number:  { type: string, maxLength: 255 }
+        receiving_account: { type: string, maxLength: 255 }
+        attachment_url:    { type: string, maxLength: 2048 }
+        notes:             { type: string }
+
+    ReturnItemInput:
+      type: object
+      required: [sale_item_id, condition, disposition]
+      properties:
+        sale_item_id: { type: integer, minimum: 1 }
+        pack_id:      { type: integer, minimum: 1 }
+        condition:    { $ref: '#/components/schemas/ReturnCondition' }
+        disposition:  { $ref: '#/components/schemas/ReturnDisposition' }
+        notes:        { type: string }
+
+    CreateReturnRequest:
+      type: object
+      required: [items]
+      properties:
+        items:           { type: array, minItems: 1, maxItems: 200, items: { $ref: '#/components/schemas/ReturnItemInput' } }
+        notes:           { type: string }
+        refund_amount:   { type: number, minimum: 0 }
+        refund_currency: { $ref: '#/components/schemas/Currency' }
+
+    ReturnResponse:
+      type: object
+      required: [return_id]
+      properties:
+        return_id: { type: integer }
+        refund_id: { type: [integer, 'null'] }
+
+    RejectRefundRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 1000 }
+
+    RefundPayoutRequest:
+      type: object
+      required: [amount, currency, date_paid, method]
+      properties:
+        amount:           { type: number, exclusiveMinimum: 0 }
+        currency:         { $ref: '#/components/schemas/Currency' }
+        date_paid:        { type: string, format: date }
+        method:           { $ref: '#/components/schemas/PaymentMethod' }
+        reference_number: { type: string, maxLength: 255 }
+        paying_account:   { type: string, maxLength: 255 }
+        attachment_url:   { type: string, maxLength: 2048 }
+        notes:            { type: string }
+
+    # ---------- inventory ----------
+    FinishedInventoryGroup:
+      type: object
+      properties:
+        variant_id:      { type: integer }
+        paint_id:        { type: integer }
+        paint_name:      { type: string }
+        classification:  { $ref: '#/components/schemas/Classification' }
+        ink_series:      { $ref: '#/components/schemas/InkSeries' }
+        pack_size_kg:    { type: [number, string] }
+        status:          { $ref: '#/components/schemas/PackStatus' }
+        units:           { type: [integer, string] }
+        total_kg:        { type: [number, string] }
+        avg_cost_per_kg: { type: [number, string] }
+
+    FinishedPackRow:
+      type: object
+      properties:
+        id:                { type: integer }
+        pack_size_kg:      { type: [number, string] }
+        source:            { $ref: '#/components/schemas/PackSource' }
+        production_run_id: { type: [integer, 'null'] }
+        po_item_id:        { type: [integer, 'null'] }
+        cost_per_kg:       { type: [number, string] }
+        status:            { $ref: '#/components/schemas/PackStatus' }
+        location:          { type: [string, 'null'] }
+        created_at:        { type: string, format: date-time }
+
+    StashEntry:
+      type: object
+      properties:
+        variant_id:     { type: integer }
+        kg_remaining:   { type: [number, string] }
+        updated_at:     { type: string, format: date-time }
+        paint_name:     { type: string }
+        classification: { $ref: '#/components/schemas/Classification' }
+        ink_series:     { $ref: '#/components/schemas/InkSeries' }
+
+    ResourceInventoryRow:
+      type: object
+      properties:
+        id:                       { type: integer }
+        name:                     { type: string }
+        aliases:                  { type: array, items: { type: string } }
+        current_stock_kg:         { type: [number, string] }
+        weighted_avg_cost_per_kg: { type: [number, string] }
+        low_stock_threshold_kg:   { type: [number, string, 'null'] }
+        effective_threshold_kg:   { type: [number, string] }
+        is_low_stock:             { type: boolean }
+
+    # ---------- dashboard / reports ----------
+    DashboardCounts:
+      type: object
+      properties:
+        paints:              { type: [integer, string] }
+        variants:            { type: [integer, string] }
+        formulas:            { type: [integer, string] }
+        resources:           { type: [integer, string] }
+        customers:           { type: [integer, string] }
+        suppliers:           { type: [integer, string] }
+        packs_in_stock:      { type: [integer, string] }
+        packs_ready_to_ship: { type: [integer, string] }
+
+    DashboardResponse:
+      type: object
+      properties:
+        counts:                       { $ref: '#/components/schemas/DashboardCounts' }
+        low_stock_resources:          { type: array, items: { type: object } }
+        pending_production_requests:  { type: array, items: { type: object } }
+        open_purchase_orders:         { type: array, items: { type: object } }
+        pending_device_approvals:     { type: array, items: { type: object } }
+        flagged_runs_last_30_days:    { type: array, items: { type: object } }
+        overdue_sales:                { type: array, items: { type: object } }
+
+    IrregularityReportRow:
+      type: object
+      properties:
+        id:                  { type: integer }
+        batch_number:        { type: string }
+        variant_id:          { type: integer }
+        formula_id:          { type: integer }
+        status:              { $ref: '#/components/schemas/ProductionRunStatus' }
+        expected_output_kg:  { type: [number, string] }
+        actual_output_kg:    { type: [number, string, 'null'] }
+        wastage_pct:         { type: [number, string, 'null'] }
+        wastage_flagged:     { type: boolean }
+        dilution_total_kg:   { type: [number, string] }
+        dilution_flagged:    { type: boolean }
+        operator:            { type: string }
+        completed_at:        { type: [string, 'null'], format: date-time }
+        resource_variances:  { type: array, items: { $ref: '#/components/schemas/ResourceActual' } }
+        dilution_adjustments: { type: array, items: { $ref: '#/components/schemas/DilutionAdjustment' } }
+
+    OperatorSummaryRow:
+      type: object
+      properties:
+        operator_id:  { type: integer }
+        operator:     { type: string }
+        runs:         { type: [integer, string] }
+        flagged_runs: { type: [integer, string] }
+        wastage_kg:   { type: [number, string] }
+
+# ============================================================================
+# Paths
+# ============================================================================
+
+paths:
+  # ---------- Auth ----------
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in and receive a JWT
+      description: |
+        Requires `clientId` (UUID) per spec §2.2. First sign-in from an
+        unrecognised device returns `403 device_pending_approval` and records
+        a pending row in `user_devices`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Signed JWT
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /auth/set-password:
+    post:
+      tags: [Auth]
+      summary: Set a new password (first-login / Manager-reset flow, spec §5)
+      description: |
+        Only succeeds when the target user is in the must-reset state
+        (`password_hash IS NULL` or `password_reset_required = TRUE`). The
+        same device-approval gate as `/auth/login` runs; on success returns
+        a JWT just like `/auth/login`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier, new_password, clientId]
+              properties:
+                identifier:   { type: string, minLength: 1 }
+                new_password: { type: string, minLength: 8, maxLength: 255 }
+                clientId:     { type: string, format: uuid }
+      responses:
+        '200':
+          description: Signed JWT
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /auth/public-key:
+    get:
+      tags: [Auth]
+      summary: ES256 public key (PEM)
+      security: []
+      responses:
+        '200':
+          description: PEM-encoded public key
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicKeyResponse' }
+
+  /users/{id}/reset-password:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Users]
+      summary: Manager-triggered password reset (spec §5)
+      description: Clears password_hash and sets password_reset_required. The user must set a new password on their next sign-in via `/auth/set-password`.
+      responses:
+        '200':
+          description: Reset
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  user:    { type: object, properties: { id: { type: integer }, username: { type: string } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------- Users ----------
+  /users:
+    get:
+      tags: [Users]
+      summary: List users (Manager)
+      responses:
+        '200':
+          description: All users
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/User' } }
+    post:
+      tags: [Users]
+      summary: Create a new user (Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateUserRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  user:    { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /users/summary:
+    get:
+      tags: [Users]
+      summary: Aggregate counts by role (Manager)
+      responses:
+        '200':
+          description: Counts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UsersSummary' }
+
+  /roles:
+    get:
+      tags: [Users]
+      summary: Available user_role enum values (Manager)
+      responses:
+        '200':
+          description: Role list
+          content:
+            application/json:
+              schema: { type: array, items: { type: object, properties: { name: { type: string } } } }
+
+  /users/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    patch:
+      tags: [Users]
+      summary: Update a user (Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PatchUserRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  user:    { $ref: '#/components/schemas/User' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Users]
+      summary: Delete a user (Manager)
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  user:    { type: object, properties: { id: { type: integer }, username: { type: string } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /users/device-requests:
+    get:
+      tags: [Users]
+      summary: List pending device approvals (Manager)
+      responses:
+        '200':
+          description: Pending device requests
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/DeviceRequest' } }
+
+  /users/device-requests/{id}/approve:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Users]
+      summary: Approve a pending device (Manager)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { message: { type: string } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /users/device-requests/{id}/reject:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Users]
+      summary: Reject a pending device (Manager)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { message: { type: string } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------- Paints ----------
+  /paints:
+    get:
+      tags: [Paints]
+      summary: List paints with pagination + filters
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/IncludeArchived'
+        - { in: query, name: hsn_code, schema: { type: string } }
+        - { in: query, name: product_code, schema: { type: string } }
+        - { in: query, name: classification, schema: { $ref: '#/components/schemas/Classification' } }
+        - { in: query, name: ink_series, schema: { $ref: '#/components/schemas/InkSeries' } }
+        - { in: query, name: tag, schema: { type: string } }
+      responses:
+        '200':
+          description: Page of paints
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/PaintListItem' } }
+    post:
+      tags: [Paints]
+      summary: Create a paint + initial variant matrix (Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePaintRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /paints/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get:
+      tags: [Paints]
+      summary: One paint with its variants
+      responses:
+        '200':
+          description: Paint
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Paint' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Paints]
+      summary: Update paint metadata (Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PatchPaintRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /paints/{id}/variants:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Paints]
+      summary: Add variants (Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddVariantsRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /paints/{id}/archive:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Paints]
+      summary: Archive paint + cascade to its variants (Manager)
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /paints/{id}/restore:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Paints]
+      summary: Restore an archived paint + variants (Manager)
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /paints/variants/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get:
+      tags: [Paints]
+      summary: One variant
+      responses:
+        '200':
+          description: Variant
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Variant' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /paints/variants/{id}/archive:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Paints]
+      summary: Archive a variant (Manager)
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /paints/variants/{id}/restore:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Paints]
+      summary: Restore a variant (Manager)
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------- Formulas ----------
+  /formulas:
+    get:
+      tags: [Formulas]
+      summary: List formulas
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/IncludeArchived'
+        - { in: query, name: variant_id, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: Page of formulas
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/FormulaListItem' } }
+    post:
+      tags: [Formulas]
+      summary: Create formula + ingredients (Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateFormulaRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+
+  /formulas/variants/{variantId}:
+    parameters:
+      - { in: path, name: variantId, required: true, schema: { type: integer, minimum: 1 } }
+    get:
+      tags: [Formulas]
+      summary: All non-archived formulas for a variant
+      responses:
+        '200':
+          description: Variant's formulas
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/FormulaListItem' } }
+
+  /formulas/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get:
+      tags: [Formulas]
+      summary: One formula with ingredients
+      responses:
+        '200': { description: Formula, content: { application/json: { schema: { $ref: '#/components/schemas/Formula' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Formulas]
+      summary: Update name/notes/thresholds (Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PatchFormulaRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+
+  /formulas/{id}/copy:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Formulas]
+      summary: Duplicate a formula (Manager)
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CopyFormulaRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+
+  /formulas/{id}/ingredients:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    put:
+      tags: [Formulas]
+      summary: Replace the ingredient list (Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReplaceIngredientsRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+
+  /formulas/{id}/default:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Formulas]
+      summary: Mark as the default formula for its variant (Manager)
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+
+  /formulas/{id}/archive:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Formulas]
+      summary: Archive (Manager)
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+
+  /formulas/{id}/restore:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Formulas]
+      summary: Restore (Manager)
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+
+  # ---------- Resources ----------
+  /resources:
+    get:
+      tags: [Resources]
+      summary: List resources
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/IncludeArchived'
+        - { in: query, name: low_stock_only, schema: { type: boolean } }
+      responses:
+        '200':
+          description: Page of resources
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/ResourceListItem' } }
+    post:
+      tags: [Resources]
+      summary: Create a resource (Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateResourceRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+
+  /resources/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get:
+      tags: [Resources]
+      summary: One resource with recent transactions
+      responses:
+        '200': { description: Resource, content: { application/json: { schema: { $ref: '#/components/schemas/Resource' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Resources]
+      summary: Update (Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PatchResourceRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+
+  /resources/{id}/archive:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post: { tags: [Resources], summary: Archive (Manager), responses: { '200': { $ref: '#/components/responses/Updated' } } }
+
+  /resources/{id}/restore:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post: { tags: [Resources], summary: Restore (Manager), responses: { '200': { $ref: '#/components/responses/Updated' } } }
+
+  # ---------- Customers ----------
+  /customers:
+    get:
+      tags: [Customers]
+      summary: List customers
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/IncludeArchived'
+      responses:
+        '200':
+          description: Page of customers
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/CustomerListItem' } }
+    post:
+      tags: [Customers]
+      summary: Create (Manager or Sales)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCustomerRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+
+  /customers/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get:
+      tags: [Customers]
+      summary: One customer with shipping addresses
+      responses:
+        '200': { description: Customer, content: { application/json: { schema: { $ref: '#/components/schemas/Customer' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Customers]
+      summary: Update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PatchCustomerRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+
+  /customers/{id}/archive:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post: { tags: [Customers], summary: Archive (Manager), responses: { '200': { $ref: '#/components/responses/Updated' } } }
+
+  /customers/{id}/restore:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post: { tags: [Customers], summary: Restore (Manager), responses: { '200': { $ref: '#/components/responses/Updated' } } }
+
+  /customers/{id}/shipping-addresses:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Customers]
+      summary: Add a shipping address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ShippingAddressRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+
+  /customers/shipping-addresses/{addrId}:
+    parameters:
+      - { in: path, name: addrId, required: true, schema: { type: integer, minimum: 1 } }
+    patch:
+      tags: [Customers]
+      summary: Update shipping address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PatchShippingAddressRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+    delete:
+      tags: [Customers]
+      summary: Remove shipping address
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------- Suppliers ----------
+  /suppliers:
+    get:
+      tags: [Suppliers]
+      summary: List suppliers
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/IncludeArchived'
+      responses:
+        '200':
+          description: Page of suppliers
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/SupplierListItem' } }
+    post:
+      tags: [Suppliers]
+      summary: Create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSupplierRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+
+  /suppliers/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get:
+      tags: [Suppliers]
+      summary: One supplier
+      responses:
+        '200': { description: Supplier, content: { application/json: { schema: { $ref: '#/components/schemas/Supplier' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Suppliers]
+      summary: Update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PatchSupplierRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+
+  /suppliers/{id}/archive:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post: { tags: [Suppliers], summary: Archive (Manager), responses: { '200': { $ref: '#/components/responses/Updated' } } }
+
+  /suppliers/{id}/restore:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post: { tags: [Suppliers], summary: Restore (Manager), responses: { '200': { $ref: '#/components/responses/Updated' } } }
+
+  # ---------- Settings ----------
+  /settings:
+    get:
+      tags: [Settings]
+      summary: All app settings merged with defaults
+      responses:
+        '200':
+          description: Settings map
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/SettingEntry'
+
+  /settings/{key}:
+    parameters:
+      - { in: path, name: key, required: true, schema: { type: string, pattern: '^[a-z][a-z0-9_.]*$' } }
+    get:
+      tags: [Settings]
+      summary: One setting
+      responses:
+        '200':
+          description: Setting
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { type: object, properties: { key: { type: string } } }
+                  - { $ref: '#/components/schemas/SettingEntry' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Settings]
+      summary: Upsert a setting (Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpsertSettingRequest' }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { type: object, properties: { key: { type: string } } }
+                  - { $ref: '#/components/schemas/SettingEntry' }
+    delete:
+      tags: [Settings]
+      summary: Reset to default (Manager)
+      responses:
+        '200':
+          description: Reset
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { type: object, properties: { key: { type: string } } }
+                  - { $ref: '#/components/schemas/SettingEntry' }
+
+  /settings/pack-sizes:
+    get:
+      tags: [Settings]
+      summary: Active pack sizes (kg)
+      responses:
+        '200':
+          description: Active pack sizes
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/PackSize' } }
+    post:
+      tags: [Settings]
+      summary: Add or re-activate a pack size (Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pack_size_kg]
+              properties:
+                pack_size_kg: { type: number, exclusiveMinimum: 0 }
+      responses:
+        '201':
+          description: Added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pack_size_kg: { type: number }
+
+  /settings/pack-sizes/{kg}:
+    parameters:
+      - { in: path, name: kg, required: true, schema: { type: number, exclusiveMinimum: 0 } }
+    delete:
+      tags: [Settings]
+      summary: Deactivate (soft) a pack size (Manager)
+      responses:
+        '200':
+          description: Disabled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pack_size_kg: { type: [number, string] }
+                  is_active:    { type: boolean }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------- Purchase Orders ----------
+  /purchase-orders:
+    get:
+      tags: [Purchase Orders]
+      summary: List POs
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/IncludeArchived'
+        - { in: query, name: status, schema: { $ref: '#/components/schemas/PoStatus' } }
+        - { in: query, name: supplier_id, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: Page of POs
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/PurchaseOrderListItem' } }
+    post:
+      tags: [Purchase Orders]
+      summary: Create a draft PO (Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePORequest' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+
+  /purchase-orders/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get:
+      tags: [Purchase Orders]
+      summary: One PO with line items
+      responses:
+        '200': { description: PO, content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseOrder' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Purchase Orders]
+      summary: Update header (Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PatchPORequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+
+  /purchase-orders/{id}/items:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Purchase Orders]
+      summary: Add an item (Manager, only while draft)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/POItemInput' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /purchase-orders/items/{itemId}:
+    parameters:
+      - { in: path, name: itemId, required: true, schema: { type: integer, minimum: 1 } }
+    patch:
+      tags: [Purchase Orders]
+      summary: Update an item (Manager, only while draft)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PatchPOItemRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Purchase Orders]
+      summary: Remove an item (Manager, only while draft)
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /purchase-orders/{id}/transition:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Purchase Orders]
+      summary: Move through status state machine (Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransitionPORequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:     { type: integer }
+                  status: { $ref: '#/components/schemas/PoStatus' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /purchase-orders/{id}/receive:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Purchase Orders]
+      summary: Receive selected line items (Manager)
+      description: |
+        For each `resource` line: writes a `resource_stock_transactions` row
+        (DDL trigger maintains weighted-avg cost). For each `finished_paint`
+        line: writes supplier-source `finished_paint_packs` rows. When every
+        line is fully received the PO auto-transitions to `received`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReceivePORequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /purchase-orders/{id}/archive:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post: { tags: [Purchase Orders], summary: Archive (Manager), responses: { '200': { $ref: '#/components/responses/Updated' } } }
+
+  /purchase-orders/{id}/restore:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post: { tags: [Purchase Orders], summary: Restore (Manager), responses: { '200': { $ref: '#/components/responses/Updated' } } }
+
+  # ---------- Production ----------
+  /production/requests:
+    get:
+      tags: [Production]
+      summary: Operator queue (pending production requests)
+      parameters:
+        - { in: query, name: status, schema: { $ref: '#/components/schemas/ProductionRequestStatus' } }
+      responses:
+        '200':
+          description: Requests
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/ProductionRequest' } }
+    post:
+      tags: [Production]
+      summary: Create a manual production request (Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateProductionRequestRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+
+  /production/requests/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get:
+      tags: [Production]
+      summary: One request
+      responses:
+        '200': { description: Request, content: { application/json: { schema: { $ref: '#/components/schemas/ProductionRequest' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /production/requests/{id}/cancel:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post: { tags: [Production], summary: Cancel a request (Manager), responses: { '200': { $ref: '#/components/responses/Updated' }, '404': { $ref: '#/components/responses/NotFound' } } }
+
+  /production/runs:
+    get:
+      tags: [Production]
+      summary: List production runs
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - { in: query, name: status, schema: { $ref: '#/components/schemas/ProductionRunStatus' } }
+        - { in: query, name: variant_id, schema: { type: integer, minimum: 1 } }
+        - { in: query, name: operator_id, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: Page of runs
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/ProductionRunListItem' } }
+    post:
+      tags: [Production]
+      summary: Open a new production run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateRunRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /production/runs/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get:
+      tags: [Production]
+      summary: Full run detail (actuals + dilution + packs)
+      responses:
+        '200': { description: Run, content: { application/json: { schema: { $ref: '#/components/schemas/ProductionRun' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /production/runs/{id}/start:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Production]
+      summary: Move run from planned to in_progress
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /production/runs/{id}/actuals:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Production]
+      summary: Log actual output + per-resource consumption (computes wastage + variance + flags)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActualsRequest' }
+      responses:
+        '200':
+          description: Computed wastage
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:              { type: integer }
+                  wastage_pct:     { type: number }
+                  wastage_flagged: { type: boolean }
+
+  /production/runs/{id}/dilution:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Production]
+      summary: Add a post-mix dilution adjustment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DilutionRequest' }
+      responses:
+        '200':
+          description: Updated totals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:                { type: integer }
+                  dilution_total_kg: { type: number }
+                  dilution_flagged:  { type: boolean }
+
+  /production/runs/{id}/packaging:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Production]
+      summary: Split output into finished_paint_packs (+ stash residue)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PackagingRequest' }
+      responses:
+        '200':
+          description: Packs created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:            { type: integer }
+                  packs_created: { type: integer }
+                  stash_kg:      { type: number }
+
+  /production/runs/{id}/complete:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post: { tags: [Production], summary: Mark run completed, responses: { '200': { $ref: '#/components/responses/Updated' }, '409': { $ref: '#/components/responses/Conflict' } } }
+
+  /production/runs/{id}/cancel:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post: { tags: [Production], summary: Cancel run, responses: { '200': { $ref: '#/components/responses/Updated' }, '409': { $ref: '#/components/responses/Conflict' } } }
+
+  /production/packs/{packId}/ready:
+    parameters:
+      - { in: path, name: packId, required: true, schema: { type: integer, minimum: 1 } }
+    post:
+      tags: [Production]
+      summary: Mark a pack ready_for_shipment
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /production/stash/{variantId}/repackage:
+    parameters:
+      - { in: path, name: variantId, required: true, schema: { type: integer, minimum: 1 } }
+    post:
+      tags: [Production]
+      summary: Repackage variant stash into smaller packs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RepackageRequest' }
+      responses:
+        '200':
+          description: Repackaged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  variant_id:    { type: integer }
+                  packs_created: { type: integer }
+
+  /production/summary:
+    get:
+      tags: [Production]
+      summary: Run counts by status + flagged-runs total
+      responses:
+        '200': { description: Summary, content: { application/json: { schema: { $ref: '#/components/schemas/ProductionSummary' } } } }
+
+  # ---------- Sales ----------
+  /sales/orders:
+    get:
+      tags: [Sales]
+      summary: List customer orders (visibility-gated on financials)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - { in: query, name: status, schema: { $ref: '#/components/schemas/OrderStatus' } }
+        - { in: query, name: customer_id, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: Page of orders
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/CustomerOrderListItem' } }
+    post:
+      tags: [Sales]
+      summary: Create a draft customer order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOrderRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+
+  /sales/orders/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get:
+      tags: [Sales]
+      summary: Order detail
+      responses:
+        '200': { description: Order, content: { application/json: { schema: { $ref: '#/components/schemas/CustomerOrder' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Sales]
+      summary: Edit header
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PatchOrderRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /sales/orders/{id}/submit:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post: { tags: [Sales], summary: 'draft → pending_approval', responses: { '200': { $ref: '#/components/responses/Updated' }, '409': { $ref: '#/components/responses/Conflict' } } }
+
+  /sales/orders/{id}/approve:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post: { tags: [Sales], summary: 'pending_approval → approved (Manager)', responses: { '200': { $ref: '#/components/responses/Updated' }, '409': { $ref: '#/components/responses/Conflict' } } }
+
+  /sales/orders/{id}/cancel:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post: { tags: [Sales], summary: Cancel order, responses: { '200': { $ref: '#/components/responses/Updated' }, '403': { $ref: '#/components/responses/Forbidden' }, '409': { $ref: '#/components/responses/Conflict' } } }
+
+  /sales/orders/{id}/confirmation:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Sales]
+      summary: Generate the next Order Confirmation version
+      responses:
+        '200':
+          description: Confirmation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderConfirmation' }
+
+  /sales/orders/{id}/cost-to-build:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get:
+      tags: [Sales]
+      summary: Live cost-to-build per line (drafting helper)
+      responses:
+        '200':
+          description: Per-line cost
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CostToBuildLine' } }
+
+  /sales/orders/{id}/sale:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Sales]
+      summary: Log a sale + sale_items + assigned packs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSaleRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /sales/transactions:
+    get:
+      tags: [Sales]
+      summary: List sales (visibility-gated)
+      responses:
+        '200':
+          description: Sales
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/SaleListItem' } }
+
+  /sales/transactions/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get:
+      tags: [Sales]
+      summary: Sale detail with payments + status
+      responses:
+        '200': { description: Sale, content: { application/json: { schema: { $ref: '#/components/schemas/Sale' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /sales/transactions/{id}/payments:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Sales]
+      summary: Record a payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePaymentRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /sales/transactions/{saleId}/returns:
+    parameters:
+      - { in: path, name: saleId, required: true, schema: { type: integer, minimum: 1 } }
+    post:
+      tags: [Sales]
+      summary: Record a return + optional refund (Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateReturnRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnResponse' }
+
+  /sales/refunds/{id}/approve:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post: { tags: [Sales], summary: Approve refund (Manager), responses: { '200': { $ref: '#/components/responses/Updated' }, '409': { $ref: '#/components/responses/Conflict' } } }
+
+  /sales/refunds/{id}/reject:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Sales]
+      summary: Reject refund (Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RejectRefundRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /sales/refunds/{id}/payouts:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      tags: [Sales]
+      summary: Record a refund payout (Manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefundPayoutRequest' }
+      responses:
+        '201':
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  refund_id: { type: integer }
+
+  # ---------- Inventory ----------
+  /inventory/finished:
+    get:
+      tags: [Inventory]
+      summary: Finished-paint inventory grouped by variant + pack_size + status
+      parameters:
+        - { in: query, name: variant_id, schema: { type: integer, minimum: 1 } }
+        - { in: query, name: status, schema: { $ref: '#/components/schemas/PackStatus' } }
+      responses:
+        '200':
+          description: Inventory rows
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/FinishedInventoryGroup' } }
+
+  /inventory/finished/by-variant/{variantId}:
+    parameters:
+      - { in: path, name: variantId, required: true, schema: { type: integer, minimum: 1 } }
+    get:
+      tags: [Inventory]
+      summary: Per-pack rows for one variant
+      responses:
+        '200':
+          description: Packs
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/FinishedPackRow' } }
+
+  /inventory/finished/stash:
+    get:
+      tags: [Inventory]
+      summary: Per-variant stash residue
+      responses:
+        '200':
+          description: Stash entries
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/StashEntry' } }
+
+  /inventory/resources:
+    get:
+      tags: [Inventory]
+      summary: Resource stock with low-stock flag
+      parameters:
+        - { in: query, name: low_stock_only, schema: { type: boolean } }
+      responses:
+        '200':
+          description: Resources
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/ResourceInventoryRow' } }
+
+  # ---------- Dashboard ----------
+  /api/dashboard:
+    get:
+      tags: [Dashboard]
+      summary: Counts + pull-out lists for the home dashboard
+      responses:
+        '200':
+          description: Dashboard snapshot
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardResponse' }
+
+  # ---------- Reports ----------
+  /api/losses:
+    get:
+      tags: [Reports]
+      summary: Production Irregularity Report (Manager)
+      parameters:
+        - { in: query, name: from, schema: { type: string, format: date } }
+        - { in: query, name: to, schema: { type: string, format: date } }
+        - { in: query, name: variant_id, schema: { type: integer, minimum: 1 } }
+        - { in: query, name: operator_id, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: Flagged runs
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/IrregularityReportRow' } }
+
+  /api/losses/operator-summary:
+    get:
+      tags: [Reports]
+      summary: Per-operator flagged-run totals (Manager)
+      parameters:
+        - { in: query, name: from, schema: { type: string, format: date } }
+        - { in: query, name: to, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Summary rows
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/OperatorSummaryRow' } }

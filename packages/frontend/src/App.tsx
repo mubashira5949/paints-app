@@ -11,6 +11,7 @@ import ProductionRunForm from './pages/ProductionRunForm'
 import Users from './pages/Users'
 import Settings from './pages/Settings'
 import Login from './pages/Login'
+import Paints from './pages/Paints'
 import Formulas from './pages/Formulas'
 import Sales from './pages/Sales'
 import SalesHistory from './pages/SalesHistory'
@@ -20,7 +21,6 @@ import Losses from './pages/Losses'
 import RawMaterials from './pages/RawMaterials'
 import Suppliers from './pages/Suppliers'
 import PurchaseOrders from './pages/PurchaseOrders'
-import Trends from './pages/Trends'
 import SharedPurchaseOrder from './pages/SharedPurchaseOrder'
 
 function App() {
@@ -28,23 +28,21 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Public Route */}
           <Route path="/login" element={<Login />} />
           <Route path="/po/:token" element={<SharedPurchaseOrder />} />
 
-          {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<MainLayout />}>
               <Route index element={<Navigate to="/dashboard" replace />} />
 
               <Route path="dashboard" element={<Dashboard />} />
-              <Route path="trends" element={<Trends />} />
               <Route path="inventory" element={<Inventory />} />
+              <Route path="paints" element={<Paints />} />
               <Route path="formulas" element={<Formulas />} />
               <Route path="production" element={<Production />} />
               <Route path="production/new" element={<ProductionRunForm />} />
-              <Route path="production/:batchId" element={<ProductionDetail />} />
-              <Route path="production/:batchId/packaging" element={<ProductionPackaging />} />
+              <Route path="production/:id" element={<ProductionDetail />} />
+              <Route path="production/:id/packaging" element={<ProductionPackaging />} />
               <Route path="sales/new" element={<Sales />} />
               <Route path="sales/history" element={<SalesHistory />} />
               <Route path="sales/orders" element={<Orders />} />
@@ -54,7 +52,6 @@ function App() {
               <Route path="suppliers" element={<Suppliers />} />
               <Route path="purchase-orders" element={<PurchaseOrders />} />
 
-              {/* Manager and Admin routes */}
               <Route element={<ProtectedRoute allowedRoles={['manager', 'admin']} />}>
                 <Route path="users" element={<Users />} />
                 <Route path="settings" element={<Settings />} />

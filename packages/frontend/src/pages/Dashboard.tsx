@@ -1,4 +1,3 @@
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiRequest } from '../services/api'
@@ -6,87 +5,109 @@ import { useAuth } from '../contexts/AuthContext'
 import {
   Package,
   Layers,
-  Activity,
   AlertTriangle,
-  TrendingUp,
   History,
-  FileText,
-  PaintBucket,
   Clock,
   Bell,
   Users,
   ShoppingCart,
+  PaintBucket,
+  ClipboardList,
+  Truck,
+  ShieldCheck,
+  CircleDollarSign,
 } from 'lucide-react'
-import { useUnitPreference, formatUnit } from '../utils/units'
-import { useDateFormatPreference, formatDate } from '../utils/dateFormatter'
 
+/**
+ * Matches the response of GET /api/dashboard (see openapi.yaml → DashboardResponse).
+ * All counts come back as strings because the backend uses `COUNT(*)` which
+ * Postgres returns as `bigint` and the pg driver hands back as a string.
+ */
 interface DashboardData {
-  metrics: {
-    rawMaterials: number
-    lowStock: number
-    finishedStock: number
-    activeRuns: number
+  counts: {
+    paints: string | number
+    variants: string | number
+    formulas: string | number
+    resources: string | number
+    customers: string | number
+    suppliers: string | number
+    packs_in_stock: string | number
+    packs_ready_to_ship: string | number
   }
-  productionChart: {
-    month: string
-    runs: number
-  }[]
-  recentRuns: {
-    batchId: string
-    color: string
-    output: number | null
-    operator: string
-    status?: string
-  }[]
-  inventoryAlerts: {
-    resource_id: number
-    material: string
-    remaining: string
+  low_stock_resources: Array<{
+    id: number
+    name: string
+    current_stock_kg: string | number
+    effective_threshold_kg: string | number
+  }>
+  pending_production_requests: Array<{
+    id: number
+    variant_id: number
+    pack_size_kg: string | number
+    quantity_packs: number
+    origin: 'customer_order' | 'demand_suggestion'
+    created_at: string
+    paint_name: string
+    classification: string
+    ink_series: string
+  }>
+  open_purchase_orders: Array<{
+    id: number
+    supplier_id: number
+    supplier_name: string
     status: string
-    requested_by: string | null
-    requested_at: string | null
-  }[]
+    created_at: string
+  }>
+  pending_device_approvals: Array<{
+    id: number
+    user_name: string
+    device: string | null
+    requested_at: string
+  }>
+  flagged_runs_last_30_days: Array<{
+    id: number
+    batch_number: string
+    paint_name: string
+    classification: string
+    ink_series: string
+    wastage_pct: string | number | null
+    dilution_total_kg: string | number
+    completed_at: string | null
+  }>
+  overdue_sales: Array<{
+    id: number
+    order_id: number
+    customer_name: string
+    due_date: string
+    currency: string
+    billed: string | number
+    collected: string | number
+  }>
 }
+
+const num = (v: unknown): number => (typeof v === 'string' ? Number(v) : Number(v ?? 0))
 
 export default function Dashboard() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const unitPref = useUnitPreference()
-  const dateFormat = useDateFormatPreference()
   const [data, setData] = useState<DashboardData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isFetching, setIsFetching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
-
-
-
-  // Toggle states for tables
-  const [showAllRuns, setShowAllRuns] = useState(false)
+  const [showAllFlagged, setShowAllFlagged] = useState(false)
   const [showAllAlerts, setShowAllAlerts] = useState(false)
 
   const fetchDashboardData = async (isBackgroundPolling = false, signal?: AbortSignal) => {
-    // Prevent overlapping API calls
     if (isFetching) return
-
-    // Only show global loading spinners on initial manual load
-    if (!isBackgroundPolling && !data) {
-      // Already true by default, no need to set synchronously in effect
-    }
     setIsFetching(true)
-
     try {
-      const dashboardData = await apiRequest<DashboardData>('/api/dashboard', {
-        signal,
-      })
+      const dashboardData = await apiRequest<DashboardData>('/api/dashboard', { signal })
       setData(dashboardData)
       setLastUpdated(new Date().toLocaleTimeString())
-      setError(null) // Clear errors on success
+      setError(null)
     } catch (err: any) {
-      if (err.name === 'AbortError') {
-        console.log('Fetch aborted')
-        return
-      }
+      if (err.name === 'AbortError') return
       console.error('Failed to fetch dashboard data', err)
       setError('Failed to load dashboard data. Retrying in background...')
     } finally {
@@ -95,65 +116,26 @@ export default function Dashboard() {
     }
   }
 
-  const generateStockReport = async () => {
-    try {
-      const res = await apiRequest<any[]>('/inventory/stock-report')
-
-      if (!res || !Array.isArray(res) || res.length === 0) {
-        alert('No stock data available to export.')
-        return
-      }
-
-      // Convert array of objects to CSV
-      const headers = Object.keys(res[0])
-      const csvRows = [headers.join(',')] // Header row
-
-      for (const row of res) {
-        const values = headers.map((header) => {
-          const val = row[header]
-          // Escape quotes and wrap strings in quotes if they contain commas
-          const escaped = String(val).replace(/"/g, '""')
-          return `"${escaped}"`
-        })
-        csvRows.push(values.join(','))
-      }
-
-      const csvString = csvRows.join('\n')
-
-      // Trigger download
-      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.setAttribute('href', url)
-      link.setAttribute('download', `stock-report-${new Date().toISOString().split('T')[0]}.csv`)
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-    } catch (err) {
-      console.error('Failed to generate report', err)
-      alert('Failed to generate report. Please try again.')
-    }
-  }
-
   useEffect(() => {
     const controller = new AbortController()
     fetchDashboardData(false, controller.signal)
-
-    // Auto Refresh: Poll backend every 30 seconds for live updates
     const interval = setInterval(() => fetchDashboardData(true, controller.signal), 30000)
-
-    // Cleanup interval on component unmount
     return () => {
       clearInterval(interval)
       controller.abort()
     }
   }, [])
 
+  const lowStockCount = data?.low_stock_resources.length ?? 0
+  const pendingRequestsCount = data?.pending_production_requests.length ?? 0
+  const openPOsCount = data?.open_purchase_orders.length ?? 0
+  const pendingDevicesCount = data?.pending_device_approvals.length ?? 0
+  const overdueSalesCount = data?.overdue_sales.length ?? 0
+
   return (
     <div className="space-y-8">
-      {/* Error Banner */}
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 p-4 flex items-center shadow-sm animate-in fade-in slide-in-from-top-2">
+        <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 p-4 flex items-center shadow-sm">
           <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 mr-3 shrink-0" />
           <p className="text-sm font-medium text-red-800 dark:text-red-300">{error}</p>
         </div>
@@ -177,181 +159,146 @@ export default function Dashboard() {
         </p>
       </div>
 
+      {/* Top-row counters */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Raw Materials"
-          value={
-            <span className="text-3xl font-semibold">
-              {data?.metrics.rawMaterials || 0}{' '}
-              <span className="text-sm font-normal text-gray-500">Resources</span>
-            </span>
-          }
-          subtitle="Tracked in inventory"
+          title="Resources"
+          value={num(data?.counts.resources)}
+          unit="materials"
+          subtitle="In active catalog"
           icon={<Layers className="h-4 w-4 text-blue-600" />}
           loading={isLoading}
         />
         <StatCard
           title="Low Stock Alerts"
-          value={
-            <span className="text-3xl font-semibold">
-              {data?.metrics.lowStock || 0}{' '}
-              <span className="text-sm font-normal text-gray-500">Items</span>
-            </span>
-          }
-          subtitle={
-            (data?.metrics.lowStock || 0) > 0 ? 'Action required soon' : 'Inventory healthy'
-          }
-          icon={
-            <AlertTriangle
-              className={`h-4 w-4 ${(data?.metrics.lowStock || 0) > 0 ? 'text-destructive' : 'text-muted-foreground'}`}
-            />
-          }
+          value={lowStockCount}
+          unit="items"
+          subtitle={lowStockCount > 0 ? 'Action required soon' : 'Inventory healthy'}
+          icon={<AlertTriangle className={`h-4 w-4 ${lowStockCount > 0 ? 'text-destructive' : 'text-muted-foreground'}`} />}
           loading={isLoading}
-          trend={(data?.metrics.lowStock || 0) > 0 ? 'Critical' : 'Good'}
-          trendColor={(data?.metrics.lowStock || 0) > 0 ? 'text-destructive' : 'text-green-600'}
+          trend={lowStockCount > 0 ? 'Critical' : 'Good'}
+          trendColor={lowStockCount > 0 ? 'text-destructive' : 'text-green-600'}
         />
         <StatCard
-          title="Finished Paint Stock"
-          value={
-            <span className="text-3xl font-semibold">
-              {data?.metrics.finishedStock || 0}{' '}
-              <span className="text-sm font-normal text-gray-500">Units</span>
-            </span>
-          }
-          subtitle="Ready for sale"
+          title="Finished Stock"
+          value={num(data?.counts.packs_in_stock)}
+          unit="packs"
+          subtitle={`${num(data?.counts.packs_ready_to_ship)} ready to ship`}
           icon={<Package className="h-4 w-4 text-blue-600" />}
           loading={isLoading}
         />
         <StatCard
-          title="Production Runs"
-          value={
-            <span className="text-3xl font-semibold">
-              {data?.metrics.activeRuns || 0}{' '}
-              <span className="text-sm font-normal text-gray-500">Active</span>
-            </span>
-          }
-          subtitle="Batches in progress"
-          icon={<Activity className="h-4 w-4 text-blue-600" />}
+          title="Pending Production"
+          value={pendingRequestsCount}
+          unit="requests"
+          subtitle="In Operator queue"
+          icon={<ClipboardList className="h-4 w-4 text-blue-600" />}
           loading={isLoading}
         />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <div className="col-span-4 rounded-xl border bg-card p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="font-semibold flex items-center">
-              <TrendingUp className="mr-2 h-4 w-4 text-blue-600" />
-              Production Runs
-            </h3>
-            <span className="text-xs text-muted-foreground">Last 6 Months</span>
-          </div>
-          <div className="h-48 w-full mt-4">
-            {isLoading ? (
-              <div className="w-full h-full flex items-center justify-center">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={data?.productionChart || []}
-                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                >
-                  <XAxis
-                    dataKey="month"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 12, fill: '#64748b' }}
-                    dy={10}
-                  />
-                  <YAxis
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 12, fill: '#64748b' }}
-                  />
-                  <Tooltip
-                    cursor={{ fill: '#f1f5f9' }}
-                    contentStyle={{
-                      borderRadius: '8px',
-                      border: 'none',
-                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-                    }}
-                  />
-                  <Bar dataKey="runs" fill="#2563eb" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </div>
+      {/* Second-row counters: ops + supply + safety */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Open Purchase Orders"
+          value={openPOsCount}
+          unit="POs"
+          subtitle="Draft / ordered / shipped"
+          icon={<Truck className="h-4 w-4 text-blue-600" />}
+          loading={isLoading}
+        />
+        <StatCard
+          title="Overdue Sales"
+          value={overdueSalesCount}
+          unit="sales"
+          subtitle={overdueSalesCount > 0 ? 'Past due, partial or unpaid' : 'All current'}
+          icon={<CircleDollarSign className={`h-4 w-4 ${overdueSalesCount > 0 ? 'text-destructive' : 'text-blue-600'}`} />}
+          loading={isLoading}
+        />
+        <StatCard
+          title="Pending Device Approvals"
+          value={pendingDevicesCount}
+          unit="devices"
+          subtitle="Awaiting Manager review"
+          icon={<ShieldCheck className={`h-4 w-4 ${pendingDevicesCount > 0 ? 'text-orange-500' : 'text-muted-foreground'}`} />}
+          loading={isLoading}
+        />
+        <StatCard
+          title="Catalog"
+          value={num(data?.counts.paints)}
+          unit="paints"
+          subtitle={`${num(data?.counts.variants)} variants · ${num(data?.counts.formulas)} formulas`}
+          icon={<PaintBucket className="h-4 w-4 text-blue-600" />}
+          loading={isLoading}
+        />
+      </div>
 
-        <div className="col-span-3 rounded-xl border bg-card p-6 shadow-sm">
-          <h3 className="font-semibold flex items-center mb-4">
-            <History className="mr-2 h-4 w-4 text-blue-600" />
-            Quick Actions
-          </h3>
-          <div className="space-y-3">
+      {/* Quick actions */}
+      <div className="rounded-xl border bg-card p-6 shadow-sm">
+        <h3 className="font-semibold flex items-center mb-4">
+          <History className="mr-2 h-4 w-4 text-blue-600" />
+          Quick Actions
+        </h3>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <button
+            onClick={() => navigate('/production')}
+            className="flex items-center p-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-sm"
+          >
+            <Package className="mr-3 h-5 w-5" />
+            <span>Start New Production Batch</span>
+          </button>
+          {(user?.role === 'manager' || user?.role === 'sales') && (
             <button
-              onClick={() => navigate('/production')}
-              className="w-full flex items-center p-3 rounded-lg border border-transparent bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-sm group"
+              onClick={() => navigate('/sales/new')}
+              className="flex items-center p-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-all text-sm font-medium shadow-sm"
             >
-              <Package className="mr-3 h-5 w-5 text-blue-100 group-hover:scale-110 transition-transform" />
-              <span>Start New Production Batch</span>
+              <ShoppingCart className="mr-3 h-5 w-5" />
+              <span>Record New Sale</span>
             </button>
-
-            {(user?.role === 'admin' ||
-              user?.role === 'manager' ||
-              user?.role === 'operator' ||
-              user?.role === 'sales') && (
-                <button
-                  onClick={() => navigate('/sales/new')}
-                  className="w-full flex items-center p-3 rounded-lg border border-transparent bg-emerald-600 hover:bg-emerald-700 text-white transition-all text-sm font-medium shadow-sm group"
-                >
-                  <ShoppingCart className="mr-3 h-5 w-5 text-emerald-100 group-hover:scale-110 transition-transform" />
-                  <span>Record New Sale</span>
-                </button>
-              )}
-
-            {(user?.role === 'admin' || user?.role === 'manager' || user?.role === 'sales') && (
-              <button
-                onClick={generateStockReport}
-                className="w-full flex items-center p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-all text-sm font-medium shadow-sm group"
-              >
-                <FileText className="mr-3 h-5 w-5 text-slate-400 group-hover:scale-110 transition-transform" />
-                <span>Generate Stock Report</span>
-              </button>
-            )}
-
-            {user?.role === 'admin' && (
+          )}
+          {user?.role === 'manager' && (
+            <>
               <button
                 onClick={() => navigate('/users')}
-                className="w-full flex items-center p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-all text-sm font-medium shadow-sm group"
+                className="flex items-center p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-all text-sm font-medium shadow-sm"
               >
-                <Users className="mr-3 h-5 w-5 text-slate-400 group-hover:scale-110 transition-transform" />
+                <Users className="mr-3 h-5 w-5 text-slate-400" />
                 <span>Manage User Access</span>
               </button>
-            )}
-          </div>
+              {pendingDevicesCount > 0 && (
+                <button
+                  onClick={() => navigate('/users?tab=device-requests')}
+                  className="flex items-center p-3 rounded-lg border border-orange-200 bg-orange-50 hover:bg-orange-100 text-orange-700 transition-all text-sm font-medium shadow-sm"
+                >
+                  <ShieldCheck className="mr-3 h-5 w-5 text-orange-500" />
+                  <span>{pendingDevicesCount} Device Approval{pendingDevicesCount === 1 ? '' : 's'}</span>
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
 
+      {/* Two side-by-side tables */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <div className="col-span-2 rounded-xl border bg-card p-6 shadow-sm">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <Clock className="mr-2 h-4 w-4 text-blue-600" />
-              <h3 className="font-semibold">Recent Production Runs</h3>
+              <h3 className="font-semibold">Flagged Production Runs (Last 30d)</h3>
               <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
-                {data?.recentRuns &&
-                  (showAllRuns
-                    ? `Showing all ${data.recentRuns.length}`
-                    : `Showing ${Math.min(3, data.recentRuns.length)} of ${data.recentRuns.length}`)}
+                {data?.flagged_runs_last_30_days &&
+                  (showAllFlagged
+                    ? `Showing all ${data.flagged_runs_last_30_days.length}`
+                    : `Showing ${Math.min(5, data.flagged_runs_last_30_days.length)} of ${data.flagged_runs_last_30_days.length}`)}
               </span>
             </div>
-            {data?.recentRuns && data.recentRuns.length > 3 && (
+            {data?.flagged_runs_last_30_days && data.flagged_runs_last_30_days.length > 5 && (
               <button
-                onClick={() => setShowAllRuns(!showAllRuns)}
+                onClick={() => setShowAllFlagged(!showAllFlagged)}
                 className="text-xs text-blue-600 hover:text-blue-700 font-bold uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded border border-blue-100"
               >
-                {showAllRuns ? 'View Less' : 'View All'}
+                {showAllFlagged ? 'View Less' : 'View All'}
               </button>
             )}
           </div>
@@ -359,55 +306,38 @@ export default function Dashboard() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-slate-50/50">
-                  <th className="h-12 px-6 text-left align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
-                    Batch ID
-                  </th>
-                  <th className="h-12 px-6 text-left align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
-                    Color
-                  </th>
-                  <th className="h-12 px-6 text-left align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
-                    Output
-                  </th>
-                  <th className="h-12 px-6 text-left align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
-                    Operator
-                  </th>
+                  <Th>Batch</Th>
+                  <Th>Variant</Th>
+                  <Th>Wastage</Th>
+                  <Th>Dilution</Th>
+                  <Th>Completed</Th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {isLoading ? (
-                  <tr>
-                    <td colSpan={4} className="p-6 text-center text-slate-400">
-                      Loading runs...
-                    </td>
-                  </tr>
-                ) : data?.recentRuns.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="p-6 text-center text-slate-400">
-                      No recent runs
-                    </td>
-                  </tr>
+                  <Loading colSpan={5} />
+                ) : (data?.flagged_runs_last_30_days?.length ?? 0) === 0 ? (
+                  <Empty colSpan={5} message="No flagged runs in the last 30 days" />
                 ) : (
-                  data?.recentRuns
-                    .slice(0, showAllRuns ? data.recentRuns.length : 3)
-                    .map((run, i) => (
-                      <tr key={i} className="hover:bg-gray-50 transition-colors">
-                        <td className="p-6 font-bold text-blue-600 tracking-tight">
-                          {run.batchId}
+                  data!.flagged_runs_last_30_days
+                    .slice(0, showAllFlagged ? undefined : 5)
+                    .map((r) => (
+                      <tr key={r.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="p-4 font-bold text-blue-600 tracking-tight">{r.batch_number}</td>
+                        <td className="p-4 font-semibold text-slate-900">
+                          {r.paint_name}{' '}
+                          <span className="text-slate-500 font-normal">
+                            ({r.classification}, {r.ink_series})
+                          </span>
                         </td>
-                        <td className="p-6 font-extrabold text-slate-900">{run.color}</td>
-                        <td className="p-6 font-black text-slate-700 tracking-tight">
-                          {run.output != null && run.output > 0 ? (
-                            formatUnit(run.output, unitPref)
-                          ) : run.status !== 'completed' ? (
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-600 border border-amber-200">
-                              In Progress
-                            </span>
-                          ) : (
-                            '—'
-                          )}
+                        <td className="p-4 text-slate-700 tracking-tight">
+                          {r.wastage_pct != null ? `${num(r.wastage_pct).toFixed(2)}%` : '—'}
                         </td>
-                        <td className="p-6 text-slate-500 font-medium text-xs uppercase tracking-wide">
-                          {run.operator}
+                        <td className="p-4 text-slate-700 tracking-tight">
+                          {num(r.dilution_total_kg).toFixed(2)} kg
+                        </td>
+                        <td className="p-4 text-slate-500 font-medium text-xs">
+                          {r.completed_at ? new Date(r.completed_at).toLocaleDateString() : '—'}
                         </td>
                       </tr>
                     ))
@@ -418,94 +348,46 @@ export default function Dashboard() {
         </div>
 
         <div className="col-span-1 rounded-xl border bg-card p-6 shadow-sm border-t-4 border-t-orange-500">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <Bell className="mr-2 h-4 w-4 text-orange-500" />
-              <h3 className="font-semibold">Inventory Alerts</h3>
-              <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
-                {data?.inventoryAlerts &&
-                  (showAllAlerts
-                    ? `Showing all ${data.inventoryAlerts.length}`
-                    : `Showing ${Math.min(3, data.inventoryAlerts.length)} of ${data.inventoryAlerts.length}`)}
-              </span>
-              {data?.inventoryAlerts && data.inventoryAlerts.length > 3 && (
-                <button
-                  onClick={() => setShowAllAlerts(!showAllAlerts)}
-                  className="text-xs text-orange-600 hover:text-orange-700 font-bold uppercase tracking-wider bg-orange-50 px-2 py-0.5 rounded border border-orange-100 whitespace-nowrap"
-                >
-                  {showAllAlerts ? 'View Less' : 'View All'}
-                </button>
-              )}
-            </div>
+          <div className="flex items-center gap-3 mb-6">
+            <Bell className="mr-2 h-4 w-4 text-orange-500" />
+            <h3 className="font-semibold">Low-Stock Resources</h3>
+            <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
+              {data?.low_stock_resources &&
+                (showAllAlerts
+                  ? `Showing all ${data.low_stock_resources.length}`
+                  : `Showing ${Math.min(5, data.low_stock_resources.length)} of ${data.low_stock_resources.length}`)}
+            </span>
+            {data?.low_stock_resources && data.low_stock_resources.length > 5 && (
+              <button
+                onClick={() => setShowAllAlerts(!showAllAlerts)}
+                className="text-xs text-orange-600 hover:text-orange-700 font-bold uppercase tracking-wider bg-orange-50 px-2 py-0.5 rounded border border-orange-100"
+              >
+                {showAllAlerts ? 'View Less' : 'View All'}
+              </button>
+            )}
           </div>
           <div className="overflow-x-auto rounded-xl shadow-sm border border-slate-100">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-slate-50/50">
-                  <th className="h-12 px-4 text-left align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
-                    Material
-                  </th>
-                  <th className="h-12 px-4 text-right align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest">
-                    Status
-                  </th>
+                  <Th>Material</Th>
+                  <Th align="right">Stock / Threshold</Th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {isLoading ? (
-                  <tr>
-                    <td colSpan={2} className="p-6 text-center text-slate-400">Loading...</td>
-                  </tr>
-                ) : data?.inventoryAlerts.length === 0 ? (
-                  <tr>
-                    <td colSpan={2} className="p-6 text-center text-slate-400">No alerts</td>
-                  </tr>
+                  <Loading colSpan={2} />
+                ) : (data?.low_stock_resources?.length ?? 0) === 0 ? (
+                  <Empty colSpan={2} message="No low-stock resources" />
                 ) : (
-                  data?.inventoryAlerts
-                    .slice(0, showAllAlerts ? data.inventoryAlerts.length : 3)
-                    .map((alert, i) => (
-                      <tr key={i} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-4">
-                          <p className="font-extrabold text-slate-900 text-sm">{alert.material}</p>
-                          <p className="text-[10px] text-slate-500 font-medium mt-0.5">
-                            {alert.remaining.replace(/^([\d.]+)/, (match) => parseFloat(match).toString())} left
-                          </p>
-                        </td>
-                        <td className="px-4 py-4 text-right">
-                          <div className="flex flex-col items-end gap-1.5">
-                            <span
-                              className={`inline-flex items-center px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${alert.status === 'critical'
-                                ? 'bg-red-100 text-red-700'
-                                : 'bg-amber-100 text-amber-700'
-                                }`}
-                            >
-                              {alert.status}
-                            </span>
-
-                            {/* Admin only: Place Order */}
-                            {user?.role === 'admin' && (
-                              <button
-                                onClick={() => navigate('/raw-materials', { state: { orderMaterialId: alert.resource_id } })}
-                                className="text-[9px] bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200 px-2 py-1 rounded-lg uppercase tracking-widest font-black transition-colors"
-                              >
-                                Place Order
-                              </button>
-                            )}
-
-                            {/* Manager: see who requested, no order button */}
-                            {user?.role === 'manager' && alert.requested_by && (
-                              <div className="flex flex-col items-end">
-                                <span className="text-[9px] text-blue-600 font-bold uppercase tracking-wider bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
-                                  Req: {alert.requested_by}
-                                </span>
-                                {alert.requested_at && (
-                                  <span className="text-[8px] text-slate-400 font-bold mt-0.5">
-                                    {formatDate(alert.requested_at, dateFormat, true)}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-
-                          </div>
+                  data!.low_stock_resources
+                    .slice(0, showAllAlerts ? undefined : 5)
+                    .map((r) => (
+                      <tr key={r.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="p-4 font-semibold text-slate-900">{r.name}</td>
+                        <td className="p-4 text-right text-slate-700 tracking-tight">
+                          <span className="text-red-600 font-bold">{num(r.current_stock_kg).toFixed(2)} kg</span>
+                          <span className="text-slate-400"> / {num(r.effective_threshold_kg).toFixed(2)} kg</span>
                         </td>
                       </tr>
                     ))
@@ -519,26 +401,71 @@ export default function Dashboard() {
   )
 }
 
-function StatCard({ title, value, subtitle, icon, loading, trend, trendColor }: any) {
+// ---------- small UI helpers ----------
+
+function StatCard({
+  title, value, unit, subtitle, icon, loading, trend, trendColor,
+}: {
+  title: string
+  value: number
+  unit: string
+  subtitle: string
+  icon: React.ReactNode
+  loading: boolean
+  trend?: string
+  trendColor?: string
+}) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-card text-card-foreground shadow-sm hover:shadow-md transition-shadow duration-200 border-t-4 border-t-blue-500 p-6 overflow-hidden relative">
-      <div className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <p className="text-sm font-medium text-muted-foreground">{title}</p>
+    <div className="rounded-xl border bg-card p-5 shadow-sm">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-muted-foreground">{title}</span>
         {icon}
       </div>
-      {loading ? (
-        <div className="h-8 w-24 bg-muted animate-pulse rounded" />
-      ) : (
-        <>
-          <div className="mt-2">{value}</div>
-          <div className="flex items-center gap-2 mt-1">
-            <p className="text-xs text-muted-foreground">{subtitle}</p>
-            {trend && (
-              <span className={`text-[10px] font-bold uppercase ${trendColor}`}>{trend}</span>
-            )}
-          </div>
-        </>
+      <div className="mt-3">
+        {loading ? (
+          <div className="h-9 w-24 bg-slate-100 animate-pulse rounded" />
+        ) : (
+          <span className="text-3xl font-semibold">
+            {value} <span className="text-sm font-normal text-gray-500">{unit}</span>
+          </span>
+        )}
+      </div>
+      <div className="mt-1 text-xs text-muted-foreground">{subtitle}</div>
+      {trend && trendColor && !loading && (
+        <div className={`mt-2 text-xs font-bold uppercase ${trendColor}`}>{trend}</div>
       )}
     </div>
+  )
+}
+
+function Th({ children, align = 'left' }: { children: React.ReactNode; align?: 'left' | 'right' }) {
+  return (
+    <th
+      className={`h-12 px-4 align-middle font-bold text-slate-500 text-[11px] uppercase tracking-widest ${
+        align === 'right' ? 'text-right' : 'text-left'
+      }`}
+    >
+      {children}
+    </th>
+  )
+}
+
+function Loading({ colSpan }: { colSpan: number }) {
+  return (
+    <tr>
+      <td colSpan={colSpan} className="p-6 text-center text-slate-400">
+        Loading…
+      </td>
+    </tr>
+  )
+}
+
+function Empty({ colSpan, message }: { colSpan: number; message: string }) {
+  return (
+    <tr>
+      <td colSpan={colSpan} className="p-6 text-center text-slate-400">
+        {message}
+      </td>
+    </tr>
   )
 }

@@ -8,12 +8,16 @@ import { Pool } from 'pg'
 import { FastifyInstance } from 'fastify'
 import fs from 'fs'
 import path from 'path'
+import { IPgClientLike } from '../types/misc'
 
 async function dbConnector(fastify: FastifyInstance) {
     /**
      * Create a new PostgreSQL connection pool.
      * Configuration is pulled from the DATABASE_URL environment variable.
      */
+    // Local postgres (deploy/local) speaks plain TCP; set DB_SSL=false to opt out.
+    const sslDisabled = process.env.DB_SSL === 'false'
+
     let sslOptions: any = { rejectUnauthorized: false }
     if (process.env.DB_SSL_ROOT_CERT) {
         sslOptions = {
@@ -22,9 +26,14 @@ async function dbConnector(fastify: FastifyInstance) {
         }
     }
 
+    const MAX_DB_CONNS = +(process.env.MAX_DB_CONNS || 10);
+    const PG_APP_NAME = process.env.PG_APP_NAME || 'paints_app';
+
     const pool = new Pool({
         connectionString: process.env.DATABASE_URL,
-        ssl: sslOptions
+        max: MAX_DB_CONNS,
+        application_name: PG_APP_NAME,
+        ssl: sslDisabled ? false : sslOptions
     })
 
     // Verify the database connection on startup in the background (non-blocking).
@@ -70,6 +79,6 @@ export default fp(dbConnector)
  */
 declare module 'fastify' {
     interface FastifyInstance {
-        db: Pool
+        db: Pool; // IPgClientLike
     }
 }

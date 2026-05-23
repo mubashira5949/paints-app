@@ -1,465 +1,262 @@
 /**
- * Formulas Module
- * Handles operations related to paint formulas and their bill of materials.
+ * Formulas + Formula Resources module (spec §3.1).
  */
 
 import { FastifyInstance } from 'fastify'
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
 import { Type } from '@sinclair/typebox'
 import { authorizeRole } from '../../utils/authorizeRole'
+import { withTransaction } from '../../utils/withTransaction'
+import {
+    listFormulas, listFormulasByVariant, getFormula,
+    clearDefaultFormulaForVariant, insertFormula,
+    getFormulaForCopy, insertFormulaCopy, copyFormulaIngredients,
+    patchFormula, deleteFormulaIngredients, insertFormulaIngredient,
+    formulaExists, getFormulaVariant, setFormulaDefault,
+    archiveFormula, restoreFormula,
+} from '../../queries'
+
+const IdParam        = Type.Object({ id:        Type.Integer({ minimum: 1 }) })
+const VariantIdParam = Type.Object({ variantId: Type.Integer({ minimum: 1 }) })
+
+const IngredientItem = Type.Object({
+    resource_id: Type.Integer({ minimum: 1 }),
+    quantity_kg: Type.Number({ exclusiveMinimum: 0 }),
+})
+
+const CreateFormulaBody = Type.Object({
+    variant_id:                      Type.Integer({ minimum: 1 }),
+    name:                            Type.String({ minLength: 1, maxLength: 255 }),
+    notes:                           Type.Optional(Type.String()),
+    standard_output_kg:              Type.Number({ exclusiveMinimum: 0 }),
+    is_default:                      Type.Optional(Type.Boolean()),
+    wastage_threshold_pct:           Type.Optional(Type.Number({ minimum: 0 })),
+    resource_variance_threshold_pct: Type.Optional(Type.Number({ minimum: 0 })),
+    dilution_threshold_pct:          Type.Optional(Type.Number({ minimum: 0 })),
+    ingredients:                     Type.Array(IngredientItem, { minItems: 1, maxItems: 200 }),
+})
+
+const PatchFormulaBody = Type.Object({
+    name:                            Type.Optional(Type.String({ minLength: 1, maxLength: 255 })),
+    notes:                           Type.Optional(Type.String()),
+    standard_output_kg:              Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+    wastage_threshold_pct:           Type.Optional(Type.Union([Type.Number({ minimum: 0 }), Type.Null()])),
+    resource_variance_threshold_pct: Type.Optional(Type.Union([Type.Number({ minimum: 0 }), Type.Null()])),
+    dilution_threshold_pct:          Type.Optional(Type.Union([Type.Number({ minimum: 0 }), Type.Null()])),
+})
+
+const CopyFormulaBody = Type.Object({
+    variant_id: Type.Optional(Type.Integer({ minimum: 1 })),
+    name:       Type.Optional(Type.String({ minLength: 1, maxLength: 255 })),
+})
+
+const ReplaceIngredientsBody = Type.Object({
+    ingredients: Type.Array(IngredientItem, { minItems: 1, maxItems: 200 }),
+})
+
+const ListQuery = Type.Object({
+    page:             Type.Optional(Type.Integer({ minimum: 1 })),
+    page_size:        Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+    search:           Type.Optional(Type.String({ maxLength: 100 })),
+    variant_id:       Type.Optional(Type.Integer({ minimum: 1 })),
+    include_archived: Type.Optional(Type.Boolean()),
+})
+
+async function replaceIngredients(tx: any, formulaId: number, ingredients: ReadonlyArray<{ resource_id: number; quantity_kg: number }>): Promise<void> {
+    await deleteFormulaIngredients.run({ formula_id: formulaId }, tx)
+    for (const i of ingredients) {
+        await insertFormulaIngredient.run({ formula_id: formulaId, resource_id: i.resource_id, quantity_kg: i.quantity_kg as any }, tx)
+    }
+}
 
 export default async function (fastifyRaw: FastifyInstance) {
     const fastify = fastifyRaw.withTypeProvider<TypeBoxTypeProvider>()
 
-    const ColorIdParamSchema = Type.Object({
-        colorId: Type.Integer()
-    })
-
-    const CreateFormulaSchema = Type.Object({
-        color_id: Type.Integer(),
-        name: Type.String(),
-        version: Type.Optional(Type.String({ default: '1.0.0' })),
-        batch_size_kg: Type.Number(),
-        resources: Type.Array(
-            Type.Object({
-                resource_id: Type.Integer(),
-                quantity_required: Type.Number()
-            }),
-            { minItems: 1 }
-        )
-    })
-
-    const UpdateFormulaSchema = Type.Object({
-        name: Type.Optional(Type.String()),
-        version: Type.Optional(Type.String()),
-        batch_size_kg: Type.Optional(Type.Number()),
-        resources: Type.Optional(
-            Type.Array(
-                Type.Object({
-                    resource_id: Type.Integer(),
-                    quantity_required: Type.Number()
-                }),
-                { minItems: 1 }
-            )
-        )
-    })
-
-    const FormulaIdParamSchema = Type.Object({
-        id: Type.Integer()
-    })
-
-    const AddResourceSchema = Type.Object({
-        resource_id: Type.Integer(),
-        quantity_required: Type.Number({ exclusiveMinimum: 0 })
-    })
-
-    /**
-     * GET /formulas/:colorId - Retrieve active formulas for a specific color.
-     * Accessible to all authenticated users.
-     */
-    fastify.get('/:colorId', {
+    fastify.get('/', {
         preHandler: [fastify.authenticate],
-        schema: {
-            params: ColorIdParamSchema
+        schema: { querystring: ListQuery },
+        handler: async (request) => {
+            const q = request.query
+            const page = q.page ?? 1
+            const page_size = q.page_size ?? 20
+            const rows = await listFormulas.run({
+                page_size, page_offset: (page - 1) * page_size,
+                search:           q.search ? `%${q.search}%` : null,
+                variant_id:       q.variant_id ?? null,
+                include_archived: q.include_archived ?? null,
+            }, fastify.db)
+            const total = rows[0]?._total ? Number(rows[0]._total) : 0
+            return { items: rows.map(({ _total, ...r }) => r), total, page, page_size }
         },
+    })
+
+    fastify.get('/variants/:variantId', {
+        preHandler: [fastify.authenticate],
+        schema: { params: VariantIdParam },
+        handler: async (request) => listFormulasByVariant.run({ variant_id: request.params.variantId }, fastify.db),
+    })
+
+    fastify.get('/:id', {
+        preHandler: [fastify.authenticate],
+        schema: { params: IdParam },
         handler: async (request, reply) => {
-            const { colorId } = request.params
+            const rows = await getFormula.run({ id: request.params.id }, fastify.db)
+            if (rows.length === 0) return reply.status(404).send({ error: 'Not Found', message: 'Formula not found' })
+            return rows[0]
+        },
+    })
 
+    fastify.post('/', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { body: CreateFormulaBody },
+        handler: async (request, reply) => {
+            const user = request.user as any
+            const b = request.body
             try {
-                // Fetch the formulas
-                const formulasResult = await fastify.db.query(
-                    `SELECT id, name, version, batch_size_kg, created_at, updated_at 
-                     FROM formulas 
-                     WHERE color_id = $1 AND is_active = TRUE 
-                     ORDER BY created_at DESC`,
-                    [colorId]
-                )
-
-                if (formulasResult.rows.length === 0) {
-                    return reply.send([])
-                }
-
-                const formulas = formulasResult.rows
-
-                // Fetch the resources for all these formulas
-                const formulaIds = formulas.map(r => r.id)
-
-                const resourcesResult = await fastify.db.query(
-                    `SELECT rr.formula_id, rr.resource_id, r.name, r.unit, rr.quantity_required
-                     FROM formula_resources rr
-                     JOIN resources r ON rr.resource_id = r.id
-                     WHERE rr.formula_id = ANY($1::int[])`,
-                    [formulaIds]
-                )
-
-                // Group resources by formula_id
-                const resourcesByFormula: { [key: number]: any[] } = {}
-                resourcesResult.rows.forEach(resource => {
-                    if (!resourcesByFormula[resource.formula_id]) {
-                        resourcesByFormula[resource.formula_id] = []
-                    }
-                    resourcesByFormula[resource.formula_id].push({
-                        resource_id: resource.resource_id,
-                        name: resource.name,
-                        unit: resource.unit,
-                        quantity_required: resource.quantity_required
-                    })
+                const id = await withTransaction(fastify.db, async (tx) => {
+                    if (b.is_default) await clearDefaultFormulaForVariant.run({ variant_id: b.variant_id }, tx)
+                    const [f] = await insertFormula.run({
+                        variant_id: b.variant_id, name: b.name, notes: b.notes ?? null,
+                        standard_output_kg: b.standard_output_kg as any,
+                        is_default: b.is_default ?? null,
+                        wastage_threshold_pct: (b.wastage_threshold_pct ?? null) as any,
+                        resource_variance_threshold_pct: (b.resource_variance_threshold_pct ?? null) as any,
+                        dilution_threshold_pct: (b.dilution_threshold_pct ?? null) as any,
+                        created_by: user.id,
+                    }, tx)
+                    await replaceIngredients(tx, f.id, b.ingredients)
+                    return f.id
                 })
+                return reply.status(201).send({ id })
+            } catch (err: any) {
+                if (err.code === '23503') return reply.status(400).send({ error: 'Bad Request', message: 'Unknown variant_id or resource_id' })
+                if (err.code === '23505') return reply.status(409).send({ error: 'Conflict', message: 'Duplicate ingredient or already a default' })
+                fastify.log.error(err)
+                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to create formula' })
+            }
+        },
+    })
 
-                // Attach resources to their respective formulas
-                const fullFormulas = formulas.map(formula => ({
-                    ...formula,
-                    resources: resourcesByFormula[formula.id] || []
-                }))
+    fastify.post('/:id/copy', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { params: IdParam, body: CopyFormulaBody },
+        handler: async (request, reply) => {
+            const user = request.user as any
+            const sourceId = request.params.id
+            try {
+                const newId = await withTransaction(fastify.db, async (tx) => {
+                    const src = await getFormulaForCopy.run({ id: sourceId }, tx)
+                    if (src.length === 0) throw Object.assign(new Error('Source formula not found'), { statusCode: 404 })
+                    const s = src[0]
+                    const [inserted] = await insertFormulaCopy.run({
+                        variant_id: request.body.variant_id ?? s.variant_id,
+                        name: request.body.name ?? `${s.name} (copy)`,
+                        notes: s.notes,
+                        standard_output_kg: s.standard_output_kg,
+                        wastage_threshold_pct: s.wastage_threshold_pct,
+                        resource_variance_threshold_pct: s.resource_variance_threshold_pct,
+                        dilution_threshold_pct: s.dilution_threshold_pct,
+                        created_by: user.id,
+                    }, tx)
+                    await copyFormulaIngredients.run({ new_id: inserted.id, source_id: sourceId }, tx)
+                    return inserted.id
+                })
+                return reply.status(201).send({ id: newId })
+            } catch (err: any) {
+                if (err.statusCode === 404) return reply.status(404).send({ error: 'Not Found', message: err.message })
+                if (err.code === '23503') return reply.status(400).send({ error: 'Bad Request', message: 'Target variant_id does not exist' })
+                fastify.log.error(err)
+                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to copy formula' })
+            }
+        },
+    })
 
-                return reply.send(fullFormulas)
+    fastify.patch('/:id', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { params: IdParam, body: PatchFormulaBody },
+        handler: async (request, reply) => {
+            const b = request.body
+            const hasField = b.name !== undefined || b.notes !== undefined || b.standard_output_kg !== undefined
+                || b.wastage_threshold_pct !== undefined || b.resource_variance_threshold_pct !== undefined
+                || b.dilution_threshold_pct !== undefined
+            if (!hasField) return reply.status(400).send({ error: 'Bad Request', message: 'No fields to update' })
+            const rows = await patchFormula.run({
+                id: request.params.id,
+                name: b.name ?? null, notes: b.notes ?? null,
+                standard_output_kg: (b.standard_output_kg ?? null) as any,
+                wastage_threshold_pct:           (b.wastage_threshold_pct ?? null) as any,
+                resource_variance_threshold_pct: (b.resource_variance_threshold_pct ?? null) as any,
+                dilution_threshold_pct:          (b.dilution_threshold_pct ?? null) as any,
+                clear_wastage:  b.wastage_threshold_pct === null,
+                clear_variance: b.resource_variance_threshold_pct === null,
+                clear_dilution: b.dilution_threshold_pct === null,
+            }, fastify.db)
+            if (rows.length === 0) return reply.status(404).send({ error: 'Not Found', message: 'Formula not found' })
+            return { id: rows[0].id }
+        },
+    })
+
+    fastify.put('/:id/ingredients', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { params: IdParam, body: ReplaceIngredientsBody },
+        handler: async (request, reply) => {
+            const id = request.params.id
+            try {
+                await withTransaction(fastify.db, async (tx) => {
+                    const ok = await formulaExists.run({ id }, tx)
+                    if (ok.length === 0) throw Object.assign(new Error('Formula not found'), { statusCode: 404 })
+                    await replaceIngredients(tx, id, request.body.ingredients)
+                })
+                return { id }
+            } catch (err: any) {
+                if (err.statusCode === 404) return reply.status(404).send({ error: 'Not Found', message: err.message })
+                if (err.code === '23503') return reply.status(400).send({ error: 'Bad Request', message: 'Unknown resource_id' })
+                fastify.log.error(err)
+                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to replace ingredients' })
+            }
+        },
+    })
+
+    fastify.post('/:id/default', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { params: IdParam },
+        handler: async (request, reply) => {
+            const id = request.params.id
+            try {
+                const ok = await withTransaction(fastify.db, async (tx) => {
+                    const target = await getFormulaVariant.run({ id }, tx)
+                    if (target.length === 0) return false
+                    await clearDefaultFormulaForVariant.run({ variant_id: target[0].variant_id }, tx)
+                    await setFormulaDefault.run({ id }, tx)
+                    return true
+                })
+                if (!ok) return reply.status(404).send({ error: 'Not Found', message: 'Formula not found' })
+                return { id }
             } catch (err) {
                 fastify.log.error(err)
-                return reply.status(500).send({
-                    error: 'Internal Server Error',
-                    message: 'Failed to retrieve formulas'
-                })
+                return reply.status(500).send({ error: 'Internal Server Error', message: 'Failed to set default' })
             }
-        }
+        },
     })
 
-    /**
-     * POST /formulas - Create a new formula and its bill of materials.
-     * Only accessible by users with 'admin' or 'manager' roles.
-     */
-    fastify.post('/', {
-        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
-        schema: {
-            body: CreateFormulaSchema
-        },
+    fastify.post('/:id/archive', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { params: IdParam },
         handler: async (request, reply) => {
-            const { color_id, name, version, batch_size_kg, resources } = request.body
-
-            // We need a transaction block to ensure both the formula and its resources are safely committed.
-            let client
-            try {
-                // Get a dedicated client from the pool for the transaction
-                client = await fastify.db.connect()
-                await client.query('BEGIN')
-
-                // 1. Insert the new formula
-                const formulaResult = await client.query(
-                    `INSERT INTO formulas (color_id, name, version, batch_size_kg) 
-                     VALUES ($1, $2, $3, $4) 
-                     RETURNING id, color_id, name, version, batch_size_kg, is_active, created_at`,
-                    [color_id, name, version || '1.0.0', batch_size_kg]
-                )
-
-                const newFormula = formulaResult.rows[0]
-
-                // 2. Insert the formula's resources (Bill of Materials)
-                for (const res of resources) {
-                    await client.query(
-                        `INSERT INTO formula_resources (formula_id, resource_id, quantity_required) 
-                         VALUES ($1, $2, $3)`,
-                        [newFormula.id, res.resource_id, res.quantity_required]
-                    )
-                }
-
-                // 3. Log the creation in the audit_logs table
-                const user = request.user as any
-                await client.query(
-                    `INSERT INTO audit_logs (user_id, action, entity_type, entity_id)
-                     VALUES ($1, 'formula_created', 'formula', $2)`,
-                    [user.id, newFormula.id]
-                )
-
-                // 5. Commit Transaction
-                await client.query('COMMIT')
-
-                return reply.status(201).send({
-                    message: 'Formula created successfully',
-                    formula: {
-                        ...newFormula,
-                        resources: resources
-                    }
-                })
-            } catch (err: any) {
-                // If any error occurs, rollback the changes
-                if (client) {
-                    await client.query('ROLLBACK')
-                }
-
-                // Handle duplicate unique constraint violations from DB if needed
-                if (err.code === '23505') {
-                    return reply.status(400).send({
-                        error: 'Bad Request',
-                        message: 'A duplicate entry exists (e.g., duplicated resource in formula)'
-                    })
-                }
-
-                // Check for foreign key constraint violation (e.g. invalid color_id or resource_id)
-                if (err.code === '23503') {
-                    return reply.status(400).send({
-                        error: 'Bad Request',
-                        message: 'Invalid color_id or resource_id provided'
-                    })
-                }
-
-                fastify.log.error(err)
-                return reply.status(500).send({
-                    error: 'Internal Server Error',
-                    message: 'Failed to create formula'
-                })
-            } finally {
-                // Always release the client back to the pool
-                if (client) {
-                    client.release()
-                }
-            }
-        }
+            const user = request.user as any
+            const rows = await archiveFormula.run({ id: request.params.id, user_id: user.id }, fastify.db)
+            if (rows.length === 0) return reply.status(404).send({ error: 'Not Found', message: 'Formula not found or already archived' })
+            return { id: rows[0].id }
+        },
     })
 
-    /**
-     * POST /formulas/:id/resources - Add a resource to an existing formula.
-     * Only accessible by users with 'admin' or 'manager' roles.
-     */
-    fastify.post('/:id/resources', {
-        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
-        schema: {
-            params: FormulaIdParamSchema,
-            body: AddResourceSchema
-        },
+    fastify.post('/:id/restore', {
+        preHandler: [fastify.authenticate, authorizeRole(['manager'])],
+        schema: { params: IdParam },
         handler: async (request, reply) => {
-            const { id } = request.params
-            const { resource_id, quantity_required } = request.body
-
-            try {
-                // 1. Validate that the formula exists
-                const formulaCheck = await fastify.db.query(
-                    'SELECT id FROM formulas WHERE id = $1',
-                    [id]
-                )
-                if (formulaCheck.rows.length === 0) {
-                    return reply.status(404).send({
-                        error: 'Not Found',
-                        message: 'Formula not found'
-                    })
-                }
-
-                // 2. Validate that the resource exists
-                const resourceCheck = await fastify.db.query(
-                    'SELECT id FROM resources WHERE id = $1',
-                    [resource_id]
-                )
-                if (resourceCheck.rows.length === 0) {
-                    return reply.status(404).send({
-                        error: 'Not Found',
-                        message: 'Resource not found'
-                    })
-                }
-
-                // 3. Insert the resource link (Bill of Materials entry)
-                const result = await fastify.db.query(
-                    `INSERT INTO formula_resources (formula_id, resource_id, quantity_required) 
-                     VALUES ($1, $2, $3) 
-                     RETURNING id, formula_id, resource_id, quantity_required`,
-                    [id, resource_id, quantity_required]
-                )
-
-                return reply.status(201).send({
-                    message: 'Resource added to formula successfully',
-                    formula_resource: result.rows[0]
-                })
-
-            } catch (err: any) {
-                // Catch unique constraint violation (e.g., resource_id already mapped to this formula_id)
-                if (err.code === '23505') {
-                    return reply.status(400).send({
-                        error: 'Bad Request',
-                        message: 'This resource is already added to the specified formula'
-                    })
-                }
-
-                fastify.log.error(err)
-                return reply.status(500).send({
-                    error: 'Internal Server Error',
-                    message: 'Failed to add resource to formula'
-                })
-            }
-        }
-    })
-
-    /**
-     * PUT /formulas/:id - Update an existing formula
-     * Only accessible by 'admin' or 'manager' roles.
-     */
-    fastify.put('/:id', {
-        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
-        schema: {
-            params: FormulaIdParamSchema,
-            body: UpdateFormulaSchema
+            const rows = await restoreFormula.run({ id: request.params.id }, fastify.db)
+            if (rows.length === 0) return reply.status(404).send({ error: 'Not Found', message: 'Formula not found' })
+            return { id: rows[0].id }
         },
-        handler: async (request, reply) => {
-            const { id } = request.params
-            const { name, version, batch_size_kg, resources } = request.body
-
-            let client
-            try {
-                client = await fastify.db.connect()
-                await client.query('BEGIN')
-
-                // Update formula core fields
-                const updates: string[] = []
-                const values: any[] = []
-                let paramIdx = 1
-
-                if (name !== undefined) {
-                    updates.push(`name = $${paramIdx++}`)
-                    values.push(name)
-                }
-                if (version !== undefined) {
-                    updates.push(`version = $${paramIdx++}`)
-                    values.push(version)
-                }
-                if (batch_size_kg !== undefined) {
-                    updates.push(`batch_size_kg = $${paramIdx++}`)
-                    values.push(batch_size_kg)
-                }
-
-                if (updates.length > 0) {
-                    updates.push(`updated_at = CURRENT_TIMESTAMP`)
-                    values.push(id)
-                    const updateQuery = `UPDATE formulas SET ${updates.join(', ')} WHERE id = $${paramIdx}`
-                    await client.query(updateQuery, values)
-                }
-
-                // Update resources if provided
-                if (resources !== undefined) {
-                    // First, delete current resources for this formula
-                    await client.query('DELETE FROM formula_resources WHERE formula_id = $1', [id])
-
-                    // Insert the new ones
-                    for (const res of resources) {
-                        await client.query(
-                            `INSERT INTO formula_resources (formula_id, resource_id, quantity_required) 
-                             VALUES ($1, $2, $3)`,
-                            [id, res.resource_id, res.quantity_required]
-                        )
-                    }
-                }
-
-                const user = request.user as any
-                await client.query(
-                    `INSERT INTO audit_logs (user_id, action, entity_type, entity_id)
-                     VALUES ($1, 'formula_updated', 'formula', $2)`,
-                    [user.id, id]
-                )
-
-                await client.query('COMMIT')
-                
-                return reply.send({
-                    message: 'Formula updated successfully'
-                })
-            } catch (err: any) {
-                if (client) await client.query('ROLLBACK')
-                if (err.code === '23505') {
-                    return reply.status(400).send({
-                        error: 'Bad Request',
-                        message: 'A duplicate entry exists (e.g., duplicated resource in formula)'
-                    })
-                }
-                fastify.log.error(err)
-                return reply.status(500).send({
-                    error: 'Internal Server Error',
-                    message: 'Failed to update formula'
-                })
-            } finally {
-                if (client) client.release()
-            }
-        }
-    })
-
-    /**
-     * DELETE /formulas/:id - Delete a formula
-     * Only accessible by 'admin' or 'manager' roles.
-     */
-    fastify.delete('/:id', {
-        preHandler: [fastify.authenticate, authorizeRole(['admin', 'manager'])],
-        schema: {
-            params: FormulaIdParamSchema
-        },
-        handler: async (request, reply) => {
-            const { id } = request.params
-            let client
-            try {
-                client = await fastify.db.connect()
-                await client.query('BEGIN')
-
-                // Get the color_id before deleting
-                const formulaResult = await client.query('SELECT color_id FROM formulas WHERE id = $1', [id])
-                if (formulaResult.rows.length === 0) {
-                    await client.query('ROLLBACK')
-                    return reply.status(404).send({
-                        error: 'Not Found',
-                        message: 'Formula not found'
-                    })
-                }
-                const colorId = formulaResult.rows[0].color_id
-
-                // Find other formulas for this color and wipe out associated data
-                const otherFormulas = await client.query('SELECT id FROM formulas WHERE color_id = $1', [colorId])
-                for (const row of otherFormulas.rows) {
-                    const formulaId = row.id
-                    
-                    // Find and delete all production runs using this formula
-                    const runsResult = await client.query('SELECT id FROM production_runs WHERE formula_id = $1', [formulaId])
-                    for (const runRow of runsResult.rows) {
-                        const runId = runRow.id
-                        // Clean up child dependencies of the production run
-                        await client.query('DELETE FROM production_resource_actuals WHERE production_run_id = $1', [runId])
-                        await client.query("DELETE FROM finished_stock_transactions WHERE reference_id = $1 AND transaction_type = 'production_entry'", [runId])
-                        await client.query("DELETE FROM resource_stock_transactions WHERE reference_id = $1 AND transaction_type = 'production_usage'", [runId])
-                        // Delete the run itself
-                        await client.query('DELETE FROM production_runs WHERE id = $1', [runId])
-                    }
-
-                    // Delete the formula resources mapping
-                    await client.query('DELETE FROM formula_resources WHERE formula_id = $1', [formulaId])
-                }
-
-                // Delete all finished stock and general transactions for this color
-                await client.query('DELETE FROM finished_stock_transactions WHERE color_id = $1', [colorId])
-                await client.query('DELETE FROM finished_stock WHERE color_id = $1', [colorId])
-                
-                // Delete all formulas for this color
-                await client.query('DELETE FROM formulas WHERE color_id = $1', [colorId])
-
-                // Delete the color itself
-                await client.query('DELETE FROM colors WHERE id = $1', [colorId])
-
-                const user = request.user as any
-                await client.query(
-                    `INSERT INTO audit_logs (user_id, action, entity_type, entity_id)
-                      VALUES ($1, 'formula_deleted_cascade_color', 'formula', $2)`,
-                    [user.id, id]
-                )
-
-                await client.query('COMMIT')
-                return reply.send({
-                    message: 'Formula and its associated color deleted successfully'
-                })
-            } catch (err: any) {
-                if (client) await client.query('ROLLBACK')
-                if (err.code === '23503') {
-                    return reply.status(400).send({
-                        error: 'Bad Request',
-                        message: `Cannot delete: the formula or color is locked by existing data. Detail: ${err.detail || 'None available'}`
-                    })
-                }
-                fastify.log.error(err)
-                return reply.status(500).send({
-                    error: 'Internal Server Error',
-                    message: 'Failed to delete formula and color'
-                })
-            } finally {
-                if (client) client.release()
-            }
-        }
     })
 }
