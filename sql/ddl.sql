@@ -1,2805 +1,896 @@
 --
--- PostgreSQL database dump
+-- Paint Production & Inventory App — Database Schema
+-- See doc/pr-1_spec.md for requirements.
+--
+-- All weights are in kilograms. All money values carry an ISO 4217 currency
+-- code; cross-currency conversion is out of scope (spec §3.8, §6).
 --
 
-\restrict 4bHFzg8sVcME48fxqjIkMBzSZiO5n0Y8gmKZPeOiLHliiEr0zUbmMYoqyfcvSl9
-
--- Dumped from database version 17.6
--- Dumped by pg_dump version 18.3
-
-SET statement_timeout = 0;
-SET lock_timeout = 0;
-SET idle_in_transaction_session_timeout = 0;
-SET transaction_timeout = 0;
-SET client_encoding = 'UTF8';
-SET standard_conforming_strings = on;
-SELECT pg_catalog.set_config('search_path', '', false);
-SET check_function_bodies = false;
-SET xmloption = content;
 SET client_min_messages = warning;
-SET row_security = off;
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 --
--- Name: public; Type: SCHEMA; Schema: -; Owner: postgres
+-- ============================================================
+-- Enums
+-- ============================================================
 --
 
--- *not* creating schema, since initdb creates it
+CREATE TYPE user_role            AS ENUM ('manager', 'operator', 'sales');
+CREATE TYPE device_status        AS ENUM ('pending', 'approved', 'rejected');
 
+CREATE TYPE paint_classification AS ENUM ('oil_based', 'water_based');
+CREATE TYPE ink_series           AS ENUM ('LCS', 'STD', 'OPQ_JS');
 
-ALTER SCHEMA public OWNER TO postgres;
+CREATE TYPE po_status            AS ENUM ('draft', 'ordered', 'shipped', 'received', 'cancelled');
+CREATE TYPE po_line_kind         AS ENUM ('resource', 'finished_paint');
 
---
--- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: postgres
---
+CREATE TYPE order_status         AS ENUM (
+	'draft',
+	'pending_approval',
+	'approved',
+	'in_production',
+	'ready_for_shipment',
+	'shipped',
+	'completed',
+	'cancelled'
+);
+CREATE TYPE payment_terms        AS ENUM ('prepaid', 'cod', 'net');
+CREATE TYPE payment_method       AS ENUM ('cash', 'bank_transfer', 'upi', 'cheque', 'card', 'other');
+CREATE TYPE refund_status        AS ENUM ('pending_approval', 'approved', 'rejected', 'paid_out', 'n_a');
 
-COMMENT ON SCHEMA public IS '';
+CREATE TYPE production_request_origin AS ENUM ('customer_order', 'demand_suggestion');
+CREATE TYPE production_request_status AS ENUM ('pending', 'in_production', 'completed', 'cancelled');
+CREATE TYPE production_run_status     AS ENUM ('planned', 'in_progress', 'completed', 'cancelled');
 
+CREATE TYPE pack_source          AS ENUM ('produced', 'supplier');
+CREATE TYPE pack_status          AS ENUM ('in_stock', 'ready_for_shipment', 'shipped', 'sold', 'lost', 'returned');
 
---
--- Name: loss_item_type; Type: TYPE; Schema: public; Owner: postgres
---
+CREATE TYPE return_condition     AS ENUM ('good', 'damaged', 'expired', 'other');
+CREATE TYPE return_disposition   AS ENUM ('re_inventory', 'lost');
 
-CREATE TYPE public.loss_item_type AS ENUM (
-    'finished_good',
-    'raw_material'
+CREATE TYPE resource_txn_type    AS ENUM (
+	'po_receipt',
+	'production_consumption',
+	'dilution_consumption',
+	'manual_adjustment'
 );
 
-
-ALTER TYPE public.loss_item_type OWNER TO postgres;
+CREATE TYPE stash_txn_action     AS ENUM ('added', 'consumed', 'repackaged', 'manual_adjustment');
 
 --
--- Name: update_resource_stock_from_transaction(); Type: FUNCTION; Schema: public; Owner: postgres
+-- ============================================================
+-- Shared trigger functions
+-- ============================================================
 --
 
-CREATE FUNCTION public.update_resource_stock_from_transaction() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
+CREATE OR REPLACE FUNCTION set_updated_at() RETURNS trigger
+LANGUAGE plpgsql AS $$
 BEGIN
-    UPDATE resources
-    SET current_stock = current_stock + NEW.quantity,
-        updated_at = CURRENT_TIMESTAMP
-    WHERE id = NEW.resource_id;
-    RETURN NEW;
+	NEW.updated_at = CURRENT_TIMESTAMP;
+	RETURN NEW;
 END;
 $$;
 
-
-ALTER FUNCTION public.update_resource_stock_from_transaction() OWNER TO postgres;
-
-SET default_tablespace = '';
-
-SET default_table_access_method = heap;
-
 --
--- Name: app_settings; Type: TABLE; Schema: public; Owner: postgres
+-- ============================================================
+-- Users, roles, devices (§2, §2.2, §5)
+-- ============================================================
 --
 
-CREATE TABLE public.app_settings (
-    key character varying(100) NOT NULL,
-    value text NOT NULL,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE users (
+	id                     int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	username               varchar(100) NOT NULL UNIQUE,
+	-- Email required for managers (used for email/Google sign-in); optional otherwise.
+	email                  varchar(255) UNIQUE,
+	google_sub             varchar(255) UNIQUE,
+	-- NULL while a password reset is pending; user must set a new one on next login (§5).
+	password_hash          text,
+	password_reset_required boolean      NOT NULL DEFAULT false,
+	role                   user_role    NOT NULL,
+	is_active              boolean      NOT NULL DEFAULT true,
+	last_login             timestamptz,
+	created_at             timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at             timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	CONSTRAINT users_manager_has_email CHECK (role <> 'manager' OR email IS NOT NULL)
 );
 
+CREATE TRIGGER trg_users_updated_at
+	BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-ALTER TABLE public.app_settings OWNER TO postgres;
-
---
--- Name: audit_logs; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.audit_logs (
-    id integer NOT NULL,
-    user_id integer NOT NULL,
-    action character varying(255) NOT NULL,
-    entity_type character varying(50) NOT NULL,
-    entity_id integer NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE user_devices (
+	id           int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	user_id      int          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	-- Random UUID generated client-side and stored on the device (spec §2.2).
+	client_id    uuid         NOT NULL,
+	status       device_status NOT NULL DEFAULT 'pending',
+	label        varchar(255),
+	user_agent   text,
+	last_seen_ip inet,
+	approved_by  int          REFERENCES users(id),
+	approved_at  timestamptz,
+	created_at   timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at   timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE (user_id, client_id)
 );
 
+CREATE INDEX idx_user_devices_user_status ON user_devices (user_id, status);
 
-ALTER TABLE public.audit_logs OWNER TO postgres;
-
---
--- Name: audit_logs_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.audit_logs_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.audit_logs_id_seq OWNER TO postgres;
+CREATE TRIGGER trg_user_devices_updated_at
+	BEFORE UPDATE ON user_devices FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 --
--- Name: audit_logs_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- ============================================================
+-- Audit trail (§3.9)
+-- Immutable: enforced via trigger preventing UPDATE/DELETE.
+-- ============================================================
 --
 
-ALTER SEQUENCE public.audit_logs_id_seq OWNED BY public.audit_logs.id;
-
-
---
--- Name: client_order_items; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.client_order_items (
-    id integer NOT NULL,
-    order_id integer,
-    color_id integer NOT NULL,
-    pack_size_kg numeric(5,2) NOT NULL,
-    quantity integer NOT NULL
+CREATE TABLE audit_logs (
+	id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	user_id     int          REFERENCES users(id),
+	action      varchar(100) NOT NULL,
+	entity_type varchar(50)  NOT NULL,
+	entity_id   bigint,
+	before      jsonb,
+	after       jsonb,
+	metadata    jsonb,
+	created_at  timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX idx_audit_logs_entity ON audit_logs (entity_type, entity_id);
+CREATE INDEX idx_audit_logs_created_at ON audit_logs (created_at DESC);
 
-ALTER TABLE public.client_order_items OWNER TO postgres;
+CREATE OR REPLACE FUNCTION audit_logs_block_mutations() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+	RAISE EXCEPTION 'audit_logs is append-only';
+END;
+$$;
 
---
--- Name: client_order_items_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.client_order_items_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.client_order_items_id_seq OWNER TO postgres;
+CREATE TRIGGER trg_audit_logs_no_update BEFORE UPDATE OR DELETE ON audit_logs
+	FOR EACH ROW EXECUTE FUNCTION audit_logs_block_mutations();
 
 --
--- Name: client_order_items_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- ============================================================
+-- App settings (thresholds, defaults) (§3.3, §3.6, §3.4)
+-- ============================================================
 --
 
-ALTER SEQUENCE public.client_order_items_id_seq OWNED BY public.client_order_items.id;
-
-
---
--- Name: client_orders; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.client_orders (
-    id integer NOT NULL,
-    client_id integer,
-    client_name character varying(255) NOT NULL,
-    shipping_address_id integer,
-    status character varying(50) DEFAULT 'pending'::character varying,
-    notes text,
-    created_by integer NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    shipping_status character varying(50) DEFAULT 'pending'::character varying,
-    payment_method character varying(50),
-    payment_status character varying(50) DEFAULT 'pending'::character varying,
-    return_status character varying(50),
-    refund_status character varying(50)
+CREATE TABLE app_settings (
+	key        varchar(100) PRIMARY KEY,
+	value      jsonb        NOT NULL,
+	updated_by int          REFERENCES users(id),
+	updated_at timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TRIGGER trg_app_settings_updated_at
+	BEFORE UPDATE ON app_settings FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-ALTER TABLE public.client_orders OWNER TO postgres;
-
---
--- Name: client_orders_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.client_orders_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.client_orders_id_seq OWNER TO postgres;
-
---
--- Name: client_orders_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.client_orders_id_seq OWNED BY public.client_orders.id;
-
-
---
--- Name: client_shipping_addresses; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.client_shipping_addresses (
-    id integer NOT NULL,
-    client_id integer NOT NULL,
-    label character varying(100) NOT NULL,
-    address text NOT NULL,
-    is_default boolean DEFAULT false
+-- Configurable default pack sizes (kg). Managers manage the active list (§3.3).
+CREATE TABLE pack_sizes (
+	pack_size_kg numeric(10,4) PRIMARY KEY CHECK (pack_size_kg > 0),
+	is_active    boolean       NOT NULL DEFAULT true,
+	created_at   timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-
-ALTER TABLE public.client_shipping_addresses OWNER TO postgres;
-
 --
--- Name: client_shipping_addresses_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.client_shipping_addresses_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.client_shipping_addresses_id_seq OWNER TO postgres;
-
---
--- Name: client_shipping_addresses_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- ============================================================
+-- Paints, variants, formulas (§3.1)
+-- ============================================================
 --
 
-ALTER SEQUENCE public.client_shipping_addresses_id_seq OWNED BY public.client_shipping_addresses.id;
-
-
---
--- Name: clients; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.clients (
-    id integer NOT NULL,
-    name character varying(255) NOT NULL,
-    gst_number character varying(20),
-    contact_name character varying(255),
-    contact_phone character varying(30),
-    contact_email character varying(255),
-    billing_address text,
-    created_by integer,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+-- A paint is the product. HSN code + product code are constant across variants.
+CREATE TABLE paints (
+	id            int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	name          varchar(255) NOT NULL UNIQUE,
+	swatch        varchar(50),       -- e.g. hex color or asset URL
+	notes         text,
+	hsn_code      varchar(50),
+	product_code  varchar(50) UNIQUE,
+	tags          jsonb        NOT NULL DEFAULT '[]'::jsonb,
+	archived_at   timestamptz,
+	archived_by   int          REFERENCES users(id),
+	created_by    int          REFERENCES users(id),
+	created_at    timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at    timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX idx_paints_hsn_code     ON paints (hsn_code);
+CREATE INDEX idx_paints_product_code ON paints (product_code);
+CREATE INDEX idx_paints_tags         ON paints USING gin (tags);
 
-ALTER TABLE public.clients OWNER TO postgres;
+CREATE TRIGGER trg_paints_updated_at
+	BEFORE UPDATE ON paints FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
---
--- Name: clients_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.clients_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.clients_id_seq OWNER TO postgres;
-
---
--- Name: clients_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.clients_id_seq OWNED BY public.clients.id;
-
-
---
--- Name: color_ink_grades; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.color_ink_grades (
-    color_id integer NOT NULL,
-    grade_id integer NOT NULL
+-- Sellable variants = paint × classification × ink_series (spec §3.1).
+-- Water-based variants are made-to-order with a 1-year shelf life (encoded in app logic).
+CREATE TABLE paint_variants (
+	id             int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	paint_id       int NOT NULL REFERENCES paints(id) ON DELETE CASCADE,
+	classification paint_classification NOT NULL,
+	ink_series     ink_series           NOT NULL,
+	archived_at    timestamptz,
+	archived_by    int          REFERENCES users(id),
+	created_at     timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at     timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE (paint_id, classification, ink_series)
 );
 
+CREATE INDEX idx_paint_variants_paint ON paint_variants (paint_id);
 
-ALTER TABLE public.color_ink_grades OWNER TO postgres;
+CREATE TRIGGER trg_paint_variants_updated_at
+	BEFORE UPDATE ON paint_variants FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
---
--- Name: color_product_series; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.color_product_series (
-    color_id integer NOT NULL,
-    series_id integer NOT NULL
+-- A formula is a recipe to produce one variant. Multiple per variant allowed;
+-- most-recent or explicitly-flagged formula is the default (§3.1).
+CREATE TABLE formulas (
+	id                       int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	variant_id               int          NOT NULL REFERENCES paint_variants(id) ON DELETE CASCADE,
+	name                     varchar(255) NOT NULL,
+	notes                    text,
+	standard_output_kg       numeric(14,6) NOT NULL CHECK (standard_output_kg > 0),
+	is_default               boolean      NOT NULL DEFAULT false,
+	-- Per-formula irregularity overrides; NULL means fall back to global app_settings (§3.3).
+	wastage_threshold_pct           numeric(6,3),
+	resource_variance_threshold_pct numeric(6,3),
+	dilution_threshold_pct          numeric(6,3),
+	archived_at  timestamptz,
+	archived_by  int          REFERENCES users(id),
+	created_by   int          REFERENCES users(id),
+	created_at   timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at   timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX idx_formulas_variant ON formulas (variant_id);
+-- At most one default formula per variant.
+CREATE UNIQUE INDEX idx_formulas_one_default_per_variant
+	ON formulas (variant_id) WHERE is_default;
 
-ALTER TABLE public.color_product_series OWNER TO postgres;
+CREATE TRIGGER trg_formulas_updated_at
+	BEFORE UPDATE ON formulas FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 --
--- Name: color_product_types; Type: TABLE; Schema: public; Owner: postgres
+-- ============================================================
+-- Resources, supplier POs, stock (§3.2, §3.7)
+-- ============================================================
 --
 
-CREATE TABLE public.color_product_types (
-    color_id integer NOT NULL,
-    type_id integer NOT NULL
+CREATE TABLE resources (
+	id                       int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	name                     varchar(255) NOT NULL UNIQUE,
+	description              text,
+	aliases                  jsonb        NOT NULL DEFAULT '[]'::jsonb,
+	import_source            varchar(255),
+	-- Maintained by trigger on resource_stock_transactions.
+	current_stock_kg         numeric(16,6) NOT NULL DEFAULT 0 CHECK (current_stock_kg >= 0),
+	weighted_avg_cost_per_kg numeric(14,4) NOT NULL DEFAULT 0 CHECK (weighted_avg_cost_per_kg >= 0),
+	-- Per-resource low-stock threshold (kg); NULL falls back to global setting (§3.2).
+	low_stock_threshold_kg   numeric(16,6),
+	archived_at  timestamptz,
+	archived_by  int          REFERENCES users(id),
+	created_by   int          REFERENCES users(id),
+	created_at   timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at   timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX idx_resources_aliases ON resources USING gin (aliases);
 
-ALTER TABLE public.color_product_types OWNER TO postgres;
+CREATE TRIGGER trg_resources_updated_at
+	BEFORE UPDATE ON resources FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
---
--- Name: colors; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.colors (
-    id integer NOT NULL,
-    name character varying(255) NOT NULL,
-    color_code character varying(50),
-    business_code character varying(50),
-    series character varying(100),
-    min_threshold_kg numeric(12,4) DEFAULT 0,
-    description text,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    approval_status character varying(20) DEFAULT 'approved'::character varying,
-    requested_by integer,
-    available_lcs boolean DEFAULT true NOT NULL,
-    available_std boolean DEFAULT true NOT NULL,
-    available_opq_js boolean DEFAULT true NOT NULL,
-    ink_series character varying(50),
-    hsn_code character varying(50),
-    tags jsonb DEFAULT '[]'::jsonb
+CREATE TABLE suppliers (
+	id              int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	name            varchar(255) NOT NULL UNIQUE,
+	contact_name    varchar(255),
+	email           varchar(255),
+	phone           varchar(50),
+	address         text,
+	website         varchar(255),
+	gst_number      varchar(20),
+	pocs            jsonb        NOT NULL DEFAULT '[]'::jsonb,
+	notes           text,
+	archived_at     timestamptz,
+	archived_by     int          REFERENCES users(id),
+	created_by      int          REFERENCES users(id),
+	created_at      timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at      timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TRIGGER trg_suppliers_updated_at
+	BEFORE UPDATE ON suppliers FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-ALTER TABLE public.colors OWNER TO postgres;
-
---
--- Name: colors_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.colors_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.colors_id_seq OWNER TO postgres;
-
---
--- Name: colors_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.colors_id_seq OWNED BY public.colors.id;
-
-
---
--- Name: device_enrollment_requests; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.device_enrollment_requests (
-    id integer NOT NULL,
-    user_id integer NOT NULL,
-    device character varying(255) NOT NULL,
-    location character varying(255),
-    status character varying(50) DEFAULT 'pending'::character varying,
-    requested_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+-- Supplier-facing Purchase Order document (§3.2). Distinct from a customer order.
+CREATE TABLE purchase_orders (
+	id          int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	supplier_id int          NOT NULL REFERENCES suppliers(id),
+	status      po_status    NOT NULL DEFAULT 'draft',
+	currency    char(3)      NOT NULL DEFAULT 'INR',
+	notes       text,
+	share_token uuid         NOT NULL DEFAULT gen_random_uuid(),
+	ordered_at  timestamptz,
+	shipped_at  timestamptz,
+	received_at timestamptz,
+	archived_at timestamptz,
+	archived_by int          REFERENCES users(id),
+	created_by  int          REFERENCES users(id),
+	created_at  timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at  timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX idx_purchase_orders_supplier ON purchase_orders (supplier_id);
+CREATE INDEX idx_purchase_orders_status   ON purchase_orders (status);
 
-ALTER TABLE public.device_enrollment_requests OWNER TO postgres;
+CREATE TRIGGER trg_purchase_orders_updated_at
+	BEFORE UPDATE ON purchase_orders FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
---
--- Name: device_enrollment_requests_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.device_enrollment_requests_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.device_enrollment_requests_id_seq OWNER TO postgres;
-
---
--- Name: device_enrollment_requests_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.device_enrollment_requests_id_seq OWNED BY public.device_enrollment_requests.id;
-
-
---
--- Name: finished_stock; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.finished_stock (
-    id integer NOT NULL,
-    color_id integer NOT NULL,
-    pack_size_kg numeric(5,2) NOT NULL,
-    quantity_units integer DEFAULT 0,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+-- A PO line is EITHER a raw resource OR supplier-supplied finished paint of an existing variant (§3.2).
+CREATE TABLE purchase_order_items (
+	id                  int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	purchase_order_id   int NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+	kind                po_line_kind NOT NULL,
+	resource_id         int          REFERENCES resources(id),
+	variant_id          int          REFERENCES paint_variants(id),
+	pack_size_kg        numeric(10,4),
+	quantity_kg         numeric(16,6),    -- used for resource lines and supplier-supplied bulk
+	quantity_packs      int,              -- used for supplier-supplied packs
+	-- Landed cost per kg (purchase price + shipping/import) — §3.2 / §3.7.
+	landed_cost_per_kg  numeric(14,4) NOT NULL CHECK (landed_cost_per_kg >= 0),
+	received_quantity_kg numeric(16,6) NOT NULL DEFAULT 0,
+	received_packs       int           NOT NULL DEFAULT 0,
+	created_at  timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at  timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	CONSTRAINT po_item_kind_resource CHECK (
+		kind <> 'resource' OR (resource_id IS NOT NULL AND quantity_kg IS NOT NULL AND quantity_kg > 0)
+	),
+	CONSTRAINT po_item_kind_finished CHECK (
+		kind <> 'finished_paint' OR (
+			variant_id IS NOT NULL AND pack_size_kg IS NOT NULL AND pack_size_kg > 0
+			AND quantity_packs IS NOT NULL AND quantity_packs > 0
+		)
+	)
 );
 
+CREATE INDEX idx_po_items_po       ON purchase_order_items (purchase_order_id);
+CREATE INDEX idx_po_items_resource ON purchase_order_items (resource_id);
+CREATE INDEX idx_po_items_variant  ON purchase_order_items (variant_id);
 
-ALTER TABLE public.finished_stock OWNER TO postgres;
+CREATE TRIGGER trg_po_items_updated_at
+	BEFORE UPDATE ON purchase_order_items FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
---
--- Name: finished_stock_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.finished_stock_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.finished_stock_id_seq OWNER TO postgres;
-
---
--- Name: finished_stock_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.finished_stock_id_seq OWNED BY public.finished_stock.id;
-
-
---
--- Name: finished_stock_transactions; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.finished_stock_transactions (
-    id integer NOT NULL,
-    color_id integer NOT NULL,
-    pack_size_kg numeric(5,2) NOT NULL,
-    transaction_type character varying(50) NOT NULL,
-    quantity_units integer NOT NULL,
-    quantity_kg numeric(12,4) NOT NULL,
-    reference_id integer,
-    notes text,
-    created_by integer,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+-- Append-only ledger of all stock movements for resources. Maintains
+-- resources.current_stock_kg and weighted_avg_cost_per_kg via trigger.
+CREATE TABLE resource_stock_transactions (
+	id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	resource_id     int          NOT NULL REFERENCES resources(id),
+	txn_type        resource_txn_type NOT NULL,
+	-- Signed: positive for receipts, negative for consumption.
+	quantity_kg     numeric(16,6) NOT NULL CHECK (quantity_kg <> 0),
+	-- Required for receipts (txn_type = 'po_receipt') to update weighted average.
+	unit_cost_per_kg numeric(14,4),
+	reference_type  varchar(50),
+	reference_id    bigint,
+	notes           text,
+	created_by      int          REFERENCES users(id),
+	created_at      timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX idx_rst_resource ON resource_stock_transactions (resource_id, created_at DESC);
+CREATE INDEX idx_rst_ref      ON resource_stock_transactions (reference_type, reference_id);
 
-ALTER TABLE public.finished_stock_transactions OWNER TO postgres;
+CREATE OR REPLACE FUNCTION apply_resource_stock_txn() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+	old_stock numeric(16,6);
+	old_cost  numeric(14,4);
+	new_stock numeric(16,6);
+	new_cost  numeric(14,4);
+BEGIN
+	SELECT current_stock_kg, weighted_avg_cost_per_kg
+	  INTO old_stock, old_cost
+	  FROM resources WHERE id = NEW.resource_id FOR UPDATE;
 
---
--- Name: finished_stock_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
+	new_stock := old_stock + NEW.quantity_kg;
+	IF new_stock < 0 THEN
+		RAISE EXCEPTION 'Resource % stock would become negative (% + % = %)',
+			NEW.resource_id, old_stock, NEW.quantity_kg, new_stock;
+	END IF;
 
-CREATE SEQUENCE public.finished_stock_transactions_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
+	-- Weighted average updates on receipts only; consumption keeps the prior average.
+	IF NEW.txn_type = 'po_receipt' AND NEW.quantity_kg > 0 AND NEW.unit_cost_per_kg IS NOT NULL THEN
+		IF new_stock = 0 THEN
+			new_cost := NEW.unit_cost_per_kg;
+		ELSE
+			new_cost := ((old_stock * old_cost) + (NEW.quantity_kg * NEW.unit_cost_per_kg)) / new_stock;
+		END IF;
+	ELSE
+		new_cost := old_cost;
+	END IF;
 
+	UPDATE resources
+	   SET current_stock_kg = new_stock,
+	       weighted_avg_cost_per_kg = new_cost,
+	       updated_at = CURRENT_TIMESTAMP
+	 WHERE id = NEW.resource_id;
 
-ALTER SEQUENCE public.finished_stock_transactions_id_seq OWNER TO postgres;
+	RETURN NEW;
+END;
+$$;
 
---
--- Name: finished_stock_transactions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
+CREATE TRIGGER trg_apply_resource_stock_txn
+	AFTER INSERT ON resource_stock_transactions
+	FOR EACH ROW EXECUTE FUNCTION apply_resource_stock_txn();
 
-ALTER SEQUENCE public.finished_stock_transactions_id_seq OWNED BY public.finished_stock_transactions.id;
-
-
---
--- Name: formula_resources; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.formula_resources (
-    id integer NOT NULL,
-    formula_id integer NOT NULL,
-    resource_id integer NOT NULL,
-    quantity_required numeric(12,4) NOT NULL
+CREATE TABLE formula_resources (
+	id                int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	formula_id        int NOT NULL REFERENCES formulas(id) ON DELETE CASCADE,
+	resource_id       int NOT NULL REFERENCES resources(id),
+	quantity_kg       numeric(16,6) NOT NULL CHECK (quantity_kg > 0),
+	UNIQUE (formula_id, resource_id)
 );
 
-
-ALTER TABLE public.formula_resources OWNER TO postgres;
-
---
--- Name: formula_resources_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.formula_resources_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.formula_resources_id_seq OWNER TO postgres;
+CREATE INDEX idx_formula_resources_formula  ON formula_resources (formula_id);
+CREATE INDEX idx_formula_resources_resource ON formula_resources (resource_id);
 
 --
--- Name: formula_resources_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- ============================================================
+-- Customers (§2.1)
+-- ============================================================
 --
 
-ALTER SEQUENCE public.formula_resources_id_seq OWNED BY public.formula_resources.id;
-
-
---
--- Name: formulas; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.formulas (
-    id integer NOT NULL,
-    color_id integer NOT NULL,
-    name character varying(255) NOT NULL,
-    version character varying(20) DEFAULT '1.0.0'::character varying,
-    batch_size_kg numeric(12,4) NOT NULL,
-    is_active boolean DEFAULT true,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE customers (
+	id               int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	name             varchar(255) NOT NULL,
+	contact_name     varchar(255),
+	contact_phone    varchar(50),
+	contact_email    varchar(255),
+	billing_address  text,
+	-- GST is optional (typically blank for international customers — spec §2.1).
+	gst_number       varchar(20) UNIQUE,
+	default_currency char(3) NOT NULL DEFAULT 'INR',
+	notes            text,
+	archived_at      timestamptz,
+	archived_by      int      REFERENCES users(id),
+	created_by       int      REFERENCES users(id),
+	created_at       timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at       timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TRIGGER trg_customers_updated_at
+	BEFORE UPDATE ON customers FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-ALTER TABLE public.formulas OWNER TO postgres;
-
---
--- Name: formulas_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.formulas_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.formulas_id_seq OWNER TO postgres;
-
---
--- Name: formulas_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.formulas_id_seq OWNED BY public.formulas.id;
-
-
---
--- Name: ink_grades; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.ink_grades (
-    id integer NOT NULL,
-    name character varying(50) NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE customer_shipping_addresses (
+	id          int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	customer_id int      NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+	label       varchar(100) NOT NULL,
+	address     text         NOT NULL,
+	is_default  boolean      NOT NULL DEFAULT false
 );
 
-
-ALTER TABLE public.ink_grades OWNER TO postgres;
-
---
--- Name: ink_grades_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.ink_grades_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.ink_grades_id_seq OWNER TO postgres;
+CREATE INDEX idx_customer_addresses_customer ON customer_shipping_addresses (customer_id);
 
 --
--- Name: ink_grades_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- ============================================================
+-- Customer orders, order confirmations (§3.4)
+-- ============================================================
 --
 
-ALTER SEQUENCE public.ink_grades_id_seq OWNED BY public.ink_grades.id;
-
-
---
--- Name: loss_reasons; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.loss_reasons (
-    id integer NOT NULL,
-    name character varying(50) NOT NULL,
-    description text
+CREATE TABLE customer_orders (
+	id                   int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	customer_id          int          NOT NULL REFERENCES customers(id),
+	shipping_address_id  int          REFERENCES customer_shipping_addresses(id),
+	status               order_status NOT NULL DEFAULT 'draft',
+	currency             char(3)      NOT NULL DEFAULT 'INR',
+	payment_terms        payment_terms NOT NULL DEFAULT 'prepaid',
+	-- Required when payment_terms = 'net'; otherwise NULL.
+	payment_net_days     int          CHECK (payment_net_days IS NULL OR payment_net_days >= 0),
+	order_date           timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	scheduled_ship_date  date,
+	due_date             date,
+	notes                text,
+	-- Sales rep who placed this order; financials are visible only to them + Managers (§3.4).
+	created_by           int          NOT NULL REFERENCES users(id),
+	approved_by          int          REFERENCES users(id),
+	approved_at          timestamptz,
+	shipped_at           timestamptz,
+	completed_at         timestamptz,
+	cancelled_at         timestamptz,
+	archived_at          timestamptz,
+	archived_by          int          REFERENCES users(id),
+	created_at           timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at           timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	CONSTRAINT customer_orders_net_days CHECK (
+		(payment_terms = 'net') = (payment_net_days IS NOT NULL)
+	)
 );
 
+CREATE INDEX idx_customer_orders_customer  ON customer_orders (customer_id);
+CREATE INDEX idx_customer_orders_status    ON customer_orders (status);
+CREATE INDEX idx_customer_orders_created_by ON customer_orders (created_by);
+CREATE INDEX idx_customer_orders_due_date  ON customer_orders (due_date);
 
-ALTER TABLE public.loss_reasons OWNER TO postgres;
+CREATE TRIGGER trg_customer_orders_updated_at
+	BEFORE UPDATE ON customer_orders FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
---
--- Name: loss_reasons_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.loss_reasons_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.loss_reasons_id_seq OWNER TO postgres;
-
---
--- Name: loss_reasons_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.loss_reasons_id_seq OWNED BY public.loss_reasons.id;
-
-
---
--- Name: material_requests; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.material_requests (
-    id integer NOT NULL,
-    resource_id integer NOT NULL,
-    requested_by integer NOT NULL,
-    status character varying(50) DEFAULT 'pending'::character varying,
-    notes text,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE customer_order_items (
+	id                          int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	order_id                    int NOT NULL REFERENCES customer_orders(id) ON DELETE CASCADE,
+	variant_id                  int NOT NULL REFERENCES paint_variants(id),
+	pack_size_kg                numeric(10,4) NOT NULL CHECK (pack_size_kg > 0),
+	quantity                    int           NOT NULL CHECK (quantity > 0),
+	-- Per-pack negotiated price (§3.4). No stored "standard price".
+	negotiated_price_per_pack   numeric(14,4) NOT NULL CHECK (negotiated_price_per_pack >= 0),
+	-- Cost-to-build snapshot at the moment the order was drafted (§3.7).
+	cost_to_build_per_pack      numeric(14,4),
+	created_at  timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX idx_customer_order_items_order   ON customer_order_items (order_id);
+CREATE INDEX idx_customer_order_items_variant ON customer_order_items (variant_id);
 
-ALTER TABLE public.material_requests OWNER TO postgres;
-
---
--- Name: material_requests_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.material_requests_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.material_requests_id_seq OWNER TO postgres;
-
---
--- Name: material_requests_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.material_requests_id_seq OWNED BY public.material_requests.id;
-
-
---
--- Name: order_return_items; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.order_return_items (
-    id integer NOT NULL,
-    return_id integer,
-    order_item_id integer,
-    quantity integer NOT NULL,
-    qc_status character varying(50) DEFAULT 'pending_inspection'::character varying
+-- Order Confirmations are versioned (§3.4).
+CREATE TABLE order_confirmations (
+	id           int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	order_id     int          NOT NULL REFERENCES customer_orders(id) ON DELETE CASCADE,
+	version      int          NOT NULL,
+	pdf_url      text,
+	payload      jsonb        NOT NULL,
+	emailed_to   varchar(255),
+	emailed_at   timestamptz,
+	generated_by int          REFERENCES users(id),
+	created_at   timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE (order_id, version)
 );
 
-
-ALTER TABLE public.order_return_items OWNER TO postgres;
-
 --
--- Name: order_return_items_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.order_return_items_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.order_return_items_id_seq OWNER TO postgres;
-
---
--- Name: order_return_items_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- ============================================================
+-- Production: requests, runs, dilution, packs, stash (§3.3)
+-- ============================================================
 --
 
-ALTER SEQUENCE public.order_return_items_id_seq OWNED BY public.order_return_items.id;
-
-
---
--- Name: order_returns; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.order_returns (
-    id integer NOT NULL,
-    order_id integer,
-    status character varying(50) DEFAULT 'initiated'::character varying,
-    notes text,
-    created_by integer,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    resolved_at timestamp with time zone
+CREATE TABLE production_requests (
+	id             int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	variant_id     int          NOT NULL REFERENCES paint_variants(id),
+	pack_size_kg   numeric(10,4) NOT NULL CHECK (pack_size_kg > 0),
+	quantity_packs int          NOT NULL CHECK (quantity_packs > 0),
+	origin         production_request_origin NOT NULL,
+	order_item_id  int          REFERENCES customer_order_items(id),
+	status         production_request_status NOT NULL DEFAULT 'pending',
+	notes          text,
+	created_by     int          REFERENCES users(id),
+	created_at     timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at     timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	CONSTRAINT production_requests_order_link CHECK (
+		(origin = 'customer_order') = (order_item_id IS NOT NULL)
+	)
 );
 
+CREATE INDEX idx_production_requests_status  ON production_requests (status);
+CREATE INDEX idx_production_requests_variant ON production_requests (variant_id);
 
-ALTER TABLE public.order_returns OWNER TO postgres;
+CREATE TRIGGER trg_production_requests_updated_at
+	BEFORE UPDATE ON production_requests FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
---
--- Name: order_returns_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.order_returns_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.order_returns_id_seq OWNER TO postgres;
-
---
--- Name: order_returns_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.order_returns_id_seq OWNED BY public.order_returns.id;
-
-
---
--- Name: product_losses; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.product_losses (
-    id integer NOT NULL,
-    item_type public.loss_item_type NOT NULL,
-    color_id integer,
-    resource_id integer,
-    pack_size_kg numeric(12,4),
-    quantity_units integer,
-    quantity_kg numeric(12,4) NOT NULL,
-    reason_id integer NOT NULL,
-    notes text,
-    documented_by integer NOT NULL,
-    documented_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    reference_type character varying(50),
-    reference_id integer,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE production_runs (
+	id                  int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	-- Human-readable, unique traceability key (§3.3).
+	batch_number        varchar(50) NOT NULL UNIQUE,
+	request_id          int         REFERENCES production_requests(id),
+	variant_id          int         NOT NULL REFERENCES paint_variants(id),
+	formula_id          int         NOT NULL REFERENCES formulas(id),
+	status              production_run_status NOT NULL DEFAULT 'planned',
+	expected_output_kg  numeric(16,6) NOT NULL CHECK (expected_output_kg > 0),
+	actual_output_kg    numeric(16,6),
+	-- Computed when actuals are logged. Symmetric flag per §3.3.
+	wastage_pct         numeric(8,4),
+	wastage_flagged     boolean      NOT NULL DEFAULT false,
+	dilution_total_kg   numeric(16,6) NOT NULL DEFAULT 0,
+	dilution_flagged    boolean      NOT NULL DEFAULT false,
+	started_at          timestamptz,
+	completed_at        timestamptz,
+	notes               text,
+	archived_at         timestamptz,
+	archived_by         int          REFERENCES users(id),
+	created_by          int          NOT NULL REFERENCES users(id),
+	created_at          timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at          timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX idx_production_runs_variant   ON production_runs (variant_id);
+CREATE INDEX idx_production_runs_formula   ON production_runs (formula_id);
+CREATE INDEX idx_production_runs_request   ON production_runs (request_id);
+CREATE INDEX idx_production_runs_status    ON production_runs (status);
 
-ALTER TABLE public.product_losses OWNER TO postgres;
+CREATE TRIGGER trg_production_runs_updated_at
+	BEFORE UPDATE ON production_runs FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
---
--- Name: product_losses_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.product_losses_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.product_losses_id_seq OWNER TO postgres;
-
---
--- Name: product_losses_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.product_losses_id_seq OWNED BY public.product_losses.id;
-
-
---
--- Name: product_series_categories; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.product_series_categories (
-    id integer NOT NULL,
-    name character varying(50) NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+-- Per-resource actuals for a run. Variance is asymmetric — over-consumption flags only (§3.3).
+CREATE TABLE production_resource_actuals (
+	id                int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	production_run_id int NOT NULL REFERENCES production_runs(id) ON DELETE CASCADE,
+	resource_id       int NOT NULL REFERENCES resources(id),
+	expected_kg       numeric(16,6) NOT NULL,
+	actual_kg         numeric(16,6) NOT NULL,
+	variance_pct      numeric(8,4),
+	flagged           boolean       NOT NULL DEFAULT false,
+	created_at        timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE (production_run_id, resource_id)
 );
 
+CREATE INDEX idx_production_resource_actuals_run ON production_resource_actuals (production_run_id);
 
-ALTER TABLE public.product_series_categories OWNER TO postgres;
-
---
--- Name: product_series_categories_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.product_series_categories_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.product_series_categories_id_seq OWNER TO postgres;
-
---
--- Name: product_series_categories_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.product_series_categories_id_seq OWNED BY public.product_series_categories.id;
-
-
---
--- Name: product_types; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.product_types (
-    id integer NOT NULL,
-    name character varying(50) NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+-- Post-mix adjustments (dilution) — recorded separately from formula consumption (§3.3).
+CREATE TABLE production_dilution_adjustments (
+	id                int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	production_run_id int NOT NULL REFERENCES production_runs(id) ON DELETE CASCADE,
+	resource_id       int NOT NULL REFERENCES resources(id),
+	kg_added          numeric(16,6) NOT NULL CHECK (kg_added > 0),
+	notes             text,
+	created_at        timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX idx_dilution_adjustments_run ON production_dilution_adjustments (production_run_id);
 
-ALTER TABLE public.product_types OWNER TO postgres;
-
---
--- Name: product_types_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.product_types_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.product_types_id_seq OWNER TO postgres;
-
---
--- Name: product_types_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.product_types_id_seq OWNED BY public.product_types.id;
-
-
---
--- Name: production_resource_actuals; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.production_resource_actuals (
-    id integer NOT NULL,
-    production_run_id integer NOT NULL,
-    resource_id integer NOT NULL,
-    actual_quantity_used numeric(12,4) NOT NULL,
-    expected_quantity numeric(12,4),
-    variance numeric(12,4),
-    variance_flag boolean DEFAULT false,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+-- Per-variant leftover bucket from production (§3.3).
+CREATE TABLE paint_variant_stash (
+	variant_id    int PRIMARY KEY REFERENCES paint_variants(id) ON DELETE CASCADE,
+	kg_remaining  numeric(16,6) NOT NULL DEFAULT 0 CHECK (kg_remaining >= 0),
+	updated_at    timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-
-ALTER TABLE public.production_resource_actuals OWNER TO postgres;
-
---
--- Name: production_resource_actuals_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.production_resource_actuals_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.production_resource_actuals_id_seq OWNER TO postgres;
-
---
--- Name: production_resource_actuals_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.production_resource_actuals_id_seq OWNED BY public.production_resource_actuals.id;
-
-
---
--- Name: production_runs; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.production_runs (
-    id integer NOT NULL,
-    formula_id integer NOT NULL,
-    status character varying(50) DEFAULT 'planned'::character varying,
-    planned_quantity_kg numeric(12,4) NOT NULL,
-    actual_quantity_kg numeric(12,4),
-    waste_kg numeric(12,4) DEFAULT 0,
-    started_at timestamp with time zone,
-    completed_at timestamp with time zone,
-    loss_reason text,
-    created_by integer,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    order_id integer,
-    client_name character varying(255),
-    order_date timestamp with time zone,
-    ink_series character varying(20)
+CREATE TABLE stash_transactions (
+	id                bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	variant_id        int NOT NULL REFERENCES paint_variants(id),
+	delta_kg          numeric(16,6) NOT NULL CHECK (delta_kg <> 0),
+	action            stash_txn_action NOT NULL,
+	production_run_id int           REFERENCES production_runs(id),
+	notes             text,
+	created_by        int           REFERENCES users(id),
+	created_at        timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX idx_stash_txn_variant ON stash_transactions (variant_id, created_at DESC);
 
-ALTER TABLE public.production_runs OWNER TO postgres;
+CREATE OR REPLACE FUNCTION apply_stash_txn() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+	INSERT INTO paint_variant_stash (variant_id, kg_remaining, updated_at)
+	VALUES (NEW.variant_id, NEW.delta_kg, CURRENT_TIMESTAMP)
+	ON CONFLICT (variant_id) DO UPDATE
+	   SET kg_remaining = paint_variant_stash.kg_remaining + EXCLUDED.kg_remaining,
+	       updated_at   = CURRENT_TIMESTAMP;
+	RETURN NEW;
+END;
+$$;
 
---
--- Name: production_runs_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
+CREATE TRIGGER trg_apply_stash_txn
+	AFTER INSERT ON stash_transactions
+	FOR EACH ROW EXECUTE FUNCTION apply_stash_txn();
 
-CREATE SEQUENCE public.production_runs_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.production_runs_id_seq OWNER TO postgres;
-
---
--- Name: production_runs_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.production_runs_id_seq OWNED BY public.production_runs.id;
-
-
---
--- Name: purchase_order_items; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.purchase_order_items (
-    id integer NOT NULL,
-    purchase_order_id integer,
-    resource_id integer,
-    quantity numeric(12,4) NOT NULL,
-    unit character varying(20) NOT NULL,
-    unit_price numeric(12,2) DEFAULT 0,
-    received_quantity numeric(12,4) DEFAULT 0,
-    refunded_quantity numeric(12,4) DEFAULT 0,
-    refund_status character varying(50) DEFAULT 'none'::character varying,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT purchase_order_items_refund_status_check CHECK (((refund_status)::text = ANY ((ARRAY['none'::character varying, 'pending'::character varying, 'completed'::character varying, 'rejected'::character varying])::text[])))
+-- One row per physical pack — enables full batch traceability (§3.3).
+CREATE TABLE finished_paint_packs (
+	id                  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	variant_id          int           NOT NULL REFERENCES paint_variants(id),
+	pack_size_kg        numeric(10,4) NOT NULL CHECK (pack_size_kg > 0),
+	source              pack_source   NOT NULL,
+	production_run_id   int           REFERENCES production_runs(id),
+	po_item_id          int           REFERENCES purchase_order_items(id),
+	-- Cost per kg at the moment the pack entered inventory (§3.7).
+	cost_per_kg         numeric(14,4) NOT NULL CHECK (cost_per_kg >= 0),
+	status              pack_status   NOT NULL DEFAULT 'in_stock',
+	location            varchar(255),
+	created_at          timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at          timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	CONSTRAINT packs_source_produced CHECK (
+		source <> 'produced' OR production_run_id IS NOT NULL
+	),
+	CONSTRAINT packs_source_supplier CHECK (
+		source <> 'supplier' OR po_item_id IS NOT NULL
+	)
 );
 
+CREATE INDEX idx_packs_variant_status ON finished_paint_packs (variant_id, status);
+CREATE INDEX idx_packs_pack_size      ON finished_paint_packs (variant_id, pack_size_kg);
+CREATE INDEX idx_packs_run            ON finished_paint_packs (production_run_id);
 
-ALTER TABLE public.purchase_order_items OWNER TO postgres;
-
---
--- Name: purchase_order_items_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.purchase_order_items_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.purchase_order_items_id_seq OWNER TO postgres;
+CREATE TRIGGER trg_packs_updated_at
+	BEFORE UPDATE ON finished_paint_packs FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 --
--- Name: purchase_order_items_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- ============================================================
+-- Shipping, sales, payments (§3.4)
+-- ============================================================
 --
 
-ALTER SEQUENCE public.purchase_order_items_id_seq OWNED BY public.purchase_order_items.id;
-
-
---
--- Name: purchase_orders; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.purchase_orders (
-    id integer NOT NULL,
-    supplier_id integer,
-    status character varying(50) DEFAULT 'draft'::character varying,
-    notes text,
-    share_token uuid DEFAULT gen_random_uuid(),
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT purchase_orders_status_check CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'pending'::character varying, 'ordered'::character varying, 'received'::character varying, 'partially_received'::character varying, 'cancelled'::character varying])::text[])))
+CREATE TABLE shipments (
+	id            int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	order_id      int          NOT NULL REFERENCES customer_orders(id),
+	carrier       varchar(255),
+	tracking_no   varchar(255),
+	shipped_at    timestamptz,
+	delivered_at  timestamptz,
+	notes         text,
+	created_by    int          REFERENCES users(id),
+	created_at    timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at    timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX idx_shipments_order ON shipments (order_id);
 
-ALTER TABLE public.purchase_orders OWNER TO postgres;
+CREATE TRIGGER trg_shipments_updated_at
+	BEFORE UPDATE ON shipments FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
---
--- Name: purchase_orders_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.purchase_orders_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.purchase_orders_id_seq OWNER TO postgres;
-
---
--- Name: purchase_orders_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.purchase_orders_id_seq OWNED BY public.purchase_orders.id;
-
-
---
--- Name: resource_stock_transactions; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.resource_stock_transactions (
-    id integer NOT NULL,
-    resource_id integer NOT NULL,
-    transaction_type character varying(50) NOT NULL,
-    quantity numeric(12,4) NOT NULL,
-    reference_id integer,
-    notes text,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE shipment_packs (
+	shipment_id int    NOT NULL REFERENCES shipments(id) ON DELETE CASCADE,
+	pack_id     bigint NOT NULL REFERENCES finished_paint_packs(id),
+	PRIMARY KEY (shipment_id, pack_id)
 );
 
-
-ALTER TABLE public.resource_stock_transactions OWNER TO postgres;
-
---
--- Name: resource_stock_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.resource_stock_transactions_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.resource_stock_transactions_id_seq OWNER TO postgres;
-
---
--- Name: resource_stock_transactions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.resource_stock_transactions_id_seq OWNED BY public.resource_stock_transactions.id;
-
-
---
--- Name: resources; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.resources (
-    id integer NOT NULL,
-    name character varying(255) NOT NULL,
-    description text,
-    unit character varying(20) NOT NULL,
-    current_stock numeric(12,4) DEFAULT 0,
-    reorder_level numeric(12,4) DEFAULT 0,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    supplier_id integer,
-    color character varying(100),
-    feel character varying(100),
-    CONSTRAINT resources_current_stock_check CHECK ((current_stock >= (0)::numeric))
+CREATE TABLE sales (
+	id           int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	order_id     int          NOT NULL REFERENCES customer_orders(id),
+	customer_id  int          NOT NULL REFERENCES customers(id),
+	currency     char(3)      NOT NULL DEFAULT 'INR',
+	sale_date    timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	due_date     date,
+	notes        text,
+	-- Sales rep who logged this sale; financials visible only to them + Managers (§3.4).
+	created_by   int          NOT NULL REFERENCES users(id),
+	archived_at  timestamptz,
+	archived_by  int          REFERENCES users(id),
+	created_at   timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at   timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX idx_sales_order      ON sales (order_id);
+CREATE INDEX idx_sales_customer   ON sales (customer_id);
+CREATE INDEX idx_sales_created_by ON sales (created_by);
+CREATE INDEX idx_sales_due_date   ON sales (due_date);
 
-ALTER TABLE public.resources OWNER TO postgres;
+CREATE TRIGGER trg_sales_updated_at
+	BEFORE UPDATE ON sales FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
---
--- Name: resources_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.resources_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.resources_id_seq OWNER TO postgres;
-
---
--- Name: resources_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.resources_id_seq OWNED BY public.resources.id;
-
-
---
--- Name: roles; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.roles (
-    id integer NOT NULL,
-    name character varying(50) NOT NULL,
-    description text,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE sale_items (
+	id                  int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	sale_id             int NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+	order_item_id       int REFERENCES customer_order_items(id),
+	variant_id          int NOT NULL REFERENCES paint_variants(id),
+	pack_size_kg        numeric(10,4) NOT NULL CHECK (pack_size_kg > 0),
+	quantity            int           NOT NULL CHECK (quantity > 0),
+	price_per_pack      numeric(14,4) NOT NULL CHECK (price_per_pack >= 0),
+	-- Cost snapshot at sale time (§3.7).
+	cost_per_pack       numeric(14,4),
+	created_at          timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX idx_sale_items_sale       ON sale_items (sale_id);
+CREATE INDEX idx_sale_items_variant    ON sale_items (variant_id);
+CREATE INDEX idx_sale_items_order_item ON sale_items (order_item_id);
 
-ALTER TABLE public.roles OWNER TO postgres;
-
---
--- Name: roles_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.roles_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.roles_id_seq OWNER TO postgres;
-
---
--- Name: roles_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.roles_id_seq OWNED BY public.roles.id;
-
-
---
--- Name: suppliers; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.suppliers (
-    id integer NOT NULL,
-    name character varying(255) NOT NULL,
-    contact_person character varying(255),
-    email character varying(255),
-    phone character varying(50),
-    address text DEFAULT 'No recorded address'::text NOT NULL,
-    website character varying(255),
-    notes text,
-    gst_number character varying(20),
-    regulatory_info text,
-    pocs jsonb DEFAULT '[]'::jsonb,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+-- Links a sold pack to its sale line (for batch traceability sale→pack→run).
+CREATE TABLE sale_item_packs (
+	sale_item_id int    NOT NULL REFERENCES sale_items(id) ON DELETE CASCADE,
+	pack_id      bigint NOT NULL REFERENCES finished_paint_packs(id),
+	PRIMARY KEY (sale_item_id, pack_id),
+	UNIQUE (pack_id)
 );
 
-
-ALTER TABLE public.suppliers OWNER TO postgres;
-
---
--- Name: suppliers_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.suppliers_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.suppliers_id_seq OWNER TO postgres;
-
---
--- Name: suppliers_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.suppliers_id_seq OWNED BY public.suppliers.id;
-
-
---
--- Name: users; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.users (
-    id integer NOT NULL,
-    username character varying(100) NOT NULL,
-    email character varying(255) NOT NULL,
-    password_hash text NOT NULL,
-    role_id integer,
-    is_active boolean DEFAULT true,
-    last_login timestamp with time zone,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+-- Money received against a sale. Multiple per sale: advance, on-delivery, settlement, etc. (§3.4).
+CREATE TABLE payments (
+	id                int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	sale_id           int           NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+	amount            numeric(14,4) NOT NULL CHECK (amount > 0),
+	currency          char(3)       NOT NULL,
+	date_received     date          NOT NULL,
+	method            payment_method NOT NULL,
+	reference_number  varchar(255),
+	receiving_account varchar(255),
+	attachment_url    text,
+	notes             text,
+	created_by        int           REFERENCES users(id),
+	created_at        timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at        timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-
-ALTER TABLE public.users OWNER TO postgres;
-
---
--- Name: users_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.users_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.users_id_seq OWNER TO postgres;
-
---
--- Name: users_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.users_id_seq OWNED BY public.users.id;
-
-
---
--- Name: audit_logs id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.audit_logs ALTER COLUMN id SET DEFAULT nextval('public.audit_logs_id_seq'::regclass);
-
-
---
--- Name: client_order_items id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.client_order_items ALTER COLUMN id SET DEFAULT nextval('public.client_order_items_id_seq'::regclass);
-
-
---
--- Name: client_orders id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.client_orders ALTER COLUMN id SET DEFAULT nextval('public.client_orders_id_seq'::regclass);
-
-
---
--- Name: client_shipping_addresses id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.client_shipping_addresses ALTER COLUMN id SET DEFAULT nextval('public.client_shipping_addresses_id_seq'::regclass);
-
-
---
--- Name: clients id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.clients ALTER COLUMN id SET DEFAULT nextval('public.clients_id_seq'::regclass);
-
-
---
--- Name: colors id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.colors ALTER COLUMN id SET DEFAULT nextval('public.colors_id_seq'::regclass);
-
-
---
--- Name: device_enrollment_requests id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.device_enrollment_requests ALTER COLUMN id SET DEFAULT nextval('public.device_enrollment_requests_id_seq'::regclass);
-
-
---
--- Name: finished_stock id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.finished_stock ALTER COLUMN id SET DEFAULT nextval('public.finished_stock_id_seq'::regclass);
-
-
---
--- Name: finished_stock_transactions id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.finished_stock_transactions ALTER COLUMN id SET DEFAULT nextval('public.finished_stock_transactions_id_seq'::regclass);
-
-
---
--- Name: formula_resources id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.formula_resources ALTER COLUMN id SET DEFAULT nextval('public.formula_resources_id_seq'::regclass);
-
-
---
--- Name: formulas id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.formulas ALTER COLUMN id SET DEFAULT nextval('public.formulas_id_seq'::regclass);
-
-
---
--- Name: ink_grades id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.ink_grades ALTER COLUMN id SET DEFAULT nextval('public.ink_grades_id_seq'::regclass);
-
-
---
--- Name: loss_reasons id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.loss_reasons ALTER COLUMN id SET DEFAULT nextval('public.loss_reasons_id_seq'::regclass);
-
-
---
--- Name: material_requests id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.material_requests ALTER COLUMN id SET DEFAULT nextval('public.material_requests_id_seq'::regclass);
-
-
---
--- Name: order_return_items id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.order_return_items ALTER COLUMN id SET DEFAULT nextval('public.order_return_items_id_seq'::regclass);
-
-
---
--- Name: order_returns id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.order_returns ALTER COLUMN id SET DEFAULT nextval('public.order_returns_id_seq'::regclass);
-
-
---
--- Name: product_losses id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.product_losses ALTER COLUMN id SET DEFAULT nextval('public.product_losses_id_seq'::regclass);
-
-
---
--- Name: product_series_categories id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.product_series_categories ALTER COLUMN id SET DEFAULT nextval('public.product_series_categories_id_seq'::regclass);
-
-
---
--- Name: product_types id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.product_types ALTER COLUMN id SET DEFAULT nextval('public.product_types_id_seq'::regclass);
-
-
---
--- Name: production_resource_actuals id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.production_resource_actuals ALTER COLUMN id SET DEFAULT nextval('public.production_resource_actuals_id_seq'::regclass);
-
-
---
--- Name: production_runs id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.production_runs ALTER COLUMN id SET DEFAULT nextval('public.production_runs_id_seq'::regclass);
-
-
---
--- Name: purchase_order_items id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.purchase_order_items ALTER COLUMN id SET DEFAULT nextval('public.purchase_order_items_id_seq'::regclass);
-
-
---
--- Name: purchase_orders id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.purchase_orders ALTER COLUMN id SET DEFAULT nextval('public.purchase_orders_id_seq'::regclass);
-
-
---
--- Name: resource_stock_transactions id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.resource_stock_transactions ALTER COLUMN id SET DEFAULT nextval('public.resource_stock_transactions_id_seq'::regclass);
-
-
---
--- Name: resources id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.resources ALTER COLUMN id SET DEFAULT nextval('public.resources_id_seq'::regclass);
-
-
---
--- Name: roles id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.roles ALTER COLUMN id SET DEFAULT nextval('public.roles_id_seq'::regclass);
-
-
---
--- Name: suppliers id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.suppliers ALTER COLUMN id SET DEFAULT nextval('public.suppliers_id_seq'::regclass);
-
-
---
--- Name: users id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.users ALTER COLUMN id SET DEFAULT nextval('public.users_id_seq'::regclass);
-
-
---
--- Data for Name: app_settings; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.app_settings (key, value, updated_at) FROM stdin;
-low_stock_threshold	20	2026-05-05 10:53:05.984661+00
-\.
-
-
---
--- Data for Name: audit_logs; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.audit_logs (id, user_id, action, entity_type, entity_id, created_at) FROM stdin;
-\.
-
-
---
--- Data for Name: client_order_items; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.client_order_items (id, order_id, color_id, pack_size_kg, quantity) FROM stdin;
-\.
-
-
---
--- Data for Name: client_orders; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.client_orders (id, client_id, client_name, shipping_address_id, status, notes, created_by, created_at, updated_at, shipping_status, payment_method, payment_status, return_status, refund_status) FROM stdin;
-\.
-
-
---
--- Data for Name: client_shipping_addresses; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.client_shipping_addresses (id, client_id, label, address, is_default) FROM stdin;
-\.
-
-
---
--- Data for Name: clients; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.clients (id, name, gst_number, contact_name, contact_phone, contact_email, billing_address, created_by, created_at, updated_at) FROM stdin;
-\.
-
-
---
--- Data for Name: color_ink_grades; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.color_ink_grades (color_id, grade_id) FROM stdin;
-1	1
-1	2
-1	3
-2	1
-2	2
-2	3
-3	1
-3	2
-3	3
-4	1
-4	2
-4	3
-5	1
-5	2
-5	3
-6	1
-6	2
-6	3
-7	1
-7	2
-7	3
-8	1
-8	2
-8	3
-9	1
-9	2
-9	3
-10	1
-10	2
-10	3
-11	2
-11	3
-12	2
-12	3
-13	2
-13	3
-14	2
-14	3
-15	2
-15	3
-16	2
-16	3
-17	3
-18	2
-19	1
-20	3
-21	3
-22	3
-23	3
-24	3
-25	3
-26	3
-27	3
-28	2
-29	3
-30	2
-\.
-
-
---
--- Data for Name: color_product_series; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.color_product_series (color_id, series_id) FROM stdin;
-\.
-
-
---
--- Data for Name: color_product_types; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.color_product_types (color_id, type_id) FROM stdin;
-\.
-
-
---
--- Data for Name: colors; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.colors (id, name, color_code, business_code, series, min_threshold_kg, description, created_at, updated_at, approval_status, requested_by, available_lcs, available_std, available_opq_js, ink_series, hsn_code, tags) FROM stdin;
-1	BLACK	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-2	LEMON YELLOW	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-3	GOLDEN YELLOW	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-4	BLUE ROYAL	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-5	BLUE NAVY	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-6	ALPHA GREEN	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-7	DALLAS GREEN	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-8	DMP	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-9	ORANGE	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-10	BRITE BLUE	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-11	SPICY BROWN	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-12	VIOLET	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-13	TEE BLUE	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-14	TURQUOISE	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-15	RED SUPER	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-16	RED SCARLET	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-17	KHAKI	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-18	RAMA GREEN	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-19	DARK SUPER RED	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-20	STEEL GREY	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-21	FLT YGT	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-22	FLT PINK	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-23	FLT GREEN	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-24	FLT ORANGE	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-25	FLT MAGENTA	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-26	FLT NEON	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-27	FLT GOLDEN YELLOW	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-28	BRITE GREEN	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-29	FOAN BUFF	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-30	SKY BLUE	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-31	HIGH DENSITY (HD / SC)	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-32	NEW HD	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-33	NEW PUFF	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-34	PUFF ADDITIVE	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-35	NEW EMBOSS GELL	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-36	CLEAR GELL 505	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-37	WHITE G-5	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-38	WHITE S-5	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-39	SUPER WHITE	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-40	CD 300 WHITE	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-41	POLAR WHITE	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-42	1 STROKE WHITE	\N	\N	\N	0.0000	\N	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00	approved	\N	t	t	t	\N	\N	[]
-\.
-
-
---
--- Data for Name: device_enrollment_requests; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.device_enrollment_requests (id, user_id, device, location, status, requested_at, updated_at) FROM stdin;
-1	1	Chrome	Initial	approved	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00
-2	1	Safari	Initial	approved	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00
-3	1	Firefox	Initial	approved	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00
-4	1	Edge	Initial	approved	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00
-6	1	Chrome on Android	Mumbai, India	approved	2026-05-05 11:03:18.69815+00	2026-05-05 11:03:18.69815+00
-5	1	Chrome on macOS	Mumbai, India	approved	2026-05-05 10:54:33.997613+00	2026-05-05 10:54:33.997613+00
-\.
-
-
---
--- Data for Name: finished_stock; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.finished_stock (id, color_id, pack_size_kg, quantity_units, updated_at) FROM stdin;
-\.
-
-
---
--- Data for Name: finished_stock_transactions; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.finished_stock_transactions (id, color_id, pack_size_kg, transaction_type, quantity_units, quantity_kg, reference_id, notes, created_by, created_at) FROM stdin;
-\.
-
-
---
--- Data for Name: formula_resources; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.formula_resources (id, formula_id, resource_id, quantity_required) FROM stdin;
-\.
-
-
---
--- Data for Name: formulas; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.formulas (id, color_id, name, version, batch_size_kg, is_active, created_at, updated_at) FROM stdin;
-\.
-
-
---
--- Data for Name: ink_grades; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.ink_grades (id, name, created_at) FROM stdin;
-1	LCS	2026-05-05 10:53:05.984661+00
-2	STD	2026-05-05 10:53:05.984661+00
-3	OPQ/JS	2026-05-05 10:53:05.984661+00
-\.
-
-
---
--- Data for Name: loss_reasons; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.loss_reasons (id, name, description) FROM stdin;
-1	Damaged	Product physically damaged in warehouse or transit
-2	Expired	Product exceeded shelf life
-3	Spillage	Accidental release or spillage
-4	QC Failure	Quality control check failed
-5	Shipping Loss	Lost during delivery to customer
-6	Customer Return	Returned by customer in unsellable condition
-7	Other	Miscellaneous documentation
-\.
-
-
---
--- Data for Name: material_requests; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.material_requests (id, resource_id, requested_by, status, notes, created_at, updated_at) FROM stdin;
-\.
-
-
---
--- Data for Name: order_return_items; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.order_return_items (id, return_id, order_item_id, quantity, qc_status) FROM stdin;
-\.
-
-
---
--- Data for Name: order_returns; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.order_returns (id, order_id, status, notes, created_by, created_at, resolved_at) FROM stdin;
-\.
-
-
---
--- Data for Name: product_losses; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.product_losses (id, item_type, color_id, resource_id, pack_size_kg, quantity_units, quantity_kg, reason_id, notes, documented_by, documented_at, reference_type, reference_id, created_at) FROM stdin;
-\.
-
-
---
--- Data for Name: product_series_categories; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.product_series_categories (id, name, created_at) FROM stdin;
-\.
-
-
---
--- Data for Name: product_types; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.product_types (id, name, created_at) FROM stdin;
-1	Water Based Ink	2026-05-05 10:53:05.984661+00
-2	Oil Based Ink	2026-05-05 10:53:05.984661+00
-\.
-
-
---
--- Data for Name: production_resource_actuals; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.production_resource_actuals (id, production_run_id, resource_id, actual_quantity_used, expected_quantity, variance, variance_flag, created_at) FROM stdin;
-\.
-
-
---
--- Data for Name: production_runs; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.production_runs (id, formula_id, status, planned_quantity_kg, actual_quantity_kg, waste_kg, started_at, completed_at, loss_reason, created_by, created_at, updated_at, order_id, client_name, order_date, ink_series) FROM stdin;
-\.
-
-
---
--- Data for Name: purchase_order_items; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.purchase_order_items (id, purchase_order_id, resource_id, quantity, unit, unit_price, received_quantity, refunded_quantity, refund_status, created_at, updated_at) FROM stdin;
-\.
-
-
---
--- Data for Name: purchase_orders; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.purchase_orders (id, supplier_id, status, notes, share_token, created_at, updated_at) FROM stdin;
-\.
-
-
---
--- Data for Name: resource_stock_transactions; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.resource_stock_transactions (id, resource_id, transaction_type, quantity, reference_id, notes, created_at) FROM stdin;
-\.
-
-
---
--- Data for Name: resources; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.resources (id, name, description, unit, current_stock, reorder_level, created_at, updated_at, supplier_id, color, feel) FROM stdin;
-\.
-
-
---
--- Data for Name: roles; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.roles (id, name, description, created_at) FROM stdin;
-1	admin	Super Administrator with full access	2026-05-05 10:53:04.025554+00
-2	manager	Production and Inventory Manager	2026-05-05 10:53:04.025554+00
-3	operator	Production floor operator	2026-05-05 10:53:04.025554+00
-4	sales	Sales and order management	2026-05-05 10:53:04.025554+00
-5	client	External client access	2026-05-05 10:53:04.025554+00
-\.
-
-
---
--- Data for Name: suppliers; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.suppliers (id, name, contact_person, email, phone, address, website, notes, gst_number, regulatory_info, pocs, created_at, updated_at) FROM stdin;
-\.
-
-
---
--- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.users (id, username, email, password_hash, role_id, is_active, last_login, created_at, updated_at) FROM stdin;
-1	admin	admin@example.com	$2b$10$fz.XHZD.JHYD7HoNFBY41uYMMhjDJnJBj12oh9kyfL03GIVFp5CMG	1	t	2026-05-05 11:03:18.565686+00	2026-05-05 10:53:05.984661+00	2026-05-05 10:53:05.984661+00
-\.
-
-
---
--- Name: audit_logs_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.audit_logs_id_seq', 1, false);
-
-
---
--- Name: client_order_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.client_order_items_id_seq', 1, false);
-
-
---
--- Name: client_orders_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.client_orders_id_seq', 1, false);
-
-
---
--- Name: client_shipping_addresses_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.client_shipping_addresses_id_seq', 1, false);
-
-
---
--- Name: clients_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.clients_id_seq', 1, false);
-
-
---
--- Name: colors_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.colors_id_seq', 42, true);
-
-
---
--- Name: device_enrollment_requests_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.device_enrollment_requests_id_seq', 6, true);
-
-
---
--- Name: finished_stock_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.finished_stock_id_seq', 1, false);
-
-
---
--- Name: finished_stock_transactions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.finished_stock_transactions_id_seq', 1, false);
-
-
---
--- Name: formula_resources_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.formula_resources_id_seq', 1, false);
-
-
---
--- Name: formulas_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.formulas_id_seq', 1, false);
-
-
---
--- Name: ink_grades_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.ink_grades_id_seq', 3, true);
-
-
---
--- Name: loss_reasons_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.loss_reasons_id_seq', 14, true);
-
-
---
--- Name: material_requests_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.material_requests_id_seq', 1, false);
-
-
---
--- Name: order_return_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.order_return_items_id_seq', 1, false);
-
-
---
--- Name: order_returns_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.order_returns_id_seq', 1, false);
-
-
---
--- Name: product_losses_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.product_losses_id_seq', 1, false);
-
-
---
--- Name: product_series_categories_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.product_series_categories_id_seq', 1, false);
-
-
---
--- Name: product_types_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.product_types_id_seq', 2, true);
-
-
---
--- Name: production_resource_actuals_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.production_resource_actuals_id_seq', 1, false);
-
-
---
--- Name: production_runs_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.production_runs_id_seq', 1, false);
-
-
---
--- Name: purchase_order_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.purchase_order_items_id_seq', 1, false);
-
-
---
--- Name: purchase_orders_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.purchase_orders_id_seq', 1, false);
-
-
---
--- Name: resource_stock_transactions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.resource_stock_transactions_id_seq', 1, false);
-
-
---
--- Name: resources_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.resources_id_seq', 1, false);
-
-
---
--- Name: roles_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.roles_id_seq', 10, true);
-
-
---
--- Name: suppliers_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.suppliers_id_seq', 1, false);
-
-
---
--- Name: users_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.users_id_seq', 1, true);
-
-
---
--- Name: app_settings app_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.app_settings
-    ADD CONSTRAINT app_settings_pkey PRIMARY KEY (key);
-
-
---
--- Name: audit_logs audit_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.audit_logs
-    ADD CONSTRAINT audit_logs_pkey PRIMARY KEY (id);
-
-
---
--- Name: client_order_items client_order_items_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.client_order_items
-    ADD CONSTRAINT client_order_items_pkey PRIMARY KEY (id);
-
-
---
--- Name: client_orders client_orders_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.client_orders
-    ADD CONSTRAINT client_orders_pkey PRIMARY KEY (id);
-
-
---
--- Name: client_shipping_addresses client_shipping_addresses_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.client_shipping_addresses
-    ADD CONSTRAINT client_shipping_addresses_pkey PRIMARY KEY (id);
-
-
---
--- Name: clients clients_gst_number_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.clients
-    ADD CONSTRAINT clients_gst_number_key UNIQUE (gst_number);
-
-
---
--- Name: clients clients_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.clients
-    ADD CONSTRAINT clients_pkey PRIMARY KEY (id);
-
-
---
--- Name: color_ink_grades color_ink_grades_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.color_ink_grades
-    ADD CONSTRAINT color_ink_grades_pkey PRIMARY KEY (color_id, grade_id);
-
-
---
--- Name: color_product_series color_product_series_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.color_product_series
-    ADD CONSTRAINT color_product_series_pkey PRIMARY KEY (color_id, series_id);
-
-
---
--- Name: color_product_types color_product_types_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.color_product_types
-    ADD CONSTRAINT color_product_types_pkey PRIMARY KEY (color_id, type_id);
-
-
---
--- Name: colors colors_name_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.colors
-    ADD CONSTRAINT colors_name_key UNIQUE (name);
-
-
---
--- Name: colors colors_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.colors
-    ADD CONSTRAINT colors_pkey PRIMARY KEY (id);
-
-
---
--- Name: device_enrollment_requests device_enrollment_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.device_enrollment_requests
-    ADD CONSTRAINT device_enrollment_requests_pkey PRIMARY KEY (id);
-
-
---
--- Name: device_enrollment_requests device_enrollment_requests_user_id_device_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.device_enrollment_requests
-    ADD CONSTRAINT device_enrollment_requests_user_id_device_key UNIQUE (user_id, device);
-
-
---
--- Name: finished_stock finished_stock_color_id_pack_size_kg_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.finished_stock
-    ADD CONSTRAINT finished_stock_color_id_pack_size_kg_key UNIQUE (color_id, pack_size_kg);
-
-
---
--- Name: finished_stock finished_stock_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.finished_stock
-    ADD CONSTRAINT finished_stock_pkey PRIMARY KEY (id);
-
-
---
--- Name: finished_stock_transactions finished_stock_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.finished_stock_transactions
-    ADD CONSTRAINT finished_stock_transactions_pkey PRIMARY KEY (id);
-
-
---
--- Name: formula_resources formula_resources_formula_id_resource_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.formula_resources
-    ADD CONSTRAINT formula_resources_formula_id_resource_id_key UNIQUE (formula_id, resource_id);
-
-
---
--- Name: formula_resources formula_resources_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.formula_resources
-    ADD CONSTRAINT formula_resources_pkey PRIMARY KEY (id);
-
-
---
--- Name: formulas formulas_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.formulas
-    ADD CONSTRAINT formulas_pkey PRIMARY KEY (id);
-
-
---
--- Name: ink_grades ink_grades_name_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.ink_grades
-    ADD CONSTRAINT ink_grades_name_key UNIQUE (name);
-
-
---
--- Name: ink_grades ink_grades_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.ink_grades
-    ADD CONSTRAINT ink_grades_pkey PRIMARY KEY (id);
-
-
---
--- Name: loss_reasons loss_reasons_name_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.loss_reasons
-    ADD CONSTRAINT loss_reasons_name_key UNIQUE (name);
-
-
---
--- Name: loss_reasons loss_reasons_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.loss_reasons
-    ADD CONSTRAINT loss_reasons_pkey PRIMARY KEY (id);
-
-
---
--- Name: material_requests material_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.material_requests
-    ADD CONSTRAINT material_requests_pkey PRIMARY KEY (id);
-
-
---
--- Name: order_return_items order_return_items_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.order_return_items
-    ADD CONSTRAINT order_return_items_pkey PRIMARY KEY (id);
-
-
---
--- Name: order_returns order_returns_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.order_returns
-    ADD CONSTRAINT order_returns_pkey PRIMARY KEY (id);
-
-
---
--- Name: product_losses product_losses_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.product_losses
-    ADD CONSTRAINT product_losses_pkey PRIMARY KEY (id);
-
-
---
--- Name: product_series_categories product_series_categories_name_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.product_series_categories
-    ADD CONSTRAINT product_series_categories_name_key UNIQUE (name);
-
-
---
--- Name: product_series_categories product_series_categories_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.product_series_categories
-    ADD CONSTRAINT product_series_categories_pkey PRIMARY KEY (id);
-
-
---
--- Name: product_types product_types_name_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.product_types
-    ADD CONSTRAINT product_types_name_key UNIQUE (name);
-
-
---
--- Name: product_types product_types_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.product_types
-    ADD CONSTRAINT product_types_pkey PRIMARY KEY (id);
-
-
---
--- Name: production_resource_actuals production_resource_actuals_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.production_resource_actuals
-    ADD CONSTRAINT production_resource_actuals_pkey PRIMARY KEY (id);
-
-
---
--- Name: production_resource_actuals production_resource_actuals_production_run_id_resource_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.production_resource_actuals
-    ADD CONSTRAINT production_resource_actuals_production_run_id_resource_id_key UNIQUE (production_run_id, resource_id);
-
-
---
--- Name: production_runs production_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.production_runs
-    ADD CONSTRAINT production_runs_pkey PRIMARY KEY (id);
-
-
---
--- Name: purchase_order_items purchase_order_items_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.purchase_order_items
-    ADD CONSTRAINT purchase_order_items_pkey PRIMARY KEY (id);
-
-
---
--- Name: purchase_orders purchase_orders_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.purchase_orders
-    ADD CONSTRAINT purchase_orders_pkey PRIMARY KEY (id);
-
-
---
--- Name: resource_stock_transactions resource_stock_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.resource_stock_transactions
-    ADD CONSTRAINT resource_stock_transactions_pkey PRIMARY KEY (id);
-
-
---
--- Name: resources resources_name_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.resources
-    ADD CONSTRAINT resources_name_key UNIQUE (name);
-
-
---
--- Name: resources resources_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.resources
-    ADD CONSTRAINT resources_pkey PRIMARY KEY (id);
-
-
---
--- Name: roles roles_name_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.roles
-    ADD CONSTRAINT roles_name_key UNIQUE (name);
-
-
---
--- Name: roles roles_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.roles
-    ADD CONSTRAINT roles_pkey PRIMARY KEY (id);
-
-
---
--- Name: suppliers suppliers_gst_number_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.suppliers
-    ADD CONSTRAINT suppliers_gst_number_key UNIQUE (gst_number);
-
-
---
--- Name: suppliers suppliers_name_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.suppliers
-    ADD CONSTRAINT suppliers_name_key UNIQUE (name);
-
-
---
--- Name: suppliers suppliers_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.suppliers
-    ADD CONSTRAINT suppliers_pkey PRIMARY KEY (id);
-
-
---
--- Name: production_resource_actuals unique_production_run_resource; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.production_resource_actuals
-    ADD CONSTRAINT unique_production_run_resource UNIQUE (production_run_id, resource_id);
-
-
---
--- Name: users users_email_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.users
-    ADD CONSTRAINT users_email_key UNIQUE (email);
-
-
---
--- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.users
-    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
-
-
---
--- Name: users users_username_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.users
-    ADD CONSTRAINT users_username_key UNIQUE (username);
-
-
---
--- Name: idx_po_supplier_id; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX idx_po_supplier_id ON public.purchase_orders USING btree (supplier_id);
-
-
---
--- Name: idx_poi_po_id; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX idx_poi_po_id ON public.purchase_order_items USING btree (purchase_order_id);
-
-
---
--- Name: idx_product_losses_color_id; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX idx_product_losses_color_id ON public.product_losses USING btree (color_id);
-
-
---
--- Name: idx_product_losses_resource_id; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX idx_product_losses_resource_id ON public.product_losses USING btree (resource_id);
-
-
---
--- Name: idx_resources_supplier_id; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX idx_resources_supplier_id ON public.resources USING btree (supplier_id);
-
-
---
--- Name: resource_stock_transactions trg_resource_stock_audit; Type: TRIGGER; Schema: public; Owner: postgres
---
-
-CREATE TRIGGER trg_resource_stock_audit AFTER INSERT ON public.resource_stock_transactions FOR EACH ROW EXECUTE FUNCTION public.update_resource_stock_from_transaction();
-
-
---
--- Name: audit_logs audit_logs_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.audit_logs
-    ADD CONSTRAINT audit_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
-
-
---
--- Name: client_order_items client_order_items_color_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.client_order_items
-    ADD CONSTRAINT client_order_items_color_id_fkey FOREIGN KEY (color_id) REFERENCES public.colors(id);
-
-
---
--- Name: client_order_items client_order_items_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.client_order_items
-    ADD CONSTRAINT client_order_items_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.client_orders(id) ON DELETE CASCADE;
-
-
---
--- Name: client_orders client_orders_client_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.client_orders
-    ADD CONSTRAINT client_orders_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.clients(id);
-
-
---
--- Name: client_orders client_orders_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.client_orders
-    ADD CONSTRAINT client_orders_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
-
-
---
--- Name: client_orders client_orders_shipping_address_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.client_orders
-    ADD CONSTRAINT client_orders_shipping_address_id_fkey FOREIGN KEY (shipping_address_id) REFERENCES public.client_shipping_addresses(id);
-
-
---
--- Name: client_shipping_addresses client_shipping_addresses_client_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.client_shipping_addresses
-    ADD CONSTRAINT client_shipping_addresses_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.clients(id) ON DELETE CASCADE;
-
-
---
--- Name: clients clients_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.clients
-    ADD CONSTRAINT clients_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
-
-
---
--- Name: color_ink_grades color_ink_grades_color_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.color_ink_grades
-    ADD CONSTRAINT color_ink_grades_color_id_fkey FOREIGN KEY (color_id) REFERENCES public.colors(id) ON DELETE CASCADE;
-
-
---
--- Name: color_ink_grades color_ink_grades_grade_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.color_ink_grades
-    ADD CONSTRAINT color_ink_grades_grade_id_fkey FOREIGN KEY (grade_id) REFERENCES public.ink_grades(id) ON DELETE CASCADE;
-
-
---
--- Name: color_product_series color_product_series_color_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.color_product_series
-    ADD CONSTRAINT color_product_series_color_id_fkey FOREIGN KEY (color_id) REFERENCES public.colors(id) ON DELETE CASCADE;
-
-
---
--- Name: color_product_series color_product_series_series_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.color_product_series
-    ADD CONSTRAINT color_product_series_series_id_fkey FOREIGN KEY (series_id) REFERENCES public.product_series_categories(id) ON DELETE CASCADE;
-
-
---
--- Name: color_product_types color_product_types_color_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.color_product_types
-    ADD CONSTRAINT color_product_types_color_id_fkey FOREIGN KEY (color_id) REFERENCES public.colors(id) ON DELETE CASCADE;
-
-
---
--- Name: color_product_types color_product_types_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.color_product_types
-    ADD CONSTRAINT color_product_types_type_id_fkey FOREIGN KEY (type_id) REFERENCES public.product_types(id) ON DELETE CASCADE;
-
-
---
--- Name: colors colors_requested_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.colors
-    ADD CONSTRAINT colors_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.users(id);
-
-
---
--- Name: device_enrollment_requests device_enrollment_requests_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.device_enrollment_requests
-    ADD CONSTRAINT device_enrollment_requests_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-
---
--- Name: finished_stock finished_stock_color_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.finished_stock
-    ADD CONSTRAINT finished_stock_color_id_fkey FOREIGN KEY (color_id) REFERENCES public.colors(id);
-
-
---
--- Name: finished_stock_transactions finished_stock_transactions_color_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.finished_stock_transactions
-    ADD CONSTRAINT finished_stock_transactions_color_id_fkey FOREIGN KEY (color_id) REFERENCES public.colors(id);
-
-
---
--- Name: finished_stock_transactions finished_stock_transactions_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.finished_stock_transactions
-    ADD CONSTRAINT finished_stock_transactions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
-
-
---
--- Name: formula_resources formula_resources_formula_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.formula_resources
-    ADD CONSTRAINT formula_resources_formula_id_fkey FOREIGN KEY (formula_id) REFERENCES public.formulas(id) ON DELETE CASCADE;
-
-
---
--- Name: formula_resources formula_resources_resource_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.formula_resources
-    ADD CONSTRAINT formula_resources_resource_id_fkey FOREIGN KEY (resource_id) REFERENCES public.resources(id);
-
-
---
--- Name: formulas formulas_color_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.formulas
-    ADD CONSTRAINT formulas_color_id_fkey FOREIGN KEY (color_id) REFERENCES public.colors(id);
-
-
---
--- Name: material_requests material_requests_requested_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.material_requests
-    ADD CONSTRAINT material_requests_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.users(id);
-
-
---
--- Name: material_requests material_requests_resource_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.material_requests
-    ADD CONSTRAINT material_requests_resource_id_fkey FOREIGN KEY (resource_id) REFERENCES public.resources(id);
-
-
---
--- Name: order_return_items order_return_items_order_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.order_return_items
-    ADD CONSTRAINT order_return_items_order_item_id_fkey FOREIGN KEY (order_item_id) REFERENCES public.client_order_items(id) ON DELETE CASCADE;
-
-
---
--- Name: order_return_items order_return_items_return_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.order_return_items
-    ADD CONSTRAINT order_return_items_return_id_fkey FOREIGN KEY (return_id) REFERENCES public.order_returns(id) ON DELETE CASCADE;
-
-
---
--- Name: order_returns order_returns_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.order_returns
-    ADD CONSTRAINT order_returns_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
-
-
---
--- Name: order_returns order_returns_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.order_returns
-    ADD CONSTRAINT order_returns_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.client_orders(id) ON DELETE CASCADE;
-
-
---
--- Name: product_losses product_losses_color_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.product_losses
-    ADD CONSTRAINT product_losses_color_id_fkey FOREIGN KEY (color_id) REFERENCES public.colors(id);
-
-
---
--- Name: product_losses product_losses_documented_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.product_losses
-    ADD CONSTRAINT product_losses_documented_by_fkey FOREIGN KEY (documented_by) REFERENCES public.users(id);
-
-
---
--- Name: product_losses product_losses_reason_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.product_losses
-    ADD CONSTRAINT product_losses_reason_id_fkey FOREIGN KEY (reason_id) REFERENCES public.loss_reasons(id);
-
-
---
--- Name: product_losses product_losses_resource_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.product_losses
-    ADD CONSTRAINT product_losses_resource_id_fkey FOREIGN KEY (resource_id) REFERENCES public.resources(id);
-
-
---
--- Name: production_resource_actuals production_resource_actuals_production_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.production_resource_actuals
-    ADD CONSTRAINT production_resource_actuals_production_run_id_fkey FOREIGN KEY (production_run_id) REFERENCES public.production_runs(id) ON DELETE CASCADE;
-
-
---
--- Name: production_resource_actuals production_resource_actuals_resource_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.production_resource_actuals
-    ADD CONSTRAINT production_resource_actuals_resource_id_fkey FOREIGN KEY (resource_id) REFERENCES public.resources(id);
-
-
---
--- Name: production_runs production_runs_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.production_runs
-    ADD CONSTRAINT production_runs_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
-
-
---
--- Name: production_runs production_runs_formula_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.production_runs
-    ADD CONSTRAINT production_runs_formula_id_fkey FOREIGN KEY (formula_id) REFERENCES public.formulas(id);
-
-
---
--- Name: production_runs production_runs_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.production_runs
-    ADD CONSTRAINT production_runs_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.client_orders(id);
-
-
---
--- Name: purchase_order_items purchase_order_items_purchase_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.purchase_order_items
-    ADD CONSTRAINT purchase_order_items_purchase_order_id_fkey FOREIGN KEY (purchase_order_id) REFERENCES public.purchase_orders(id) ON DELETE CASCADE;
-
-
---
--- Name: purchase_order_items purchase_order_items_resource_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.purchase_order_items
-    ADD CONSTRAINT purchase_order_items_resource_id_fkey FOREIGN KEY (resource_id) REFERENCES public.resources(id) ON DELETE SET NULL;
-
-
---
--- Name: purchase_orders purchase_orders_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.purchase_orders
-    ADD CONSTRAINT purchase_orders_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id) ON DELETE SET NULL;
-
-
---
--- Name: resource_stock_transactions resource_stock_transactions_resource_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.resource_stock_transactions
-    ADD CONSTRAINT resource_stock_transactions_resource_id_fkey FOREIGN KEY (resource_id) REFERENCES public.resources(id);
-
-
---
--- Name: resources resources_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.resources
-    ADD CONSTRAINT resources_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id);
-
-
---
--- Name: users users_role_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.users
-    ADD CONSTRAINT users_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(id);
-
-
---
--- Name: SCHEMA public; Type: ACL; Schema: -; Owner: postgres
---
-
-REVOKE USAGE ON SCHEMA public FROM PUBLIC;
-GRANT ALL ON SCHEMA public TO PUBLIC;
-
-
---
--- PostgreSQL database dump complete
---
-
-\unrestrict 4bHFzg8sVcME48fxqjIkMBzSZiO5n0Y8gmKZPeOiLHliiEr0zUbmMYoqyfcvSl9
-
+CREATE INDEX idx_payments_sale ON payments (sale_id);
+
+CREATE TRIGGER trg_payments_updated_at
+	BEFORE UPDATE ON payments FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+--
+-- ============================================================
+-- Returns & refunds (§3.5)
+-- ============================================================
+--
+
+CREATE TABLE returns (
+	id             int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	sale_id        int NOT NULL REFERENCES sales(id),
+	customer_id    int NOT NULL REFERENCES customers(id),
+	return_date    timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	notes          text,
+	-- Manager completes the Return Form (§3.5).
+	completed_by   int          NOT NULL REFERENCES users(id),
+	created_at     timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at     timestamptz  NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_returns_sale     ON returns (sale_id);
+CREATE INDEX idx_returns_customer ON returns (customer_id);
+
+CREATE TRIGGER trg_returns_updated_at
+	BEFORE UPDATE ON returns FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE return_items (
+	id           int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	return_id    int NOT NULL REFERENCES returns(id) ON DELETE CASCADE,
+	sale_item_id int NOT NULL REFERENCES sale_items(id),
+	pack_id      bigint REFERENCES finished_paint_packs(id),
+	condition    return_condition   NOT NULL,
+	disposition  return_disposition NOT NULL,
+	notes        text,
+	created_at   timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_return_items_return    ON return_items (return_id);
+CREATE INDEX idx_return_items_sale_item ON return_items (sale_item_id);
+
+CREATE TABLE refunds (
+	id              int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	return_id       int NOT NULL UNIQUE REFERENCES returns(id) ON DELETE CASCADE,
+	amount          numeric(14,4) NOT NULL CHECK (amount >= 0),
+	currency        char(3) NOT NULL,
+	status          refund_status NOT NULL DEFAULT 'pending_approval',
+	approved_by     int           REFERENCES users(id),
+	approved_at     timestamptz,
+	rejected_reason text,
+	created_by      int           REFERENCES users(id),
+	created_at      timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at      timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_refunds_status ON refunds (status);
+
+CREATE TRIGGER trg_refunds_updated_at
+	BEFORE UPDATE ON refunds FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- A refund may be paid out in multiple installments (§3.5).
+CREATE TABLE refund_payouts (
+	id                int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	refund_id         int           NOT NULL REFERENCES refunds(id) ON DELETE CASCADE,
+	amount            numeric(14,4) NOT NULL CHECK (amount > 0),
+	currency          char(3)       NOT NULL,
+	date_paid         date          NOT NULL,
+	method            payment_method NOT NULL,
+	reference_number  varchar(255),
+	paying_account    varchar(255),
+	attachment_url    text,
+	notes             text,
+	created_by        int           REFERENCES users(id),
+	created_at        timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_refund_payouts_refund ON refund_payouts (refund_id);
+
+--
+-- ============================================================
+-- Seed data
+-- ============================================================
+--
+
+-- Default admin user. Password is reset on first login (§5).
+INSERT INTO users (username, email, role, password_hash, password_reset_required)
+VALUES ('admin', 'admin@example.com', 'manager', NULL, true);
+
+-- Default pack sizes (kg) — Managers may add/remove (§3.3).
+INSERT INTO pack_sizes (pack_size_kg) VALUES
+	(0.5), (1), (5), (6), (25), (30), (35), (50);
+
+-- Global threshold and tolerance defaults (§3.3, §3.6).
+INSERT INTO app_settings (key, value) VALUES
+	('production.wastage_threshold_pct',           '5'::jsonb),
+	('production.resource_variance_threshold_pct', '10'::jsonb),
+	('production.dilution_threshold_pct',          '10'::jsonb),
+	('inventory.low_stock_threshold_kg',           '20'::jsonb),
+	('finance.payment_tolerance',                  '1'::jsonb),
+	('finance.refund_tolerance',                   '1'::jsonb);

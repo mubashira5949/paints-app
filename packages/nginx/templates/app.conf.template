@@ -1,6 +1,6 @@
 server {
     listen 80;
-    server_name service-dev.beautyflexinks.com;
+    server_name ${DOMAIN_BACKEND};
     server_tokens off;
 
     location /.well-known/acme-challenge/ {
@@ -14,11 +14,11 @@ server {
 
 server {
     listen 443 ssl;
-    server_name service-dev.beautyflexinks.com;
+    server_name ${DOMAIN_BACKEND};
     server_tokens off;
 
-    ssl_certificate /etc/letsencrypt/live/service-dev.beautyflexinks.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/service-dev.beautyflexinks.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN_BACKEND}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_BACKEND}/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
@@ -33,7 +33,7 @@ server {
 
 server {
     listen 80;
-    server_name app-dev.beautyflexinks.com;
+    server_name ${DOMAIN_FRONTEND};
     server_tokens off;
 
     location /.well-known/acme-challenge/ {
@@ -47,11 +47,11 @@ server {
 
 server {
     listen 443 ssl;
-    server_name app-dev.beautyflexinks.com;
+    server_name ${DOMAIN_FRONTEND};
     server_tokens off;
 
-    ssl_certificate /etc/letsencrypt/live/app-dev.beautyflexinks.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/app-dev.beautyflexinks.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN_FRONTEND}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_FRONTEND}/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 

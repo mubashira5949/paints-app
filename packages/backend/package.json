@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "tsx watch src/app.ts",
+    "dev": "dotenv -e ../../.development.env -- tsx watch src/app.ts",
     "build": "tsc",
     "start": "node dist/app.js",
     "openapi:typegen": "openapi-typescript ./openapi.yaml --output ./src/types/openapi.gen.ts",
