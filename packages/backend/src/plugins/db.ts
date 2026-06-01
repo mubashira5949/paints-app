@@ -1,0 +1,84 @@
+/**
+ * Database Plugin
+ * Configures the PostgreSQL database connection using 'pg' Pool.
+ */
+
+import fp from 'fastify-plugin'
+import { Pool } from 'pg'
+import { FastifyInstance } from 'fastify'
+import fs from 'fs'
+import path from 'path'
+import { IPgClientLike } from '../types/misc'
+
+async function dbConnector(fastify: FastifyInstance) {
+    /**
+     * Create a new PostgreSQL connection pool.
+     * Configuration is pulled from the DATABASE_URL environment variable.
+     */
+    // Local postgres (deploy/local) speaks plain TCP; set DB_SSL=false to opt out.
+    const sslDisabled = process.env.DB_SSL === 'false'
+
+    let sslOptions: any = { rejectUnauthorized: false }
+    if (process.env.DB_SSL_ROOT_CERT) {
+        sslOptions = {
+            rejectUnauthorized: true,
+            ca: fs.readFileSync(path.resolve(process.env.DB_SSL_ROOT_CERT)).toString()
+        }
+    }
+
+    const MAX_DB_CONNS = +(process.env.MAX_DB_CONNS || 10);
+    const PG_APP_NAME = process.env.PG_APP_NAME || 'paints_app';
+
+    const pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        max: MAX_DB_CONNS,
+        application_name: PG_APP_NAME,
+        ssl: sslDisabled ? false : sslOptions
+    })
+
+    // Verify the database connection on startup in the background (non-blocking).
+    pool.query('SELECT 1').then(() => {
+        fastify.log.info('Database connected successfully')
+    }).catch(err => {
+        // Log error but don't fail the startup if the database connection cannot be established yet.
+        // The first database query will naturally retry/wait for the pool or fail then.
+        fastify.log.error({ err }, 'Database connection background check failed')
+    })
+
+    /**
+     * Decorate the Fastify instance with the pool object.
+     * This allows accessed via 'fastify.db' throughout the application.
+     */
+    fastify.decorate('db', pool)
+
+    /**
+     * Keep-alive ping every 4 minutes to ensure the database connection
+     * remains active and isn't dropped by VPC firewalls or idle timeouts.
+     */
+    const keepAlive = setInterval(async () => {
+        try {
+            await pool.query('SELECT 1')
+        } catch (err) {
+            fastify.log.warn({ err }, 'DB keep-alive ping failed')
+        }
+    }, 4 * 60 * 1000) // 4 minutes
+
+    // Ensure the connection pool and keep-alive are cleaned up on server close.
+    fastify.addHook('onClose', async (instance) => {
+        clearInterval(keepAlive)
+        await pool.end()
+    })
+}
+
+// Wrap with fastify-plugin to ensure the decorator is available to all scopes.
+export default fp(dbConnector)
+
+/**
+ * TypeScript Declaration Merging
+ * Adds the 'db' property to the FastifyInstance type.
+ */
+declare module 'fastify' {
+    interface FastifyInstance {
+        db: Pool; // IPgClientLike
+    }
+}

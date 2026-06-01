@@ -1,0 +1,15 @@
+{
+  "transforms": [
+	  {
+	    "mode": "sql",
+	    "include": "packages/*/sql/queries.sql",
+	    "emitTemplate": "{{dir}}/../src/queries.ts"
+	  }
+  ],
+  "srcDir": "./",
+  "failOnError": true,
+	"typesOverrides": {
+		"bytea": "Uint8Array",
+		"jsonb": "unknown"
+	}
+}
